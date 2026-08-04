@@ -21,9 +21,13 @@ impl WorldBridge {
         WorldBridge { grid }
     }
 
-    pub fn width(&self) -> u32 { self.grid.width }
+    pub fn width(&self) -> u32 {
+        self.grid.width
+    }
 
-    pub fn height(&self) -> u32 { self.grid.height }
+    pub fn height(&self) -> u32 {
+        self.grid.height
+    }
 
     pub fn get_tile_data(&self, vx: i32, vy: i32, vw: i32, vh: i32) -> Vec<u8> {
         let safe_vw = vw.max(0);
@@ -32,18 +36,21 @@ impl WorldBridge {
 
         for y in vy..(vy + safe_vh) {
             for x in vx..(vx + safe_vw) {
-                if x >= 0 && y >= 0
+                if x >= 0
+                    && y >= 0
                     && (x as u32) < self.grid.width
                     && (y as u32) < self.grid.height
                 {
-                    let tile = &self.grid.tiles
-                        [(y as u32 * self.grid.width + x as u32) as usize];
+                    let tile =
+                        &self.grid.tiles[(y as u32 * self.grid.width + x as u32) as usize];
                     data.push(tile.terrain as u8);
                     data.push(((tile.altitude + 1.0) / 2.0 * 255.0).clamp(0.0, 255.0) as u8);
                     data.push((tile.moisture * 255.0).clamp(0.0, 255.0) as u8);
                     data.push((tile.temperature * 255.0).clamp(0.0, 255.0) as u8);
                 } else {
-                    data.extend_from_slice(&[0, 0, 0, 0]);
+                    // FIX #9: 255 = "outside map" sentinel (not DeepWater)
+                    data.push(255);
+                    data.extend_from_slice(&[0, 0, 0]);
                 }
             }
         }
@@ -54,7 +61,12 @@ impl WorldBridge {
         match self.grid.get(x, y) {
             Some(tile) => format!(
                 r#"{{"terrain":"{}","altitude":{:.6},"moisture":{:.6},"temperature":{:.6},"x":{},"y":{}}}"#,
-                tile.terrain.label(), tile.altitude, tile.moisture, tile.temperature, x, y
+                tile.terrain.label(),
+                tile.altitude,
+                tile.moisture,
+                tile.temperature,
+                x,
+                y
             ),
             None => "{}".to_string(),
         }
