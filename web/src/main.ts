@@ -8,15 +8,28 @@ import { renderMinimap, drawMinimapViewport } from "./renderer/minimap";
 import { bindControls, readParams, updateWorldInfo } from "./ui/controls";
 import { updateHover, hideTooltip } from "./ui/tooltip";
 import { buildLegend } from "./ui/legend";
-import { updateTileInspector } from "./ui/tile-inspector";
+import {
+  updateTileInspector,
+  clearTileInspector,
+} from "./ui/tile-inspector";
 
 /* ── World generation ─────────────────────── */
 
 function generateWorld(): void {
   const { seed, width, height, sea } = readParams();
 
+  // FIX #5: Clear selection state before replacing world
+  state.selectedTile = null;
+  state.hoverTile = null;
+  hideTooltip();
+  clearTileInspector();
+
   if (state.world) {
-    try { state.world.free(); } catch (_) { /* ignore */ }
+    try {
+      state.world.free();
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   state.world = createWorld(seed, width, height, sea);
@@ -29,10 +42,9 @@ function generateWorld(): void {
   requestRender();
 }
 
-/* ── Full render pass ─────────────────────── */
+/* ── Full render pass (FIX #7: no resizeCanvas here) ── */
 
 function fullRender(): void {
-  resizeCanvas();
   render();
   drawMinimapViewport();
 }
@@ -63,6 +75,8 @@ async function boot(): Promise<void> {
 
   // Build static UI
   buildLegend();
+
+  // FIX #7: Resize once at startup, then only on window resize
   resizeCanvas();
 
   // Bind input
