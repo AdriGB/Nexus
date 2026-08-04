@@ -1,10 +1,12 @@
 import { state } from "../state";
 import { TERRAIN, BASE_TILE } from "../constants";
 
+const VOID_TERRAIN = 255; // FIX #9: matches Rust out-of-bounds sentinel
+
 const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
-/* ── Deterministic per-tile jitter for texture ── */
+/* ── Deterministic per-tile jitter ── */
 
 function jitter(x: number, y: number): number {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -15,12 +17,11 @@ function jitter(x: number, y: number): number {
 function tileColor(
   terrainId: number,
   altByte: number,
-  _moistByte: number,
-  _tempByte: number,
   tx: number,
-  ty: number
+  ty: number,
 ): string {
-  const t = TERRAIN[terrainId] ?? TERRAIN[0];
+  const t = TERRAIN[terrainId];
+  if (!t) return "#07080c";
   const altNorm = altByte / 255;
   const altFactor = 0.72 + altNorm * 0.5;
   let l = t.l * altFactor;
@@ -29,7 +30,7 @@ function tileColor(
   return `hsl(${t.h},${t.s}%,${l}%)`;
 }
 
-/* ── Resize canvas respecting devicePixelRatio ── */
+/* ── Resize (call only on init + window resize) ── */
 
 export function resizeCanvas(): void {
   const rect = canvas.parentElement!.getBoundingClientRect();
@@ -46,6 +47,8 @@ export function resizeCanvas(): void {
 
 export function render(): void {
   if (!state.world) return;
+
+  // FIX #7: resizeCanvas() is no longer called here — only in init + resize
 
   const dpr = window.devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -67,16 +70,16 @@ export function render(): void {
 
   for (let i = 0; i < cols * rows; i++) {
     const terrain = data[i * 4];
-    const alt = data[i * 4 + 1];
-    const moist = data[i * 4 + 2];
-    const temp = data[i * 4 + 3];
+    // FIX #9: Skip out-of-bounds tiles (rendered as background void color)
+    if (terrain === VOID_TERRAIN) continue;
 
+    const alt = data[i * 4 + 1];
     const tx = startTX + (i % cols);
     const ty = startTY + Math.floor(i / cols);
     const px = tx * tileSize - state.panX;
     const py = ty * tileSize - state.panY;
 
-    ctx.fillStyle = tileColor(terrain, alt, moist, temp, tx, ty);
+    ctx.fillStyle = tileColor(terrain, alt, tx, ty);
     ctx.fillRect(px, py, Math.ceil(tileSize) + 1, Math.ceil(tileSize) + 1);
   }
 
@@ -120,5 +123,7 @@ export function render(): void {
 
   // Zoom display
   const zoomEl = document.getElementById("st-zoom");
-  if (zoomEl) zoomEl.textContent = Math.round((state.zoom / BASE_TILE) * BASE_TILE * 100) + "%";
+  if (zoomEl)
+    zoomEl.textContent =
+      Math.round((state.zoom / BASE_TILE) * BASE_TILE * 100) + "%";
 }
