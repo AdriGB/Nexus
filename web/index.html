@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS World Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="loading">
+    <div class="loader-ring"></div>
+    <p id="loading-text">Compiling engine...</p>
+  </div>
+
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="app-title">NEXUS</h1>
+        <p class="app-subtitle">World Engine</p>
+      </div>
+
+      <div class="sidebar-section">
+        <label class="field-label">World Parameters</label>
+        <div class="input-row">
+          <input id="seed-input" class="input-field" type="number" value="42" min="0" max="4294967295">
+          <button id="btn-random-seed" class="btn-secondary" title="Random seed">&#x1F3B2;</button>
+        </div>
+        <div class="input-row">
+          <input id="width-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
+          <span style="color:var(--text-muted);font-size:11px;line-height:32px;">&#215;</span>
+          <input id="height-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
+        </div>
+        <div class="slider-row">
+          <label>Sea Level <span id="sea-val">0.35</span></label>
+          <input id="sea-slider" type="range" min="0.1" max="0.6" step="0.01" value="0.35">
+        </div>
+        <button id="btn-generate" class="btn-primary">Generate World</button>
+      </div>
+
+      <div class="sidebar-section" id="world-info" style="display:none;">
+        <label class="field-label">World Info</label>
+        <div class="info-grid">
+          <span class="info-key">Seed</span><span class="info-val" id="info-seed">&#8212;</span>
+          <span class="info-key">Size</span><span class="info-val" id="info-size">&#8212;</span>
+          <span class="info-key">Tiles</span><span class="info-val" id="info-tiles">&#8212;</span>
+          <span class="info-key">Sea Level</span><span class="info-val" id="info-sea">&#8212;</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <label class="field-label">Terrain Legend</label>
+        <div class="legend-grid" id="legend-grid"></div>
+      </div>
+
+      <div class="sidebar-section" id="tile-inspector" style="display:none;">
+        <label class="field-label">Selected Tile</label>
+        <div class="info-grid" id="tile-info-grid"></div>
+      </div>
+
+      <div class="sidebar-section" style="border-bottom:none;">
+        <label class="field-label">Controls</label>
+        <div style="font-size:10px;color:var(--text-muted);line-height:1.8;">
+          Drag to pan &#183; Scroll to zoom<br>
+          <kbd>R</kbd> Regenerate
+          <kbd>F</kbd> Fit
+          <kbd>G</kbd> Grid<br>
+          Click tile to inspect
+        </div>
+      </div>
+    </aside>
+
+    <main id="viewport-wrap">
+      <canvas id="world-canvas"></canvas>
+
+      <div id="minimap-wrap">
+        <span id="minimap-label">Minimap</span>
+        <canvas id="minimap-canvas" width="180" height="180"></canvas>
+      </div>
+
+      <div id="status-bar">
+        <span class="status-item">x:<span class="val" id="st-x">&#8212;</span></span>
+        <span class="status-item">y:<span class="val" id="st-y">&#8212;</span></span>
+        <span class="status-item" style="margin-left:8px;">Terrain:<span class="accent" id="st-terrain">&#8212;</span></span>
+        <span class="status-item">Alt:<span class="val" id="st-alt">&#8212;</span></span>
+        <span class="status-item">Moist:<span class="val" id="st-moist">&#8212;</span></span>
+        <span class="status-item">Temp:<span class="val" id="st-temp">&#8212;</span></span>
+        <span style="flex:1;"></span>
+        <span class="status-item">Zoom:<span class="accent" id="st-zoom">100%</span></span>
+      </div>
+    </main>
+  </div>
+
+  <div id="tooltip">
+    <div class="tooltip-terrain" id="tt-terrain"></div>
+    <div class="tooltip-row"><span>Altitude</span><span id="tt-alt"></span></div>
+    <div class="tooltip-row"><span>Moisture</span><span id="tt-moist"></span></div>
+    <div class="tooltip-row"><span>Temperature</span><span id="tt-temp"></span></div>
+    <div class="tooltip-row"><span>Position</span><span id="tt-pos"></span></div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
