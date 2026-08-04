@@ -1,0 +1,19 @@
+# Rust
+engine/target/
+engine/pkg/
+
+# Node
+web/node_modules/
+web/dist/
+
+# WASM build output (rebuilt from engine source)
+web/public/wasm/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
