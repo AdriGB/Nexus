@@ -1,6 +1,5 @@
 use serde::Serialize;
 
-/// Tipos de terreno del mundo
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 #[repr(u8)]
 pub enum Terrain {
@@ -20,25 +19,6 @@ pub enum Terrain {
 }
 
 impl Terrain {
-    pub fn from_u8(v: u8) -> Self {
-        match v {
-            0 => Self::DeepWater,
-            1 => Self::ShallowWater,
-            2 => Self::Beach,
-            3 => Self::Plains,
-            4 => Self::Grassland,
-            5 => Self::Forest,
-            6 => Self::DenseForest,
-            7 => Self::Hills,
-            8 => Self::Mountain,
-            9 => Self::SnowPeak,
-            10 => Self::Desert,
-            11 => Self::Swamp,
-            12 => Self::Tundra,
-            _ => Self::DeepWater,
-        }
-    }
-
     pub fn label(&self) -> &'static str {
         match self {
             Self::DeepWater => "Deep Water",
@@ -58,7 +38,6 @@ impl Terrain {
     }
 }
 
-/// Datos de un tile individual
 #[derive(Clone, Serialize)]
 pub struct Tile {
     pub terrain: Terrain,
@@ -67,7 +46,6 @@ pub struct Tile {
     pub temperature: f64,
 }
 
-/// Grid del mundo
 pub struct Grid {
     pub width: u32,
     pub height: u32,
@@ -81,5 +59,47 @@ impl Grid {
         } else {
             None
         }
+    }
+
+    pub fn tile_count(&self) -> usize {
+        self.tiles.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_grid(w: u32, h: u32) -> Grid {
+        let tiles = (0..w * h)
+            .map(|_| Tile {
+                terrain: Terrain::Plains,
+                altitude: 0.0,
+                moisture: 0.5,
+                temperature: 0.5,
+            })
+            .collect();
+        Grid { width: w, height: h, tiles }
+    }
+
+    #[test]
+    fn tile_count_matches_dimensions() {
+        let grid = make_grid(100, 80);
+        assert_eq!(grid.tile_count(), 8000);
+    }
+
+    #[test]
+    fn valid_coordinates_return_some() {
+        let grid = make_grid(10, 10);
+        assert!(grid.get(0, 0).is_some());
+        assert!(grid.get(9, 9).is_some());
+    }
+
+    #[test]
+    fn out_of_bounds_returns_none() {
+        let grid = make_grid(10, 10);
+        assert!(grid.get(10, 0).is_none());
+        assert!(grid.get(0, 10).is_none());
+        assert!(grid.get(100, 100).is_none());
     }
 }
