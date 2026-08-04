@@ -1,10 +1,16 @@
 import { state } from "../state";
 import { TERRAIN, BASE_TILE } from "../constants";
 
-const miniCanvas = document.getElementById("minimap-canvas") as HTMLCanvasElement;
+const miniCanvas = document.getElementById(
+  "minimap-canvas",
+) as HTMLCanvasElement;
 const miniCtx = miniCanvas.getContext("2d")!;
 
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+function hslToRgb(
+  h: number,
+  s: number,
+  l: number,
+): [number, number, number] {
   h /= 360;
   s /= 100;
   l /= 100;
@@ -39,7 +45,6 @@ export function renderMinimap(): void {
   const data = state.world.get_tile_data(0, 0, state.worldW, state.worldH);
   const imageData = miniCtx.createImageData(mw, mh);
 
-  // Background
   for (let i = 0; i < imageData.data.length; i += 4) {
     imageData.data[i] = 7;
     imageData.data[i + 1] = 8;
@@ -50,7 +55,9 @@ export function renderMinimap(): void {
   for (let y = 0; y < state.worldH; y++) {
     for (let x = 0; x < state.worldW; x++) {
       const ti = (y * state.worldW + x) * 4;
-      const t = TERRAIN[data[ti]] ?? TERRAIN[0];
+      const terrainId = data[ti];
+      if (terrainId === 255) continue; // skip void
+      const t = TERRAIN[terrainId] ?? TERRAIN[0];
       const [r, g, b] = hslToRgb(t.h, t.s, t.l);
       const px = Math.floor(x * scaleX);
       const py = Math.floor(y * scaleY);
@@ -81,12 +88,15 @@ export function drawMinimapViewport(): void {
   const rw = (state.cssW / (BASE_TILE * state.zoom) / state.worldW) * mw;
   const rh = (state.cssH / (BASE_TILE * state.zoom) / state.worldH) * mh;
 
-  miniCtx.strokeStyle = "rgba(201,168,76,0.8)";
-  miniCtx.lineWidth = 1.5;
-  miniCtx.strokeRect(
-    Math.max(0, rx),
-    Math.max(0, ry),
-    Math.min(mw - rx, rw),
-    Math.min(mh - ry, rh)
-  );
+  // FIX #8: Clamp with two-corner intersection — no negative dimensions
+  const x1 = Math.max(0, Math.min(mw, rx));
+  const y1 = Math.max(0, Math.min(mh, ry));
+  const x2 = Math.max(0, Math.min(mw, rx + rw));
+  const y2 = Math.max(0, Math.min(mh, ry + rh));
+
+  if (x2 > x1 && y2 > y1) {
+    miniCtx.strokeStyle = "rgba(201,168,76,0.8)";
+    miniCtx.lineWidth = 1.5;
+    miniCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  }
 }
