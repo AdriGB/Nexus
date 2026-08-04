@@ -7,7 +7,7 @@ A procedural world generation tool built with Rust + WebAssembly + TypeScript.
 - Generates worlds using fractal Brownian motion (Perlin noise)
 - Classifies terrain: ocean, beach, plains, forest, mountains, desert, tundra, swamp
 - Renders in Canvas 2D with pan, zoom, minimap, and tile inspection
-- Runs entirely in the browser — no server required
+- Runs entirely in the browser — no backend required
 
 ## Prerequisites
 
