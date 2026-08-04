@@ -1,3 +1,9 @@
+
+---
+
+## ROADMAP reorder: `ROADMAP.md`
+
+```markdown
 # NEXUS Roadmap
 
 ## Phase 1 — World Viewer ✅
@@ -6,14 +12,27 @@
 - [x] Minimap
 - [x] Tile inspector
 - [x] Terrain legend
+- [x] TypeScript + Vite + WASM architecture
+
+## Phase 1.1 — Stabilization
+- [ ] CI passing (cargo fmt, clippy, tsc, build)
+- [ ] Save/load seed and parameters (localStorage)
+- [ ] Export/import world data as JSON
+- [ ] LOD rendering or full-world image for extreme zoom-out
+
+## Phase 1.2 — Geography
+- [ ] River generation (erosion simulation)
+- [ ] Biome refinement (temperature + moisture gradients)
+- [ ] Resource deposits (ore, fertile soil, timber)
+- [ ] Region detection and connectivity analysis
 
 ## Phase 2 — Living World
 - [ ] Entity system (creatures with needs, personality, AI)
-- [ ] Pathfinding
+- [ ] Pathfinding (A* on terrain)
 - [ ] Reproduction, aging, death
 - [ ] Factions and groups
 
-## Phase 3 — User Rules
+## Phase 3 — User Rules & Consequences
 - [ ] Rule editor (define social/economic/cultural rules)
 - [ ] Consequence engine (migrate NEXUS rule matching to Rust)
 - [ ] Rules affect entities and society
@@ -29,18 +48,15 @@
 ## Phase 5 — History
 - [ ] Historical event logging
 - [ ] Timeline viewer
-- [ ] Legend mode (query history)
+- [ ] Legend mode (query world history)
 - [ ] Export world as narrative document
 
 ## Phase 6 — Polish
-- [ ] River generation (erosion simulation)
-- [ ] Biome refinement
-- [ ] City growth
+- [ ] City growth and expansion
 - [ ] Trade routes
-- [ ] Save/load/export
-- [ ] Tauri desktop app
+- [ ] Tauri desktop application
 
 ## Future
-- [ ] WebGL renderer (for larger worlds)
+- [ ] WebGL renderer (larger worlds)
 - [ ] Multiplayer (shared world editing)
 - [ ] AI-assisted consequence suggestions
