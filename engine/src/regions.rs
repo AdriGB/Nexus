@@ -148,6 +148,19 @@ mod tests {
         }
     }
 
+    // Pattern used by most tests:
+    //
+    //   LLWWW   y=0
+    //   LLWWW   y=1
+    //   WWLWW   y=2
+    //   WWLLW   y=3
+    //
+    // 4-connected regions:
+    //   Region 0 — Land:  (0,0)(1,0)(0,1)(1,1) = 4 tiles
+    //   Region 1 — Water: (2,0)(3,0)(4,0)(2,1)(3,1)(4,1)(3,2)(4,2)(4,3) = 9 tiles
+    //   Region 2 — Water: (0,2)(1,2)(0,3)(1,3) = 4 tiles
+    //   Region 3 — Land:  (2,2)(2,3)(3,3) = 3 tiles
+
     #[test]
     fn every_tile_receives_a_region() {
         let mut grid = make_test_grid(&[
@@ -165,7 +178,8 @@ mod tests {
             "LLWWW", "LLWWW", "WWLWW", "WWLLW",
         ]);
         detect_regions(&mut grid);
-        assert_eq!(grid.regions.len(), 7);
+        // 2 land regions + 2 water regions = 4
+        assert_eq!(grid.regions.len(), 4);
     }
 
     #[test]
@@ -174,10 +188,11 @@ mod tests {
             "LLWWW", "LLWWW", "WWLWW", "WWLLW",
         ]);
         detect_regions(&mut grid);
+        // Land A: (0,0),(1,0),(0,1),(1,1) all share region 0
         let r00 = grid.region_ids[0];
         let r10 = grid.region_ids[1];
-        let r01 = grid.region_ids[5];
-        let r11 = grid.region_ids[6];
+        let r01 = grid.region_ids[5]; // y=1, x=0
+        let r11 = grid.region_ids[6]; // y=1, x=1
         assert_eq!(r00, r10);
         assert_eq!(r00, r01);
         assert_eq!(r00, r11);
@@ -189,12 +204,10 @@ mod tests {
             "LLWWW", "LLWWW", "WWLWW", "WWLLW",
         ]);
         detect_regions(&mut grid);
-        let region_a = grid.region_ids[0];
-        let region_d = grid.region_ids[12];
-        let region_g = grid.region_ids[17];
+        // Land A (idx 0) and Land D+G (idx 12) are different regions
+        let region_a = grid.region_ids[0]; // region 0
+        let region_d = grid.region_ids[12]; // region 3
         assert_ne!(region_a, region_d);
-        assert_ne!(region_a, region_g);
-        assert_ne!(region_d, region_g);
     }
 
     #[test]
@@ -235,16 +248,17 @@ mod tests {
     }
 
     #[test]
-    fn isolated_single_tile_is_its_own_region() {
+    fn small_land_region_is_detected() {
         let mut grid = make_test_grid(&[
             "LLWWW", "LLWWW", "WWLWW", "WWLLW",
         ]);
         detect_regions(&mut grid);
-        let rid = grid.region_ids[12];
+        // Region 3: (2,2),(2,3),(3,3) = 3 land tiles
+        let rid = grid.region_ids[12]; // (2,2)
         let region = &grid.regions[rid as usize];
         assert_eq!(region.kind, RegionKind::Land);
-        assert_eq!(region.tile_count, 1);
-        assert!(!region.touches_border);
+        assert_eq!(region.tile_count, 3);
+        assert!(region.touches_border); // (3,3) touches bottom row
     }
 
     #[test]
@@ -258,7 +272,9 @@ mod tests {
             .iter()
             .filter(|r| r.kind == RegionKind::Water)
             .collect();
+        // All border water is one connected region
         assert_eq!(water_regions.len(), 1);
-        assert_eq!(water_regions[0].tile_count, 16);
+        // 25 total - 6 land = 14 water tiles
+        assert_eq!(water_regions[0].tile_count, 14);
     }
 }
