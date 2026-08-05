@@ -103,6 +103,87 @@ kbd {
   border-radius: 3px; padding: 1px 5px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary);
 }
 
+/* ── Save & Load ────────────────────────────── */
+
+.import-label {
+  flex: 1; text-align: center; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 4px; margin: 0;
+}
+
+.saved-list {
+  margin-top: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.saved-list-empty {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+.save-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: border-color 0.15s;
+}
+.save-item:hover {
+  border-color: var(--border-hover);
+}
+.save-item-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.save-item-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.save-item-meta {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.save-item-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.save-btn-sm {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.save-btn-sm:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.save-btn-sm.danger:hover {
+  border-color: rgba(239,68,68,0.3);
+  color: var(--danger);
+}
+
 /* ── Viewport ───────────────────────────────── */
 
 #viewport-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg-void); }
