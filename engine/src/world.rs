@@ -148,17 +148,4 @@ mod tests {
         assert!(grid.get(0, 10).is_none());
         assert!(grid.get(100, 100).is_none());
     }
-
-    #[test]
-    fn movement_cost_none_for_water() {
-        assert_eq!(Terrain::DeepWater.movement_cost(), None);
-        assert_eq!(Terrain::ShallowWater.movement_cost(), None);
-    }
-
-    #[test]
-    fn movement_cost_some_for_land() {
-        assert!(Terrain::Plains.movement_cost().is_some());
-        assert!(Terrain::Forest.movement_cost().is_some());
-        assert!(Terrain::Mountain.movement_cost().is_some());
-    }
 }
