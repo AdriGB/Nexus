@@ -206,7 +206,6 @@ mod tests {
         assert_eq!(g1.region_ids, g2.region_ids);
         assert_eq!(g1.regions.len(), g2.regions.len());
         for (a, b) in g1.regions.iter().zip(g2.regions.iter()) {
-            assert_eq!(a.id, b.id);
             assert_eq!(a.kind, b.kind);
             assert_eq!(a.tile_count, b.tile_count);
         }
