@@ -15,7 +15,10 @@ export interface WorldSaveV1 {
 
 export const GENERATOR_VERSION = "0.1.0";
 
-export function createSave(name: string, config: WorldConfig): WorldSaveV1 {
+export function createSave(
+  name: string,
+  config: WorldConfig,
+): WorldSaveV1 {
   return {
     formatVersion: 1,
     generatorVersion: GENERATOR_VERSION,
@@ -23,6 +26,33 @@ export function createSave(name: string, config: WorldConfig): WorldSaveV1 {
     createdAt: new Date().toISOString(),
     config,
   };
+}
+
+function isIntegerInRange(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= min &&
+    value <= max
+  );
+}
+
+function isFloatInRange(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+  );
 }
 
 export function validateSave(data: unknown): WorldSaveV1 | null {
@@ -34,16 +64,23 @@ export function validateSave(data: unknown): WorldSaveV1 | null {
   const cfg = d.config as Record<string, unknown> | undefined;
   if (!cfg) return null;
 
-  if (typeof cfg.seed !== "number" || cfg.seed < 0 || cfg.seed > 4294967295) return null;
-  if (typeof cfg.width !== "number" || cfg.width < 64 || cfg.width > 1024) return null;
-  if (typeof cfg.height !== "number" || cfg.height < 64 || cfg.height > 1024) return null;
-  if (typeof cfg.seaLevel !== "number" || cfg.seaLevel < 0.05 || cfg.seaLevel > 0.8) return null;
+  if (!isIntegerInRange(cfg.seed, 0, 4294967295)) return null;
+  if (!isIntegerInRange(cfg.width, 64, 1024)) return null;
+  if (!isIntegerInRange(cfg.height, 64, 1024)) return null;
+  if (!isFloatInRange(cfg.seaLevel, 0.05, 0.8)) return null;
 
   return {
     formatVersion: 1,
-    generatorVersion: typeof d.generatorVersion === "string" ? d.generatorVersion : "unknown",
-    name: typeof d.name === "string" ? d.name : "Unnamed World",
-    createdAt: typeof d.createdAt === "string" ? d.createdAt : new Date().toISOString(),
+    generatorVersion:
+      typeof d.generatorVersion === "string"
+        ? d.generatorVersion
+        : "unknown",
+    name:
+      typeof d.name === "string" ? d.name : "Unnamed World",
+    createdAt:
+      typeof d.createdAt === "string"
+        ? d.createdAt
+        : new Date().toISOString(),
     config: {
       seed: cfg.seed,
       width: cfg.width,
