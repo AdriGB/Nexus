@@ -40,7 +40,6 @@ impl Terrain {
     pub fn is_water(&self) -> bool {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
