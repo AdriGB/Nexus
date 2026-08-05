@@ -35,7 +35,7 @@ jobs:
 
       - name: Build WASM
         working-directory: engine
-        run: wasm-pack build --target web --out-dir ../web/public/wasm
+        run: wasm-pack build --target web --out-dir ../web/src/wasm
 
   web:
     name: TypeScript Web
@@ -53,7 +53,7 @@ jobs:
 
       - name: Build WASM
         working-directory: engine
-        run: wasm-pack build --target web --out-dir ../web/public/wasm
+        run: wasm-pack build --target web --out-dir ../web/src/wasm
 
       - uses: actions/setup-node@v4
         with:
