@@ -3,20 +3,38 @@ import "./styles/main.css";
 import { state, setRenderCallback, requestRender } from "./state";
 import { loadWasm, createWorld } from "./wasm";
 import { resizeCanvas, render } from "./renderer/world-renderer";
-import { fitWorld, screenToTile, bindCamera } from "./renderer/camera";
-import { renderMinimap, drawMinimapViewport } from "./renderer/minimap";
-import { bindControls, readParams, updateWorldInfo } from "./ui/controls";
+import {
+  fitWorld,
+  screenToTile,
+  bindCamera,
+} from "./renderer/camera";
+import {
+  renderMinimap,
+  drawMinimapViewport,
+} from "./renderer/minimap";
+import {
+  bindControls,
+  readParams,
+  updateWorldInfo,
+  updateRegionStats,
+} from "./ui/controls";
 import { updateHover, hideTooltip } from "./ui/tooltip";
 import { buildLegend } from "./ui/legend";
-import { updateTileInspector, clearTileInspector } from "./ui/tile-inspector";
-import { bindSaveControls, autoSave, restoreLastWorld } from "./ui/save-controls";
+import {
+  updateTileInspector,
+  clearTileInspector,
+} from "./ui/tile-inspector";
+import {
+  bindSaveControls,
+  autoSave,
+  restoreLastWorld,
+} from "./ui/save-controls";
 
 /* ── World generation ─────────────────────── */
 
 function generateWorld(): void {
   const { seed, width, height, sea } = readParams();
 
-  // Clear selection state before replacing world
   state.selectedTile = null;
   state.hoverTile = null;
   hideTooltip();
@@ -35,15 +53,14 @@ function generateWorld(): void {
   state.worldH = state.world.height();
 
   updateWorldInfo(seed, width, height, sea);
+  updateRegionStats();
   fitWorld();
   renderMinimap();
   requestRender();
-
-  // Persist last world config
   autoSave();
 }
 
-/* ── Full render pass ─────────────────────── */
+/* ── Render callback ──────────────────────── */
 
 function fullRender(): void {
   render();
@@ -68,24 +85,33 @@ async function boot(): Promise<void> {
   }
 
   document.getElementById("loading")!.classList.add("done");
-  setTimeout(() => document.getElementById("loading")!.remove(), 600);
+  setTimeout(
+    () => document.getElementById("loading")!.remove(),
+    600,
+  );
 
   setRenderCallback(fullRender);
 
   buildLegend();
   resizeCanvas();
 
-  const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
+  const canvas = document.getElementById(
+    "world-canvas",
+  ) as HTMLCanvasElement;
   bindCamera(canvas);
   bindControls(generateWorld);
   bindSaveControls(generateWorld);
 
-  // Hover
   canvas.addEventListener("mousemove", (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    if (mx >= 0 && my >= 0 && mx < state.cssW && my < state.cssH) {
+    if (
+      mx >= 0 &&
+      my >= 0 &&
+      mx < state.cssW &&
+      my < state.cssH
+    ) {
       state.hoverTile = screenToTile(mx, my);
       updateHover(state.hoverTile, e.clientX, e.clientY);
       requestRender();
@@ -98,7 +124,6 @@ async function boot(): Promise<void> {
     requestRender();
   });
 
-  // Click to select tile
   canvas.addEventListener("click", () => {
     if (canvas.dataset.wasDrag === "true") return;
     if (state.hoverTile) {
@@ -108,7 +133,6 @@ async function boot(): Promise<void> {
     }
   });
 
-  // Restore last world if available, otherwise generate with defaults
   restoreLastWorld();
   generateWorld();
 }
