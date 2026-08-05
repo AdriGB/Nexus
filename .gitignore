@@ -1,13 +1,12 @@
 # Rust
 engine/target/
-engine/pkg/
+
+# WASM build output (rebuilt from engine source)
+web/src/wasm/
 
 # Node
 web/node_modules/
 web/dist/
-
-# WASM build output (rebuilt from engine source)
-web/public/wasm/
 
 # OS
 .DS_Store
