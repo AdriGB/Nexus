@@ -8,17 +8,15 @@ import { renderMinimap, drawMinimapViewport } from "./renderer/minimap";
 import { bindControls, readParams, updateWorldInfo } from "./ui/controls";
 import { updateHover, hideTooltip } from "./ui/tooltip";
 import { buildLegend } from "./ui/legend";
-import {
-  updateTileInspector,
-  clearTileInspector,
-} from "./ui/tile-inspector";
+import { updateTileInspector, clearTileInspector } from "./ui/tile-inspector";
+import { bindSaveControls, autoSave, restoreLastWorld } from "./ui/save-controls";
 
 /* ── World generation ─────────────────────── */
 
 function generateWorld(): void {
   const { seed, width, height, sea } = readParams();
 
-  // FIX #5: Clear selection state before replacing world
+  // Clear selection state before replacing world
   state.selectedTile = null;
   state.hoverTile = null;
   hideTooltip();
@@ -40,9 +38,12 @@ function generateWorld(): void {
   fitWorld();
   renderMinimap();
   requestRender();
+
+  // Persist last world config
+  autoSave();
 }
 
-/* ── Full render pass (FIX #7: no resizeCanvas here) ── */
+/* ── Full render pass ─────────────────────── */
 
 function fullRender(): void {
   render();
@@ -55,13 +56,12 @@ async function boot(): Promise<void> {
   try {
     await loadWasm();
   } catch (err) {
-    const loadingEl = document.getElementById("loading")!;
     const textEl = document.getElementById("loading-text")!;
     textEl.outerHTML = `<div class="error">
       <strong>Failed to load WASM engine</strong><br><br>
       ${(err as Error).message || err}<br><br>
       Build the engine first, then serve via HTTP:<br>
-      <code>cd engine && wasm-pack build --target web --out-dir ../web/public/wasm<br>
+      <code>cd engine && wasm-pack build --target web --out-dir ../web/src/wasm<br>
       cd ../web && npm run dev</code>
     </div>`;
     return;
@@ -70,22 +70,17 @@ async function boot(): Promise<void> {
   document.getElementById("loading")!.classList.add("done");
   setTimeout(() => document.getElementById("loading")!.remove(), 600);
 
-  // Set render callback
   setRenderCallback(fullRender);
 
-  // Build static UI
   buildLegend();
-
-  // FIX #7: Resize once at startup, then only on window resize
   resizeCanvas();
 
-  // Bind input
-  bindCamera(document.getElementById("world-canvas") as HTMLCanvasElement);
-  bindControls(generateWorld);
-
-  // Hover + click
   const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
+  bindCamera(canvas);
+  bindControls(generateWorld);
+  bindSaveControls(generateWorld);
 
+  // Hover
   canvas.addEventListener("mousemove", (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -103,6 +98,7 @@ async function boot(): Promise<void> {
     requestRender();
   });
 
+  // Click to select tile
   canvas.addEventListener("click", () => {
     if (canvas.dataset.wasDrag === "true") return;
     if (state.hoverTile) {
@@ -112,7 +108,8 @@ async function boot(): Promise<void> {
     }
   });
 
-  // Generate first world
+  // Restore last world if available, otherwise generate with defaults
+  restoreLastWorld();
   generateWorld();
 }
 
