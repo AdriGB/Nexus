@@ -93,7 +93,7 @@ impl WorldBridge {
                 } else {
                     u32::MAX
                 };
-                let (r_kind, r_area, r_border) =
+                let (r_kind, r_area, _r_border) =
                     if rid != u32::MAX
                         && (rid as usize) < self.grid.regions.len()
                     {
