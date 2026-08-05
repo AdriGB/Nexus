@@ -20,7 +20,7 @@ A procedural world generation tool built with Rust + WebAssembly + TypeScript.
 ```bash
 # Build the WASM engine
 cd engine
-wasm-pack build --target web --out-dir ../web/public/wasm
+wasm-pack build --target web --out-dir ../web/src/wasm
 
 # Install and run the frontend
 cd ../web
