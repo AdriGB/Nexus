@@ -59,7 +59,7 @@ impl Terrain {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RegionKind {
     Land,
     Water,
