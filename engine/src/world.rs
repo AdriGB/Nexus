@@ -102,10 +102,6 @@ impl Grid {
         }
     }
 
-    pub fn tile_count(&self) -> usize {
-        self.tiles.len()
-    }
-
     pub fn is_coastal(&self, x: u32, y: u32) -> bool {
         if let Some(tile) = self.get(x, y) {
             if tile.terrain.is_water() {
@@ -152,7 +148,7 @@ mod tests {
     #[test]
     fn tile_count_matches_dimensions() {
         let grid = make_grid(100, 80);
-        assert_eq!(grid.tile_count(), 8000);
+        assert_eq!(grid.tiles.len(), 8000);
     }
 
     #[test]
