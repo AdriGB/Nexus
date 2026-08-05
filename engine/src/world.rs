@@ -40,22 +40,6 @@ impl Terrain {
     pub fn is_water(&self) -> bool {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }
-
-    pub fn movement_cost(&self) -> Option<f32> {
-        match self {
-            Self::Plains => Some(1.0),
-            Self::Grassland => Some(1.1),
-            Self::Forest => Some(1.6),
-            Self::DenseForest => Some(2.2),
-            Self::Hills => Some(2.0),
-            Self::Mountain => Some(4.0),
-            Self::SnowPeak => Some(5.0),
-            Self::Swamp => Some(3.0),
-            Self::Beach => Some(1.5),
-            Self::Desert => Some(2.5),
-            Self::Tundra => Some(2.0),
-            Self::DeepWater | Self::ShallowWater => None,
-        }
     }
 }
 
@@ -67,7 +51,6 @@ pub enum RegionKind {
 
 #[derive(Clone, Debug)]
 pub struct Region {
-    pub id: u32,
     pub kind: RegionKind,
     pub tile_count: u32,
     pub min_x: u32,
