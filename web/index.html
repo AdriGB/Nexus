@@ -21,6 +21,7 @@
         <p class="app-subtitle">World Engine</p>
       </div>
 
+      <!-- World Parameters -->
       <div class="sidebar-section">
         <label class="field-label">World Parameters</label>
         <div class="input-row">
@@ -39,6 +40,7 @@
         <button id="btn-generate" class="btn-primary">Generate World</button>
       </div>
 
+      <!-- World Info -->
       <div class="sidebar-section" id="world-info" style="display:none;">
         <label class="field-label">World Info</label>
         <div class="info-grid">
@@ -49,16 +51,36 @@
         </div>
       </div>
 
+      <!-- Save & Load -->
+      <div class="sidebar-section" id="save-section">
+        <label class="field-label">Save &amp; Load</label>
+        <div class="input-row">
+          <input id="world-name-input" class="input-field" type="text" placeholder="World name..." maxlength="60">
+          <button id="btn-save-world" class="btn-primary" style="width:auto;padding:8px 14px;">Save</button>
+        </div>
+        <div class="input-row" style="gap:6px;">
+          <button id="btn-export-world" class="btn-secondary" style="flex:1;">Export JSON</button>
+          <label id="btn-import-label" class="btn-secondary import-label">
+            Import
+            <input id="import-file-input" type="file" accept=".json" style="display:none;">
+          </label>
+        </div>
+        <div id="saved-worlds-list" class="saved-list"></div>
+      </div>
+
+      <!-- Terrain Legend -->
       <div class="sidebar-section">
         <label class="field-label">Terrain Legend</label>
         <div class="legend-grid" id="legend-grid"></div>
       </div>
 
+      <!-- Selected Tile -->
       <div class="sidebar-section" id="tile-inspector" style="display:none;">
         <label class="field-label">Selected Tile</label>
         <div class="info-grid" id="tile-info-grid"></div>
       </div>
 
+      <!-- Controls -->
       <div class="sidebar-section" style="border-bottom:none;">
         <label class="field-label">Controls</label>
         <div style="font-size:10px;color:var(--text-muted);line-height:1.8;">
@@ -71,14 +93,13 @@
       </div>
     </aside>
 
+    <!-- Viewport -->
     <main id="viewport-wrap">
       <canvas id="world-canvas"></canvas>
-
       <div id="minimap-wrap">
         <span id="minimap-label">Minimap</span>
         <canvas id="minimap-canvas" width="180" height="180"></canvas>
       </div>
-
       <div id="status-bar">
         <span class="status-item">x:<span class="val" id="st-x">&#8212;</span></span>
         <span class="status-item">y:<span class="val" id="st-y">&#8212;</span></span>
@@ -92,6 +113,7 @@
     </main>
   </div>
 
+  <!-- Tooltip -->
   <div id="tooltip">
     <div class="tooltip-terrain" id="tt-terrain"></div>
     <div class="tooltip-row"><span>Altitude</span><span id="tt-alt"></span></div>
