@@ -36,6 +36,45 @@ impl Terrain {
             Self::Tundra => "Tundra",
         }
     }
+
+    pub fn is_water(&self) -> bool {
+        matches!(self, Self::DeepWater | Self::ShallowWater)
+    }
+
+    pub fn movement_cost(&self) -> Option<f32> {
+        match self {
+            Self::Plains => Some(1.0),
+            Self::Grassland => Some(1.1),
+            Self::Forest => Some(1.6),
+            Self::DenseForest => Some(2.2),
+            Self::Hills => Some(2.0),
+            Self::Mountain => Some(4.0),
+            Self::SnowPeak => Some(5.0),
+            Self::Swamp => Some(3.0),
+            Self::Beach => Some(1.5),
+            Self::Desert => Some(2.5),
+            Self::Tundra => Some(2.0),
+            Self::DeepWater | Self::ShallowWater => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum RegionKind {
+    Land,
+    Water,
+}
+
+#[derive(Clone, Debug)]
+pub struct Region {
+    pub id: u32,
+    pub kind: RegionKind,
+    pub tile_count: u32,
+    pub min_x: u32,
+    pub min_y: u32,
+    pub max_x: u32,
+    pub max_y: u32,
+    pub touches_border: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -50,6 +89,8 @@ pub struct Grid {
     pub width: u32,
     pub height: u32,
     pub tiles: Vec<Tile>,
+    pub region_ids: Vec<u32>,
+    pub regions: Vec<Region>,
 }
 
 impl Grid {
@@ -63,6 +104,26 @@ impl Grid {
 
     pub fn tile_count(&self) -> usize {
         self.tiles.len()
+    }
+
+    pub fn is_coastal(&self, x: u32, y: u32) -> bool {
+        if let Some(tile) = self.get(x, y) {
+            if tile.terrain.is_water() {
+                return false;
+            }
+            for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && ny >= 0 {
+                    if let Some(n) = self.get(nx as u32, ny as u32) {
+                        if n.terrain.is_water() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 }
 
@@ -79,7 +140,13 @@ mod tests {
                 temperature: 0.5,
             })
             .collect();
-        Grid { width: w, height: h, tiles }
+        Grid {
+            width: w,
+            height: h,
+            tiles,
+            region_ids: Vec::new(),
+            regions: Vec::new(),
+        }
     }
 
     #[test]
@@ -101,5 +168,18 @@ mod tests {
         assert!(grid.get(10, 0).is_none());
         assert!(grid.get(0, 10).is_none());
         assert!(grid.get(100, 100).is_none());
+    }
+
+    #[test]
+    fn movement_cost_none_for_water() {
+        assert_eq!(Terrain::DeepWater.movement_cost(), None);
+        assert_eq!(Terrain::ShallowWater.movement_cost(), None);
+    }
+
+    #[test]
+    fn movement_cost_some_for_land() {
+        assert!(Terrain::Plains.movement_cost().is_some());
+        assert!(Terrain::Forest.movement_cost().is_some());
+        assert!(Terrain::Mountain.movement_cost().is_some());
     }
 }
