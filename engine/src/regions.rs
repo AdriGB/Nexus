@@ -29,7 +29,6 @@ pub fn detect_regions(grid: &mut Grid) {
             };
 
             let mut region = Region {
-                id: next_id,
                 kind,
                 tile_count: 0,
                 min_x: x,
