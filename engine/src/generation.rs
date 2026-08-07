@@ -1,12 +1,7 @@
-use crate::world::{Grid, Tile, Terrain};
+use crate::world::{Grid, Terrain, Tile};
 use noise::{NoiseFn, Perlin, Seedable};
 
-pub fn generate_world(
-    seed: u32,
-    width: u32,
-    height: u32,
-    sea_level: f64,
-) -> Grid {
+pub fn generate_world(seed: u32, width: u32, height: u32, sea_level: f64) -> Grid {
     let tile_count = width
         .checked_mul(height)
         .and_then(|n| usize::try_from(n).ok())
@@ -24,24 +19,18 @@ pub fn generate_world(
             let fx = x as f64;
             let fy = y as f64;
 
-            let continent =
-                fbm(&continent_noise, fx, fy, 0.0018, 4, 0.5, 2.0);
-            let detail =
-                fbm(&detail_noise, fx, fy, 0.007, 6, 0.48, 2.1);
+            let continent = fbm(&continent_noise, fx, fy, 0.0018, 4, 0.5, 2.0);
+            let detail = fbm(&detail_noise, fx, fy, 0.007, 6, 0.48, 2.1);
             let altitude = continent * 0.58 + detail * 0.42;
 
-            let raw_moisture =
-                fbm(&moisture_noise, fx, fy, 0.005, 4, 0.5, 2.0);
+            let raw_moisture = fbm(&moisture_noise, fx, fy, 0.005, 4, 0.5, 2.0);
             let moisture = ((raw_moisture + 1.0) / 2.0).clamp(0.0, 1.0);
 
             let latitude = (fy / height as f64 - 0.5).abs() * 2.0;
-            let temp_var =
-                fbm(&temp_noise, fx, fy, 0.0025, 3, 0.4, 2.0) * 0.18;
-            let temperature =
-                (1.0 - latitude * 0.85 + temp_var).clamp(0.0, 1.0);
+            let temp_var = fbm(&temp_noise, fx, fy, 0.0025, 3, 0.4, 2.0) * 0.18;
+            let temperature = (1.0 - latitude * 0.85 + temp_var).clamp(0.0, 1.0);
 
-            let terrain =
-                classify_terrain(altitude, moisture, temperature, sea_level);
+            let terrain = classify_terrain(altitude, moisture, temperature, sea_level);
 
             tiles.push(Tile {
                 terrain,
@@ -85,12 +74,7 @@ fn fbm(
     total / max_amplitude
 }
 
-fn classify_terrain(
-    altitude: f64,
-    moisture: f64,
-    temperature: f64,
-    sea_level: f64,
-) -> Terrain {
+fn classify_terrain(altitude: f64, moisture: f64, temperature: f64, sea_level: f64) -> Terrain {
     if altitude < sea_level - 0.18 {
         return Terrain::DeepWater;
     }

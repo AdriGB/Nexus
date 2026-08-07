@@ -53,23 +53,16 @@ pub fn detect_regions(grid: &mut Grid) {
                 if cy > region.max_y {
                     region.max_y = cy;
                 }
-                if cx == 0
-                    || cy == 0
-                    || cx == grid.width - 1
-                    || cy == grid.height - 1
-                {
+                if cx == 0 || cy == 0 || cx == grid.width - 1 || cy == grid.height - 1 {
                     region.touches_border = true;
                 }
 
-                for (nx, ny) in
-                    neighbors_4(cx, cy, grid.width, grid.height)
-                {
+                for (nx, ny) in neighbors_4(cx, cy, grid.width, grid.height) {
                     let nidx = (ny * grid.width + nx) as usize;
                     if grid.region_ids[nidx] != u32::MAX {
                         continue;
                     }
-                    let n_is_water =
-                        is_water(grid.tiles[nidx].terrain);
+                    let n_is_water = is_water(grid.tiles[nidx].terrain);
                     let n_kind = if n_is_water {
                         RegionKind::Water
                     } else {
@@ -88,12 +81,7 @@ pub fn detect_regions(grid: &mut Grid) {
     }
 }
 
-fn neighbors_4(
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-) -> Vec<(u32, u32)> {
+fn neighbors_4(x: u32, y: u32, w: u32, h: u32) -> Vec<(u32, u32)> {
     let mut out = Vec::with_capacity(4);
     if x > 0 {
         out.push((x - 1, y));
@@ -128,11 +116,7 @@ mod tests {
                 };
                 tiles.push(Tile {
                     terrain,
-                    altitude: if is_water(terrain) {
-                        -0.5
-                    } else {
-                        0.5
-                    },
+                    altitude: if is_water(terrain) { -0.5 } else { 0.5 },
                     moisture: 0.5,
                     temperature: 0.5,
                 });
@@ -163,9 +147,7 @@ mod tests {
 
     #[test]
     fn every_tile_receives_a_region() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         for (i, &rid) in grid.region_ids.iter().enumerate() {
             assert_ne!(rid, u32::MAX, "tile {} has no region", i);
@@ -174,9 +156,7 @@ mod tests {
 
     #[test]
     fn correct_number_of_regions() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         // 2 land regions + 2 water regions = 4
         assert_eq!(grid.regions.len(), 4);
@@ -184,9 +164,7 @@ mod tests {
 
     #[test]
     fn connected_land_has_same_region() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         // Land A: (0,0),(1,0),(0,1),(1,1) all share region 0
         let r00 = grid.region_ids[0];
@@ -200,9 +178,7 @@ mod tests {
 
     #[test]
     fn land_separated_by_water_has_different_regions() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         // Land A (idx 0) and Land D+G (idx 12) are different regions
         let region_a = grid.region_ids[0]; // region 0
@@ -212,9 +188,7 @@ mod tests {
 
     #[test]
     fn water_and_land_never_share_region() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         for (i, tile) in grid.tiles.iter().enumerate() {
             let rid = grid.region_ids[i];
@@ -229,19 +203,13 @@ mod tests {
 
     #[test]
     fn region_detection_is_deterministic() {
-        let mut g1 = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
-        let mut g2 = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut g1 = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
+        let mut g2 = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut g1);
         detect_regions(&mut g2);
         assert_eq!(g1.region_ids, g2.region_ids);
         assert_eq!(g1.regions.len(), g2.regions.len());
-        for (a, b) in
-            g1.regions.iter().zip(g2.regions.iter())
-        {
+        for (a, b) in g1.regions.iter().zip(g2.regions.iter()) {
             assert_eq!(a.kind, b.kind);
             assert_eq!(a.tile_count, b.tile_count);
         }
@@ -249,9 +217,7 @@ mod tests {
 
     #[test]
     fn small_land_region_is_detected() {
-        let mut grid = make_test_grid(&[
-            "LLWWW", "LLWWW", "WWLWW", "WWLLW",
-        ]);
+        let mut grid = make_test_grid(&["LLWWW", "LLWWW", "WWLWW", "WWLLW"]);
         detect_regions(&mut grid);
         // Region 3: (2,2),(2,3),(3,3) = 3 land tiles
         let rid = grid.region_ids[12]; // (2,2)
@@ -263,9 +229,7 @@ mod tests {
 
     #[test]
     fn large_water_body_is_detected() {
-        let mut grid = make_test_grid(&[
-            "WWWWW", "WLLLW", "WLLLW", "WWWWW",
-        ]);
+        let mut grid = make_test_grid(&["WWWWW", "WLLLW", "WLLLW", "WWWWW"]);
         detect_regions(&mut grid);
         let water_regions: Vec<_> = grid
             .regions
