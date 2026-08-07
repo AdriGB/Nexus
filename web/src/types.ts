@@ -9,6 +9,12 @@ export interface IWorldBridge {
   ): Uint8Array;
   tile_info(x: number, y: number): string;
   region_stats(): string;
+  find_path(
+    startX: number,
+    startY: number,
+    goalX: number,
+    goalY: number,
+  ): Uint32Array;
   free(): void;
 }
 
@@ -24,6 +30,7 @@ export interface WorldBridgeConstructor {
 export interface IGpuRendererBridge {
   resize(width: number, height: number, dpr: number): void;
   upload_world(world: IWorldBridge): void;
+  upload_route(coordinates: Uint32Array): void;
   render(
     panX: number,
     panY: number,

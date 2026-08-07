@@ -40,6 +40,26 @@ impl Terrain {
     pub fn is_water(&self) -> bool {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }
+
+    pub fn movement_cost(&self) -> Option<f32> {
+        match self {
+            Self::DeepWater | Self::ShallowWater | Self::SnowPeak => None,
+            Self::Beach => Some(1.2),
+            Self::Plains => Some(1.0),
+            Self::Grassland => Some(1.1),
+            Self::Forest => Some(1.6),
+            Self::DenseForest => Some(2.2),
+            Self::Hills => Some(2.0),
+            Self::Mountain => Some(4.0),
+            Self::Desert => Some(1.8),
+            Self::Swamp => Some(3.0),
+            Self::Tundra => Some(1.7),
+        }
+    }
+
+    pub fn is_walkable(&self) -> bool {
+        self.movement_cost().is_some()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -146,5 +166,27 @@ mod tests {
         assert!(grid.get(10, 0).is_none());
         assert!(grid.get(0, 10).is_none());
         assert!(grid.get(100, 100).is_none());
+    }
+
+    #[test]
+    fn plains_are_walkable() {
+        assert!(Terrain::Plains.is_walkable());
+    }
+
+    #[test]
+    fn deep_water_is_not_walkable() {
+        assert!(!Terrain::DeepWater.is_walkable());
+    }
+
+    #[test]
+    fn snow_peaks_are_not_walkable() {
+        assert!(!Terrain::SnowPeak.is_walkable());
+    }
+
+    #[test]
+    fn mountains_are_more_expensive_than_plains() {
+        assert!(
+            Terrain::Mountain.movement_cost().unwrap() > Terrain::Plains.movement_cost().unwrap()
+        );
     }
 }

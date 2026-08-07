@@ -40,10 +40,12 @@
 
 ## Phase 1.4 — Traversal
 
-- [ ] Terrain movement costs
-- [ ] Walkability rules
-- [ ] A* pathfinding
-- [ ] GPU route overlay
+- [x] Terrain movement costs
+- [x] Walkability rules
+- [x] Four-neighbor A* pathfinding with a Manhattan heuristic
+- [x] WASM route bridge
+- [x] GPU route overlay with a dedicated render pass
+- [x] Artificial-map and large-world pathfinding tests
 
 ## Phase 2 — Living World
 

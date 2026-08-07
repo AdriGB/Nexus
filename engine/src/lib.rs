@@ -1,4 +1,5 @@
 mod generation;
+mod pathfinding;
 mod regions;
 #[cfg(target_arch = "wasm32")]
 mod renderer;
@@ -39,6 +40,10 @@ impl GpuRenderer {
         self.state.upload_world(&world.grid);
     }
 
+    pub fn upload_route(&mut self, coordinates: Vec<u32>) {
+        self.state.upload_route(&coordinates);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
@@ -72,6 +77,14 @@ impl WorldBridge {
 
     pub fn height(&self) -> u32 {
         self.grid.height
+    }
+
+    pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
+        pathfinding::find_path(&self.grid, (start_x, start_y), (goal_x, goal_y))
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|(x, y)| [x, y])
+            .collect()
     }
 
     pub fn get_tile_data(&self, vx: i32, vy: i32, vw: i32, vh: i32) -> Vec<u8> {

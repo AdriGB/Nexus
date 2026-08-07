@@ -5,6 +5,7 @@ import { loadWasm, createWorld } from "./wasm";
 import {
   initializeRenderer,
   renderWorld,
+  uploadRouteToRenderer,
   uploadWorldToRenderer,
 } from "./renderer/renderer";
 import {
@@ -41,6 +42,9 @@ function generateWorld(): void {
 
   state.selectedTile = null;
   state.hoverTile = null;
+  state.routeStart = null;
+  state.routeEnd = null;
+  state.route = [];
   hideTooltip();
   clearTileInspector();
 
@@ -56,6 +60,8 @@ function generateWorld(): void {
   state.worldW = state.world.width();
   state.worldH = state.world.height();
   uploadWorldToRenderer();
+  uploadRouteToRenderer();
+  updateRouteStatus();
 
   updateWorldInfo(seed, width, height, sea);
   updateRegionStats();
@@ -127,13 +133,32 @@ async function boot(): Promise<void> {
     requestRender();
   });
 
-  inputLayer.addEventListener("click", () => {
+  inputLayer.addEventListener("click", (event) => {
     if (inputLayer.dataset.wasDrag === "true") return;
-    if (state.hoverTile) {
-      state.selectedTile = { ...state.hoverTile };
-      updateTileInspector();
-      requestRender();
+    if (!state.hoverTile || !isTileInWorld(state.hoverTile)) return;
+
+    const tile = { ...state.hoverTile };
+    state.selectedTile = tile;
+    updateTileInspector();
+
+    if (event.shiftKey && state.routeStart && state.world) {
+      state.routeEnd = tile;
+      const coordinates = state.world.find_path(
+        state.routeStart.x,
+        state.routeStart.y,
+        tile.x,
+        tile.y,
+      );
+      state.route = unpackRoute(coordinates);
+    } else {
+      state.routeStart = tile;
+      state.routeEnd = null;
+      state.route = [];
     }
+
+    uploadRouteToRenderer();
+    updateRouteStatus();
+    requestRender();
   });
 
   restoreLastWorld();
@@ -141,3 +166,35 @@ async function boot(): Promise<void> {
 }
 
 boot();
+
+function unpackRoute(coordinates: Uint32Array): Array<{ x: number; y: number }> {
+  const route = [];
+  for (let index = 0; index + 1 < coordinates.length; index += 2) {
+    route.push({ x: coordinates[index], y: coordinates[index + 1] });
+  }
+  return route;
+}
+
+function isTileInWorld(tile: { x: number; y: number }): boolean {
+  return (
+    tile.x >= 0 &&
+    tile.y >= 0 &&
+    tile.x < state.worldW &&
+    tile.y < state.worldH
+  );
+}
+
+function updateRouteStatus(): void {
+  const status = document.getElementById("st-route");
+  if (!status) return;
+
+  if (!state.routeStart) {
+    status.textContent = "Select origin";
+  } else if (!state.routeEnd) {
+    status.textContent = `${state.routeStart.x},${state.routeStart.y} → Shift+Click`;
+  } else if (state.route.length === 0) {
+    status.textContent = "No path";
+  } else {
+    status.textContent = `${state.route.length} tiles`;
+  }
+}

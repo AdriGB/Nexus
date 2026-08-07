@@ -74,6 +74,17 @@ export function uploadWorldToRenderer(): void {
   }
 }
 
+export function uploadRouteToRenderer(): void {
+  if (backend !== "wgpu" || !gpuRenderer) return;
+
+  const coordinates = new Uint32Array(state.route.length * 2);
+  state.route.forEach((tile, index) => {
+    coordinates[index * 2] = tile.x;
+    coordinates[index * 2 + 1] = tile.y;
+  });
+  gpuRenderer.upload_route(coordinates);
+}
+
 export function renderWorld(): void {
   const frameStartedAt = debugEnabled ? performance.now() : 0;
 

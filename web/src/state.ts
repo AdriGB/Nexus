@@ -12,6 +12,9 @@ export interface AppState {
   showGrid: boolean;
   hoverTile: TileCoord | null;
   selectedTile: TileCoord | null;
+  routeStart: TileCoord | null;
+  routeEnd: TileCoord | null;
+  route: TileCoord[];
   minimapImageData: ImageData | null;
 }
 
@@ -27,6 +30,9 @@ export const state: AppState = {
   showGrid: false,
   hoverTile: null,
   selectedTile: null,
+  routeStart: null,
+  routeEnd: null,
+  route: [],
   minimapImageData: null,
 };
 

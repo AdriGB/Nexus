@@ -66,6 +66,16 @@ The Rust engine owns world generation and the wgpu renderer. In GPU mode it uplo
 
 TypeScript continues to own the HTML interface, persistence, input handling, camera state, and minimap. Camera changes cross the WASM boundary as a small uniform update rather than as a full visible-tile buffer.
 
+## Traversal and route preview
+
+Terrain defines walkability and an initial movement cost. The Rust engine uses four-neighbor A* with a Manhattan heuristic to find the cheapest route between two tiles.
+
+- Click a walkable tile to set the route origin.
+- Shift+Click another tile to calculate the destination.
+- The resulting route is uploaded to a dedicated wgpu vertex buffer and rendered in a separate overlay pass.
+
+Route visualization is intentionally unavailable in the frozen Canvas 2D fallback.
+
 ## Prerequisites
 
 - Rust (stable)

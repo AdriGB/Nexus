@@ -2,6 +2,7 @@ use super::terrain::encode_world_texture;
 use crate::world::Grid;
 use bytemuck::{Pod, Zeroable};
 use wasm_bindgen::{JsCast, JsValue};
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -12,15 +13,24 @@ struct CameraUniform {
     options: [f32; 4],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct RouteVertex {
+    position: [f32; 2],
+}
+
 pub struct GpuState {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
+    route_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
+    route_vertex_buffer: wgpu::Buffer,
+    route_vertex_count: u32,
     _world_texture: wgpu::Texture,
     world_width: u32,
     world_height: u32,
@@ -75,7 +85,7 @@ impl GpuState {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -130,6 +140,49 @@ impl GpuState {
             multiview_mask: None,
             cache: None,
         });
+        let route_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/route.wgsl"));
+        let route_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("NEXUS route pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &route_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<RouteVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 0,
+                        shader_location: 0,
+                    }],
+                })],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &route_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let route_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("NEXUS empty route vertex buffer"),
+            size: std::mem::size_of::<RouteVertex>() as u64,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
 
         Ok(Self {
             surface,
@@ -137,9 +190,12 @@ impl GpuState {
             queue,
             config,
             pipeline,
+            route_pipeline,
             bind_group_layout,
             bind_group,
             camera_buffer,
+            route_vertex_buffer,
+            route_vertex_count: 0,
             _world_texture: world_texture,
             world_width: 0,
             world_height: 0,
@@ -189,6 +245,33 @@ impl GpuState {
         self._world_texture = texture;
         self.world_width = grid.width;
         self.world_height = grid.height;
+        self.route_vertex_count = 0;
+    }
+
+    pub fn upload_route(&mut self, coordinates: &[u32]) {
+        let vertices: Vec<_> = coordinates
+            .chunks_exact(2)
+            .filter_map(|coordinate| {
+                let x = coordinate[0];
+                let y = coordinate[1];
+                (x < self.world_width && y < self.world_height).then_some(RouteVertex {
+                    position: [x as f32 + 0.5, y as f32 + 0.5],
+                })
+            })
+            .collect();
+
+        self.route_vertex_count = vertices.len() as u32;
+        if vertices.is_empty() {
+            return;
+        }
+
+        self.route_vertex_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("NEXUS route vertex buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -280,6 +363,29 @@ impl GpuState {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.draw(0..3, 0..1);
+        }
+
+        if self.route_vertex_count >= 2 {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("NEXUS route render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.route_pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_vertex_buffer(0, self.route_vertex_buffer.slice(..));
+            pass.draw(0..self.route_vertex_count, 0..1);
         }
 
         self.queue.submit(Some(encoder.finish()));
