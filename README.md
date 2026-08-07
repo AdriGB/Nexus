@@ -101,6 +101,14 @@ The browser uses `requestAnimationFrame` only to measure elapsed time; Rust rece
 
 WGSL shaders are parsed and validated with Naga during `cargo test`, so invalid identifiers or shader syntax fail CI before reaching WebGPU at runtime.
 
+## First entity
+
+Every generated world starts with one entity on the nearest walkable tile to the world center. `Simulation` owns its mutable state and receives `&mut Grid` for each world step, keeping spatial data separate from the logic that transforms it.
+
+The entity begins with zero hunger. Each tick increases hunger; at the threshold it searches for nearby Food deposits, tests candidates with A*, stores one resulting path, and follows that path without recalculating it every tick. On arrival it consumes Food and updates the resource layer.
+
+Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
+
 ## Prerequisites
 
 - Rust (stable)

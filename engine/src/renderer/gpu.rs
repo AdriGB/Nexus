@@ -1,5 +1,6 @@
 use super::resources::encode_resource_texture;
 use super::terrain::encode_world_texture;
+use crate::simulation::Simulation;
 use crate::world::Grid;
 use bytemuck::{Pod, Zeroable};
 use wasm_bindgen::{JsCast, JsValue};
@@ -20,6 +21,14 @@ struct RouteVertex {
     position: [f32; 2],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct EntityInstance {
+    position: [f32; 2],
+    hunger: f32,
+    activity: u32,
+}
+
 pub struct GpuState {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -27,11 +36,14 @@ pub struct GpuState {
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     route_pipeline: wgpu::RenderPipeline,
+    entity_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     camera_buffer: wgpu::Buffer,
     route_vertex_buffer: wgpu::Buffer,
     route_vertex_count: u32,
+    entity_instance_buffer: wgpu::Buffer,
+    entity_instance_count: u32,
     _world_texture: wgpu::Texture,
     _resource_texture: wgpu::Texture,
     world_width: u32,
@@ -202,6 +214,58 @@ impl GpuState {
             usage: wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         });
+        let entity_shader = device.create_shader_module(wgpu::include_wgsl!("shaders/entity.wgsl"));
+        let entity_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("NEXUS entity pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &entity_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<EntityInstance>() as u64,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32,
+                            offset: 8,
+                            shader_location: 1,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Uint32,
+                            offset: 12,
+                            shader_location: 2,
+                        },
+                    ],
+                })],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &entity_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let entity_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("NEXUS empty entity instance buffer"),
+            size: std::mem::size_of::<EntityInstance>() as u64,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
 
         Ok(Self {
             surface,
@@ -210,11 +274,14 @@ impl GpuState {
             config,
             pipeline,
             route_pipeline,
+            entity_pipeline,
             bind_group_layout,
             bind_group,
             camera_buffer,
             route_vertex_buffer,
             route_vertex_count: 0,
+            entity_instance_buffer,
+            entity_instance_count: 0,
             _world_texture: world_texture,
             _resource_texture: resource_texture,
             world_width: 0,
@@ -285,6 +352,50 @@ impl GpuState {
         self.world_width = grid.width;
         self.world_height = grid.height;
         self.route_vertex_count = 0;
+    }
+
+    pub fn upload_resources(&mut self, grid: &Grid) {
+        if grid.width != self.world_width || grid.height != self.world_height {
+            return;
+        }
+        let data = encode_resource_texture(grid);
+        self.queue.write_texture(
+            self._resource_texture.as_image_copy(),
+            &data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(grid.width * 4),
+                rows_per_image: Some(grid.height),
+            },
+            wgpu::Extent3d {
+                width: grid.width,
+                height: grid.height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    pub fn upload_entities(&mut self, simulation: &Simulation) {
+        let instances: Vec<_> = simulation
+            .entities()
+            .iter()
+            .map(|entity| EntityInstance {
+                position: [entity.x as f32 + 0.5, entity.y as f32 + 0.5],
+                hunger: entity.hunger,
+                activity: entity.activity as u32,
+            })
+            .collect();
+        self.entity_instance_count = instances.len() as u32;
+        if instances.is_empty() {
+            return;
+        }
+        self.entity_instance_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("NEXUS entity instance buffer"),
+                    contents: bytemuck::cast_slice(&instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
     }
 
     pub fn upload_route(&mut self, coordinates: &[u32]) {
@@ -431,6 +542,29 @@ impl GpuState {
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, self.route_vertex_buffer.slice(..));
             pass.draw(0..self.route_vertex_count, 0..1);
+        }
+
+        if self.entity_instance_count > 0 {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("NEXUS entity render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.entity_pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_vertex_buffer(0, self.entity_instance_buffer.slice(..));
+            pass.draw(0..6, 0..self.entity_instance_count);
         }
 
         self.queue.submit(Some(encoder.finish()));

@@ -7,6 +7,9 @@ export interface IWorldBridge {
   simulation_step(): bigint;
   simulation_pause(): void;
   simulation_resume(): void;
+  simulation_world_revision(): bigint;
+  entity_count(): number;
+  entity_info(id: number): string;
   get_tile_data(
     vx: number,
     vy: number,
@@ -37,6 +40,8 @@ export interface IGpuRendererBridge {
   resize(width: number, height: number, dpr: number): void;
   upload_world(world: IWorldBridge): void;
   upload_route(coordinates: Uint32Array): void;
+  upload_entities(world: IWorldBridge): void;
+  upload_resources(world: IWorldBridge): void;
   render(
     panX: number,
     panY: number,
@@ -73,6 +78,15 @@ export interface TileInfo {
     kind: "Food" | "Timber" | "Stone" | "Iron";
     amount: number;
   } | null;
+}
+
+export interface EntityInfo {
+  id: number;
+  x: number;
+  y: number;
+  hunger: number;
+  activity: "Idle" | "Seeking food" | "Moving";
+  remaining_path: number;
 }
 
 export interface RegionStats {

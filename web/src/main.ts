@@ -36,7 +36,7 @@ import {
 } from "./ui/save-controls";
 import {
   bindSimulationControls,
-  syncSimulationUi,
+  resetSimulationView,
 } from "./simulation";
 
 /* ── World generation ─────────────────────── */
@@ -63,7 +63,7 @@ function generateWorld(): void {
   state.world = createWorld(seed, width, height, sea);
   state.worldW = state.world.width();
   state.worldH = state.world.height();
-  syncSimulationUi();
+  resetSimulationView();
   uploadWorldToRenderer();
   uploadRouteToRenderer();
   updateRouteStatus();

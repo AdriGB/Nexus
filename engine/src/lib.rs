@@ -47,6 +47,14 @@ impl GpuRenderer {
         self.state.upload_route(&coordinates);
     }
 
+    pub fn upload_entities(&mut self, world: &WorldBridge) {
+        self.state.upload_entities(&world.simulation);
+    }
+
+    pub fn upload_resources(&mut self, world: &WorldBridge) {
+        self.state.upload_resources(&world.grid);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
@@ -81,10 +89,8 @@ impl WorldBridge {
         let mut grid = generation::generate_world(seed, width, height, sea_level);
         resources::generate_resources(seed, &mut grid);
         regions::detect_regions(&mut grid);
-        WorldBridge {
-            grid,
-            simulation: simulation::Simulation::default(),
-        }
+        let simulation = simulation::Simulation::with_first_entity(&grid);
+        WorldBridge { grid, simulation }
     }
 
     pub fn width(&self) -> u32 {
@@ -104,11 +110,11 @@ impl WorldBridge {
     }
 
     pub fn simulation_advance(&mut self, ticks: u32) -> u64 {
-        self.simulation.advance(ticks)
+        self.simulation.advance(ticks, &mut self.grid)
     }
 
     pub fn simulation_step(&mut self) -> u64 {
-        self.simulation.step()
+        self.simulation.step(&mut self.grid)
     }
 
     pub fn simulation_pause(&mut self) {
@@ -117,6 +123,38 @@ impl WorldBridge {
 
     pub fn simulation_resume(&mut self) {
         self.simulation.resume();
+    }
+
+    pub fn simulation_world_revision(&self) -> u64 {
+        self.simulation.world_revision()
+    }
+
+    pub fn entity_count(&self) -> u32 {
+        self.simulation.entities().len() as u32
+    }
+
+    pub fn entity_info(&self, id: u32) -> String {
+        let Some(entity) = self
+            .simulation
+            .entities()
+            .iter()
+            .find(|entity| entity.id == id)
+        else {
+            return "{}".to_string();
+        };
+
+        format!(
+            concat!(
+                r#"{{"id":{},"x":{},"y":{},"hunger":{:.2},"#,
+                r#""activity":"{}","remaining_path":{}}}"#,
+            ),
+            entity.id,
+            entity.x,
+            entity.y,
+            entity.hunger,
+            entity.activity.label(),
+            entity.remaining_path_len(),
+        )
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {

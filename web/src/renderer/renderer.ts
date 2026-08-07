@@ -71,6 +71,15 @@ export function resizeRenderer(): void {
 export function uploadWorldToRenderer(): void {
   if (backend === "wgpu" && gpuRenderer && state.world) {
     gpuRenderer.upload_world(state.world);
+    gpuRenderer.upload_entities(state.world);
+  }
+}
+
+export function uploadSimulationToRenderer(resourcesChanged: boolean): void {
+  if (backend !== "wgpu" || !gpuRenderer || !state.world) return;
+  gpuRenderer.upload_entities(state.world);
+  if (resourcesChanged) {
+    gpuRenderer.upload_resources(state.world);
   }
 }
 

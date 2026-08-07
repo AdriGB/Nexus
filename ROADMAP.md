@@ -72,9 +72,19 @@
 
 ### Phase 2.3 — First Entity
 
-- [ ] Entity system (creatures with needs, personality, AI)
-- [ ] GPU-instanced entity rendering
+- [x] Entity ID, position, and Simulation-owned storage
+- [x] Deterministic spawn on walkable terrain
+- [x] Tick-driven movement with stored A* paths
+- [x] GPU-instanced entity rendering
+- [x] Hunger need and nearby Food search
+- [x] Food consumption and resource depletion
+- [x] Entity inspector and activity debug state
+- [x] Simulation mutates Grid through explicit world steps
+
+### Future Entity Systems
+
 - [ ] Reproduction, aging, death
+- [ ] Personality and relationships
 - [ ] Factions and groups
 
 ## Phase 3 — User Rules & Consequences

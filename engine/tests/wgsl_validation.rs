@@ -9,6 +9,10 @@ const SHADERS: &[(&str, &str)] = &[
         "route.wgsl",
         include_str!("../src/renderer/shaders/route.wgsl"),
     ),
+    (
+        "entity.wgsl",
+        include_str!("../src/renderer/shaders/entity.wgsl"),
+    ),
 ];
 
 #[test]

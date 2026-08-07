@@ -1,4 +1,7 @@
-import { state } from "./state";
+import { requestRender, state } from "./state";
+import { uploadSimulationToRenderer } from "./renderer/renderer";
+import type { EntityInfo } from "./types";
+import { updateTileInspector } from "./ui/tile-inspector";
 
 const BASE_TICKS_PER_SECOND = 4;
 const MAX_FRAME_DELTA_SECONDS = 0.25;
@@ -6,6 +9,7 @@ const MAX_FRAME_DELTA_SECONDS = 0.25;
 let speed = 1;
 let accumulator = 0;
 let previousTimestamp: number | null = null;
+let lastWorldRevision = 0n;
 
 export function bindSimulationControls(): void {
   const playButton = document.getElementById("btn-sim-play")!;
@@ -26,8 +30,9 @@ export function bindSimulationControls(): void {
   });
 
   stepButton.addEventListener("click", () => {
-    state.world?.simulation_step();
-    syncSimulationUi();
+    if (!state.world) return;
+    state.world.simulation_step();
+    handleSimulationChange();
   });
 
   speedSelect.addEventListener("change", () => {
@@ -56,6 +61,12 @@ export function syncSimulationUi(): void {
   stateElement.classList.toggle("running", !paused);
   document.getElementById("btn-sim-play")?.classList.toggle("active", !paused);
   document.getElementById("btn-sim-pause")?.classList.toggle("active", paused);
+  syncEntityInspector();
+}
+
+export function resetSimulationView(): void {
+  lastWorldRevision = state.world?.simulation_world_revision() ?? 0n;
+  syncSimulationUi();
 }
 
 function runSimulationFrame(timestamp: number): void {
@@ -75,9 +86,42 @@ function runSimulationFrame(timestamp: number): void {
     if (ticks > 0) {
       accumulator -= ticks;
       state.world.simulation_advance(ticks);
-      syncSimulationUi();
+      handleSimulationChange();
     }
   }
 
   requestAnimationFrame(runSimulationFrame);
+}
+
+function handleSimulationChange(): void {
+  if (!state.world) return;
+  const revision = state.world.simulation_world_revision();
+  const resourcesChanged = revision !== lastWorldRevision;
+  lastWorldRevision = revision;
+  uploadSimulationToRenderer(resourcesChanged);
+  if (resourcesChanged) {
+    updateTileInspector();
+  }
+  syncSimulationUi();
+  requestRender();
+}
+
+function syncEntityInspector(): void {
+  const panel = document.getElementById("entity-inspector")!;
+  const grid = document.getElementById("entity-info-grid")!;
+  if (!state.world || state.world.entity_count() === 0) {
+    panel.hidden = true;
+    grid.innerHTML = "";
+    return;
+  }
+
+  const entity: EntityInfo = JSON.parse(state.world.entity_info(1));
+  panel.hidden = false;
+  grid.innerHTML = [
+    `<span class="info-key">ID</span><span class="info-val">#${entity.id}</span>`,
+    `<span class="info-key">Position</span><span class="info-val">(${entity.x}, ${entity.y})</span>`,
+    `<span class="info-key">Hunger</span><span class="info-val">${entity.hunger.toFixed(0)} / 100</span>`,
+    `<span class="info-key">Activity</span><span class="info-val entity-activity">${entity.activity}</span>`,
+    `<span class="info-key">Path remaining</span><span class="info-val">${entity.remaining_path}</span>`,
+  ].join("");
 }
