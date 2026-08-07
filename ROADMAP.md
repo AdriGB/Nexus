@@ -42,7 +42,10 @@
 
 - [x] Terrain movement costs
 - [x] Walkability rules
-- [x] Four-neighbor A* pathfinding with a Manhattan heuristic
+- [x] Eight-neighbor A* with diagonal cost √2 and an octile heuristic
+- [x] Corner-cut prevention and configurable iteration limit
+- [x] Walkability-based path smoothing for visualization/debug only
+- [x] Keep full unsmoothed A* paths for tile-by-tile entity movement
 - [x] WASM route bridge
 - [x] GPU route overlay with a dedicated render pass
 - [x] Artificial-map and large-world pathfinding tests

@@ -35,11 +35,7 @@ impl Ord for OpenNode {
     }
 }
 
-pub fn find_path(
-    grid: &Grid,
-    start: (u32, u32),
-    goal: (u32, u32),
-) -> Option<Vec<(u32, u32)>> {
+pub fn find_path(grid: &Grid, start: (u32, u32), goal: (u32, u32)) -> Option<Vec<(u32, u32)>> {
     find_path_with_limit(grid, start, goal, None)
 }
 
@@ -62,7 +58,7 @@ pub fn find_path_with_limit(
     let max_iters = max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS);
     let start_index = index(grid, start);
     let goal_index = index(grid, goal);
-    
+
     let mut open = BinaryHeap::new();
     let mut came_from = vec![None; grid.tiles.len()];
     let mut costs = vec![f32::INFINITY; grid.tiles.len()];
@@ -83,7 +79,7 @@ pub fn find_path_with_limit(
 
         let current_cost = costs[current.position];
         let best_estimate = current_cost + octile(coordinate(grid, current.position), goal);
-        
+
         if current.estimated_total > best_estimate {
             continue;
         }
@@ -98,7 +94,7 @@ pub fn find_path_with_limit(
             let Some(terrain_cost) = terrain_cost else {
                 continue;
             };
-            
+
             let step_cost = base_move_cost * terrain_cost;
             let candidate_cost = current_cost + step_cost;
 
@@ -153,7 +149,7 @@ fn has_line_of_sight(grid: &Grid, from: (u32, u32), to: (u32, u32)) -> bool {
         }
         if !grid
             .get(x0 as u32, y0 as u32)
-            .map_or(false, |t| t.terrain.is_walkable())
+            .is_some_and(|t| t.terrain.is_walkable())
         {
             return false;
         }
@@ -195,9 +191,8 @@ fn neighbors_8dir(grid: &Grid, (x, y): (u32, u32)) -> impl Iterator<Item = ((u32
     let w = grid.width;
     let h = grid.height;
 
-    let walkable = |px: u32, py: u32| -> bool {
-        grid.get(px, py).map_or(false, |t| t.terrain.is_walkable())
-    };
+    let walkable =
+        |px: u32, py: u32| -> bool { grid.get(px, py).is_some_and(|t| t.terrain.is_walkable()) };
 
     let up = y > 0 && walkable(x, y - 1);
     let down = y + 1 < h && walkable(x, y + 1);
@@ -412,7 +407,7 @@ mod tests {
         let row = "P".repeat(200);
         let rows: Vec<_> = (0..200).map(|_| row.as_str()).collect();
         let grid = grid_from_rows(&rows);
-        
+
         let path = find_path_with_limit(&grid, (0, 0), (199, 199), Some(100));
         assert!(path.is_none());
     }

@@ -159,6 +159,7 @@ impl WorldBridge {
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
         pathfinding::find_path(&self.grid, (start_x, start_y), (goal_x, goal_y))
+            .map(|path| pathfinding::smooth_path(&self.grid, path))
             .unwrap_or_default()
             .into_iter()
             .flat_map(|(x, y)| [x, y])
