@@ -353,6 +353,7 @@ dependencies = [
  "bytemuck",
  "console_error_panic_hook",
  "getrandom 0.2.17",
+ "naga",
  "noise",
  "serde",
  "wasm-bindgen",

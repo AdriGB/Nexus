@@ -88,6 +88,19 @@ Terrain defines walkability and an initial movement cost. The Rust engine uses f
 
 Route visualization is intentionally unavailable in the frozen Canvas 2D fallback.
 
+## Simulation clock
+
+The Rust engine owns a deterministic simulation clock that starts paused at tick zero. Rendering remains independent from simulation time:
+
+- **Play** lets TypeScript translate elapsed real time into batched Rust ticks.
+- **Pause** stops automatic advancement.
+- **Step** advances exactly one tick while paused or running.
+- **Speed** controls the tick rate without tying world speed to frame rate.
+
+The browser uses `requestAnimationFrame` only to measure elapsed time; Rust receives an explicit integer tick count. Long or backgrounded frames are capped and discarded to prevent accidental simulation jumps.
+
+WGSL shaders are parsed and validated with Naga during `cargo test`, so invalid identifiers or shader syntax fail CI before reaching WebGPU at runtime.
+
 ## Prerequisites
 
 - Rust (stable)

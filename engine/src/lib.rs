@@ -4,6 +4,7 @@ mod regions;
 #[cfg(target_arch = "wasm32")]
 mod renderer;
 mod resources;
+mod simulation;
 mod world;
 
 use wasm_bindgen::prelude::*;
@@ -16,6 +17,7 @@ pub fn start() {
 #[wasm_bindgen]
 pub struct WorldBridge {
     grid: world::Grid,
+    simulation: simulation::Simulation,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -79,7 +81,10 @@ impl WorldBridge {
         let mut grid = generation::generate_world(seed, width, height, sea_level);
         resources::generate_resources(seed, &mut grid);
         regions::detect_regions(&mut grid);
-        WorldBridge { grid }
+        WorldBridge {
+            grid,
+            simulation: simulation::Simulation::default(),
+        }
     }
 
     pub fn width(&self) -> u32 {
@@ -88,6 +93,30 @@ impl WorldBridge {
 
     pub fn height(&self) -> u32 {
         self.grid.height
+    }
+
+    pub fn simulation_tick(&self) -> u64 {
+        self.simulation.tick()
+    }
+
+    pub fn simulation_is_paused(&self) -> bool {
+        self.simulation.is_paused()
+    }
+
+    pub fn simulation_advance(&mut self, ticks: u32) -> u64 {
+        self.simulation.advance(ticks)
+    }
+
+    pub fn simulation_step(&mut self) -> u64 {
+        self.simulation.step()
+    }
+
+    pub fn simulation_pause(&mut self) {
+        self.simulation.pause();
+    }
+
+    pub fn simulation_resume(&mut self) {
+        self.simulation.resume();
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {

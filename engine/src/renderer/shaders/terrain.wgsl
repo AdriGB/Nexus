@@ -97,9 +97,9 @@ fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     var color = hsl_to_rgb(TERRAIN_H[terrain], TERRAIN_S[terrain], lightness);
 
     if (camera.options.z > 0.5) {
-        let resource = textureLoad(resource_texture, tile, 0);
-        let kind = resource.r;
-        let amount = resource.g | (resource.b << 8u);
+        let resource_texel = textureLoad(resource_texture, tile, 0);
+        let kind = resource_texel.r;
+        let amount = resource_texel.g | (resource_texel.b << 8u);
         let abundance = clamp(f32(amount) / 900.0, 0.0, 1.0);
         color = mix(vec3<f32>(0.035, 0.04, 0.05), color, 0.18);
 

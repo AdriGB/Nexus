@@ -96,6 +96,27 @@
         <div class="info-grid" id="tile-info-grid"></div>
       </div>
 
+      <!-- Simulation -->
+      <div class="sidebar-section">
+        <label class="field-label">Simulation</label>
+        <div class="info-grid simulation-readout">
+          <span class="info-key">Tick</span><span class="info-val" id="simulation-tick">0</span>
+          <span class="info-key">State</span><span class="info-val" id="simulation-state">Paused</span>
+        </div>
+        <div class="simulation-controls">
+          <button id="btn-sim-play" class="btn-secondary" aria-label="Play simulation">▶ Play</button>
+          <button id="btn-sim-pause" class="btn-secondary active" aria-label="Pause simulation">⏸ Pause</button>
+          <button id="btn-sim-step" class="btn-secondary" aria-label="Advance one tick">⏭ Step</button>
+        </div>
+        <label class="simulation-speed-label" for="simulation-speed">Speed</label>
+        <select id="simulation-speed" class="input-field">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </div>
+
       <!-- Controls -->
       <div class="sidebar-section" style="border-bottom:none;">
         <label class="field-label">Controls</label>

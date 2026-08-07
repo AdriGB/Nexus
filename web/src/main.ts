@@ -34,6 +34,10 @@ import {
   autoSave,
   restoreLastWorld,
 } from "./ui/save-controls";
+import {
+  bindSimulationControls,
+  syncSimulationUi,
+} from "./simulation";
 
 /* ── World generation ─────────────────────── */
 
@@ -59,6 +63,7 @@ function generateWorld(): void {
   state.world = createWorld(seed, width, height, sea);
   state.worldW = state.world.width();
   state.worldH = state.world.height();
+  syncSimulationUi();
   uploadWorldToRenderer();
   uploadRouteToRenderer();
   updateRouteStatus();
@@ -110,6 +115,7 @@ async function boot(): Promise<void> {
   bindCamera(inputLayer);
   bindControls(generateWorld);
   bindSaveControls(generateWorld);
+  bindSimulationControls();
 
   inputLayer.addEventListener("mousemove", (e) => {
     const rect = inputLayer.getBoundingClientRect();

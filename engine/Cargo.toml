@@ -20,6 +20,7 @@ web-sys = { version = "0.3", features = ["Document", "HtmlCanvasElement", "Windo
 wgpu = { version = "30", default-features = false, features = ["std", "webgpu", "wgsl"] }
 
 [dev-dependencies]
+naga = { version = "30", features = ["wgsl-in"] }
 wasm-bindgen-test = "0.3"
 
 [profile.release]

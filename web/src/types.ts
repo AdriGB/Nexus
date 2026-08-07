@@ -1,6 +1,12 @@
 export interface IWorldBridge {
   width(): number;
   height(): number;
+  simulation_tick(): bigint;
+  simulation_is_paused(): boolean;
+  simulation_advance(ticks: number): bigint;
+  simulation_step(): bigint;
+  simulation_pause(): void;
+  simulation_resume(): void;
   get_tile_data(
     vx: number,
     vy: number,

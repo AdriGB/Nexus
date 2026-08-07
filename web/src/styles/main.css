@@ -101,6 +101,13 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
 .resource-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px; margin-top: 9px; color: var(--text-muted); font-size: 9px; }
 .resource-legend span { display: flex; align-items: center; gap: 5px; }
 .resource-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--resource-color); }
+.simulation-readout { margin-bottom: 9px; }
+.simulation-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.simulation-controls .btn-secondary { padding: 7px 4px; }
+.simulation-controls .btn-secondary.active { border-color: var(--accent-dim); color: var(--accent); background: rgba(201,168,76,0.08); }
+#simulation-state.running { color: #65c983; }
+.simulation-speed-label { display: block; margin: 9px 0 4px; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
+#simulation-speed { width: 100%; }
 .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
 .info-key { font-size: 10px; color: var(--text-muted); }
 .info-val { font-size: 11px; color: var(--text-secondary); text-align: right; }

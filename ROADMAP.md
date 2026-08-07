@@ -61,7 +61,14 @@
 
 ### Phase 2.2 — Simulation
 
-- [ ] Simulation clock
+- [x] Rust-owned simulation clock and pause state
+- [x] Deterministic batched tick advancement independent from rendering
+- [x] Manual single-tick stepping
+- [x] WASM clock controls
+- [x] Play, pause, step, speed, and tick UI
+- [x] Background-frame and delta-time safeguards
+- [x] Unit tests for pause, resume, stepping, and advancement
+- [x] WGSL parsing and validation in the Rust test suite
 
 ### Phase 2.3 — First Entity
 
