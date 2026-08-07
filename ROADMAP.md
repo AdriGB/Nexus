@@ -22,7 +22,6 @@
 - [x] Region detection and connectivity analysis
 - [ ] River generation (erosion simulation)
 - [ ] Biome refinement (temperature + moisture gradients)
-- [ ] Resource deposits (ore, fertile soil, timber)
 
 ## Phase 1.3 — GPU Renderer
 
@@ -35,13 +34,23 @@
 - [x] Hover and selected-tile overlays
 - [x] Keep the current minimap working in GPU mode
 - [x] Preserve Canvas 2D behind `?renderer=canvas` and automatic fallback
-- [ ] Make wgpu the default after wider browser testing
-- [ ] Remove the main Canvas 2D renderer after parity is accepted
+- [x] Make wgpu/WebGPU the default renderer
+- [x] Freeze Canvas 2D as a basic compatibility fallback
+- [x] Validate functional parity and performance
+
+## Phase 1.4 — Traversal
+
+- [ ] Terrain movement costs
+- [ ] Walkability rules
+- [ ] A* pathfinding
+- [ ] GPU route overlay
 
 ## Phase 2 — Living World
 
+- [ ] Resource deposits (ore, fertile soil, timber) and GPU renderer layer
+- [ ] Simulation clock
 - [ ] Entity system (creatures with needs, personality, AI)
-- [ ] Pathfinding (A* on terrain)
+- [ ] GPU-instanced entity rendering
 - [ ] Reproduction, aging, death
 - [ ] Factions and groups
 

@@ -26,9 +26,13 @@ jobs:
         working-directory: engine
         run: cargo fmt --check
 
-      - name: Clippy
+      - name: Clippy native
         working-directory: engine
         run: cargo clippy -- -D warnings
+
+      - name: Clippy WASM
+        working-directory: engine
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
 
       - name: Tests
         working-directory: engine

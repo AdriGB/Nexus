@@ -15,26 +15,46 @@ const gpuCanvas = document.getElementById(
   "world-gpu-canvas",
 ) as HTMLCanvasElement;
 const rendererStatus = document.getElementById("st-renderer")!;
+const rendererDebug = document.getElementById("renderer-debug")!;
+const rendererDebugBackend = document.getElementById(
+  "debug-renderer-backend",
+)!;
+const rendererDebugFrame = document.getElementById("debug-renderer-frame")!;
+const rendererDebugWorld = document.getElementById("debug-renderer-world")!;
+const rendererDebugZoom = document.getElementById("debug-renderer-zoom")!;
+
+const searchParams = new URLSearchParams(window.location.search);
+const debugEnabled = searchParams.get("debug") === "renderer";
 
 let backend: RendererBackend = "canvas";
 let gpuRenderer: IGpuRendererBridge | null = null;
 
 export async function initializeRenderer(): Promise<void> {
-  const requested = new URLSearchParams(window.location.search).get(
-    "renderer",
-  );
+  rendererDebug.hidden = !debugEnabled;
+  const requested = searchParams.get("renderer");
 
-  if (requested === "wgpu") {
+  if (requested === "canvas") {
+    fallbackToCanvas("Canvas 2D forced by ?renderer=canvas");
+    return;
+  }
+
+  if ("gpu" in navigator) {
     try {
       sizeGpuCanvas();
       gpuRenderer = await createGpuRenderer(gpuCanvas.id);
       backend = "wgpu";
       activateBackend();
       resizeRenderer();
+      console.info("✓ wgpu renderer initialized successfully");
       return;
     } catch (error) {
-      console.warn("WebGPU unavailable; using Canvas 2D.", error);
+      console.warn(
+        "WebGPU initialization failed; falling back to Canvas 2D.",
+        error,
+      );
     }
+  } else {
+    console.info("WebGPU is not supported; falling back to Canvas 2D.");
   }
 
   fallbackToCanvas();
@@ -55,6 +75,8 @@ export function uploadWorldToRenderer(): void {
 }
 
 export function renderWorld(): void {
+  const frameStartedAt = debugEnabled ? performance.now() : 0;
+
   if (backend === "wgpu" && gpuRenderer) {
     try {
       gpuRenderer.render(
@@ -80,13 +102,17 @@ export function renderWorld(): void {
   if (zoomEl) {
     zoomEl.textContent = Math.round(state.zoom * 100) + "%";
   }
+
+  if (debugEnabled) {
+    updateDebugTelemetry(performance.now() - frameStartedAt);
+  }
 }
 
 export function getRendererBackend(): RendererBackend {
   return backend;
 }
 
-function fallbackToCanvas(): void {
+function fallbackToCanvas(reason?: string): void {
   try {
     gpuRenderer?.free();
   } catch (_) {
@@ -96,12 +122,20 @@ function fallbackToCanvas(): void {
   backend = "canvas";
   activateBackend();
   resizeCanvas();
+  console.info(reason ?? "✓ Canvas 2D renderer active");
 }
 
 function activateBackend(): void {
   canvas2d.hidden = backend !== "canvas";
   gpuCanvas.hidden = backend !== "wgpu";
   rendererStatus.textContent = backend === "wgpu" ? "wgpu" : "Canvas 2D";
+}
+
+function updateDebugTelemetry(frameMs: number): void {
+  rendererDebugBackend.textContent = backend;
+  rendererDebugFrame.textContent = `${frameMs.toFixed(2)} ms`;
+  rendererDebugWorld.textContent = `${state.worldW}×${state.worldH}`;
+  rendererDebugZoom.textContent = `${Math.round(state.zoom * 100)}%`;
 }
 
 function sizeGpuCanvas(): {
