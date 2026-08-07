@@ -99,6 +99,7 @@ export function renderWorld(): void {
         state.selectedTile?.x ?? -1,
         state.selectedTile?.y ?? -1,
         state.showGrid,
+        state.renderMode === "resources",
       );
     } catch (error) {
       console.warn("WebGPU rendering failed; using Canvas 2D.", error);
@@ -140,6 +141,24 @@ function activateBackend(): void {
   canvas2d.hidden = backend !== "canvas";
   gpuCanvas.hidden = backend !== "wgpu";
   rendererStatus.textContent = backend === "wgpu" ? "wgpu" : "Canvas 2D";
+  const resourcesButton = document.querySelector<HTMLButtonElement>(
+    '[data-render-mode="resources"]',
+  );
+  if (resourcesButton) {
+    resourcesButton.disabled = backend !== "wgpu";
+    resourcesButton.title =
+      backend === "wgpu"
+        ? "Show deterministic resource deposits"
+        : "Resource visualization requires WebGPU";
+  }
+  if (backend === "canvas" && state.renderMode === "resources") {
+    state.renderMode = "terrain";
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-render-mode]")
+      .forEach((button) => {
+        button.classList.toggle("active", button.dataset.renderMode === "terrain");
+      });
+  }
 }
 
 function updateDebugTelemetry(frameMs: number): void {

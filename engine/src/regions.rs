@@ -129,6 +129,7 @@ mod tests {
             tiles,
             region_ids: vec![u32::MAX; tc],
             regions: Vec::new(),
+            resources: vec![None; (width * height) as usize],
         }
     }
 

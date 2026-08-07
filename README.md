@@ -8,6 +8,7 @@ A procedural world generation tool built with Rust, WebAssembly, wgpu, and TypeS
 - Classifies terrain: ocean, beach, plains, forest, mountains, desert, tundra, swamp
 - Renders primarily through wgpu/WebGPU, with a frozen Canvas 2D compatibility fallback
 - Supports pan, zoom, minimap, regions, persistence, and tile inspection
+- Generates deterministic food, timber, stone, and iron deposits
 - Runs entirely in the browser — no backend required
 
 ## Architecture
@@ -65,6 +66,17 @@ The Rust engine owns world generation and the wgpu renderer. In GPU mode it uplo
 - **A**: temperature
 
 TypeScript continues to own the HTML interface, persistence, input handling, camera state, and minimap. Camera changes cross the WASM boundary as a small uniform update rather than as a full visible-tile buffer.
+
+## Resource deposits
+
+Resources are stored separately from terrain in a parallel grid layer. Their generation uses a seed derived from the world seed, so regenerating the same world produces exactly the same deposits while keeping resource placement independent from terrain noise.
+
+- Food favors plains, grassland, and some swamps.
+- Timber favors forests and dense forests.
+- Stone favors hills and mountains.
+- Iron is rarer and favors hills and mountains.
+
+Each deposit has an initial `u16` amount. The **Terrain / Resources** switch changes the primary wgpu shader to the resource layer, which is uploaded as its own RGBA texture. The tile inspector reports walkability, movement cost, resource kind, and amount. Resource visualization is intentionally unavailable in the frozen Canvas fallback.
 
 ## Traversal and route preview
 

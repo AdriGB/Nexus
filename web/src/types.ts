@@ -40,6 +40,7 @@ export interface IGpuRendererBridge {
     selectedX: number,
     selectedY: number,
     showGrid: boolean,
+    showResources: boolean,
   ): void;
   free(): void;
 }
@@ -60,6 +61,12 @@ export interface TileInfo {
   region_type: "Land" | "Water" | "Unknown";
   region_area: number;
   coastal: boolean;
+  walkable: boolean;
+  movement_cost: number | null;
+  resource: {
+    kind: "Food" | "Timber" | "Stone" | "Iron";
+    amount: number;
+  } | null;
 }
 
 export interface RegionStats {

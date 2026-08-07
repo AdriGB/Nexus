@@ -45,6 +45,11 @@ export function updateTileInspector(): void {
       : info.coastal
         ? "Yes"
         : "No";
+  const movementCost =
+    info.movement_cost === null ? "—" : info.movement_cost.toFixed(1);
+  const resourceLabel = info.resource
+    ? `${info.resource.kind}: ${info.resource.amount.toLocaleString()}`
+    : "None";
 
   grid.innerHTML = [
     `<span class="info-key">Position</span><span class="info-val">(${info.x}, ${info.y})</span>`,
@@ -56,6 +61,9 @@ export function updateTileInspector(): void {
     `<span class="info-key">Type</span><span class="info-val">${info.region_type}</span>`,
     `<span class="info-key">Area</span><span class="info-val">${regionArea}</span>`,
     `<span class="info-key">Coastal</span><span class="info-val">${coastalLabel}</span>`,
+    `<span class="info-key" style="margin-top:4px;">Walkable</span><span class="info-val" style="margin-top:4px;">${info.walkable ? "Yes" : "No"}</span>`,
+    `<span class="info-key">Movement cost</span><span class="info-val">${movementCost}</span>`,
+    `<span class="info-key" style="margin-top:4px;">Resources</span><span class="info-val" style="margin-top:4px;color:var(--accent);">${resourceLabel}</span>`,
   ].join("");
 }
 

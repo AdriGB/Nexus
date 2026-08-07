@@ -25,6 +25,8 @@ export function bindControls(generateFn: () => void): void {
     "sea-slider",
   ) as HTMLInputElement;
   const seaVal = document.getElementById("sea-val")!;
+  const renderModeButtons =
+    document.querySelectorAll<HTMLButtonElement>("[data-render-mode]");
 
   btnGenerate.addEventListener("click", generateFn);
 
@@ -36,6 +38,17 @@ export function bindControls(generateFn: () => void): void {
 
   seaSlider.addEventListener("input", () => {
     seaVal.textContent = parseFloat(seaSlider.value).toFixed(2);
+  });
+
+  renderModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      state.renderMode = button.dataset.renderMode as "terrain" | "resources";
+      renderModeButtons.forEach((candidate) => {
+        candidate.classList.toggle("active", candidate === button);
+      });
+      requestRender();
+    });
   });
 
   window.addEventListener("keydown", (e) => {

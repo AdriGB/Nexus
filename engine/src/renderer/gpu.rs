@@ -1,3 +1,4 @@
+use super::resources::encode_resource_texture;
 use super::terrain::encode_world_texture;
 use crate::world::Grid;
 use bytemuck::{Pod, Zeroable};
@@ -32,6 +33,7 @@ pub struct GpuState {
     route_vertex_buffer: wgpu::Buffer,
     route_vertex_count: u32,
     _world_texture: wgpu::Texture,
+    _resource_texture: wgpu::Texture,
     world_width: u32,
     world_height: u32,
     dpr: f32,
@@ -103,12 +105,29 @@ impl GpuState {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let world_texture = create_world_texture(&device, 1, 1);
         let world_view = world_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group =
-            create_bind_group(&device, &bind_group_layout, &camera_buffer, &world_view);
+        let resource_texture = create_resource_texture(&device, 1, 1);
+        let resource_view = resource_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = create_bind_group(
+            &device,
+            &bind_group_layout,
+            &camera_buffer,
+            &world_view,
+            &resource_view,
+        );
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/terrain.wgsl"));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("NEXUS terrain pipeline layout"),
@@ -197,6 +216,7 @@ impl GpuState {
             route_vertex_buffer,
             route_vertex_count: 0,
             _world_texture: world_texture,
+            _resource_texture: resource_texture,
             world_width: 0,
             world_height: 0,
             dpr: 1.0,
@@ -236,13 +256,32 @@ impl GpuState {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let resource_texture = create_resource_texture(&self.device, grid.width, grid.height);
+        let resource_data = encode_resource_texture(grid);
+        self.queue.write_texture(
+            resource_texture.as_image_copy(),
+            &resource_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(grid.width * 4),
+                rows_per_image: Some(grid.height),
+            },
+            wgpu::Extent3d {
+                width: grid.width,
+                height: grid.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        let resource_view = resource_texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.bind_group = create_bind_group(
             &self.device,
             &self.bind_group_layout,
             &self.camera_buffer,
             &view,
+            &resource_view,
         );
         self._world_texture = texture;
+        self._resource_texture = resource_texture;
         self.world_width = grid.width;
         self.world_height = grid.height;
         self.route_vertex_count = 0;
@@ -285,6 +324,7 @@ impl GpuState {
         selected_x: i32,
         selected_y: i32,
         show_grid: bool,
+        show_resources: bool,
     ) -> Result<(), JsValue> {
         if self.world_width == 0 || self.world_height == 0 {
             return Ok(());
@@ -309,7 +349,12 @@ impl GpuState {
                 selected_x as f32,
                 selected_y as f32,
             ],
-            options: [show_grid as u8 as f32, zoom, 0.0, 0.0],
+            options: [
+                show_grid as u8 as f32,
+                zoom,
+                show_resources as u8 as f32,
+                0.0,
+            ],
         };
         self.queue
             .write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera));
@@ -411,11 +456,29 @@ fn create_world_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu:
     })
 }
 
+fn create_resource_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("NEXUS resource texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Uint,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
 fn create_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     camera_buffer: &wgpu::Buffer,
     world_view: &wgpu::TextureView,
+    resource_view: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("NEXUS terrain bind group"),
@@ -428,6 +491,10 @@ fn create_bind_group(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(world_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(resource_view),
             },
         ],
     })

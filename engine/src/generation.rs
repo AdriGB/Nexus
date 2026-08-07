@@ -47,6 +47,7 @@ pub fn generate_world(seed: u32, width: u32, height: u32, sea_level: f64) -> Gri
         tiles,
         region_ids: Vec::new(),
         regions: Vec::new(),
+        resources: vec![None; tile_count],
     }
 }
 
@@ -152,5 +153,6 @@ mod tests {
         let grid = generate_world(42, 64, 64, 0.35);
         assert!(grid.region_ids.is_empty());
         assert!(grid.regions.is_empty());
+        assert_eq!(grid.resources.len(), grid.tiles.len());
     }
 }

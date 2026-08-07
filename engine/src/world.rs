@@ -1,5 +1,31 @@
 use serde::Serialize;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[repr(u8)]
+pub enum ResourceKind {
+    Food = 1,
+    Timber = 2,
+    Stone = 3,
+    Iron = 4,
+}
+
+impl ResourceKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Food => "Food",
+            Self::Timber => "Timber",
+            Self::Stone => "Stone",
+            Self::Iron => "Iron",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct ResourceDeposit {
+    pub kind: ResourceKind,
+    pub amount: u16,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 #[repr(u8)]
 pub enum Terrain {
@@ -93,6 +119,7 @@ pub struct Grid {
     pub tiles: Vec<Tile>,
     pub region_ids: Vec<u32>,
     pub regions: Vec<Region>,
+    pub resources: Vec<Option<ResourceDeposit>>,
 }
 
 impl Grid {
@@ -144,6 +171,7 @@ mod tests {
             tiles,
             region_ids: Vec::new(),
             regions: Vec::new(),
+            resources: vec![None; (w * h) as usize],
         }
     }
 

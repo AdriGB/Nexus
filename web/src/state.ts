@@ -10,6 +10,7 @@ export interface AppState {
   cssW: number;
   cssH: number;
   showGrid: boolean;
+  renderMode: "terrain" | "resources";
   hoverTile: TileCoord | null;
   selectedTile: TileCoord | null;
   routeStart: TileCoord | null;
@@ -28,6 +29,7 @@ export const state: AppState = {
   cssW: 0,
   cssH: 0,
   showGrid: false,
+  renderMode: "terrain",
   hoverTile: null,
   selectedTile: null,
   routeStart: null,

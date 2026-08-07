@@ -162,6 +162,7 @@ mod tests {
             tiles,
             region_ids: Vec::new(),
             regions: Vec::<Region>::new(),
+            resources: vec![None; (width * height) as usize],
         }
     }
 

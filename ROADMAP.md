@@ -49,8 +49,22 @@
 
 ## Phase 2 — Living World
 
-- [ ] Resource deposits (ore, fertile soil, timber) and GPU renderer layer
+### Phase 2.1 — Resources
+
+- [x] Parallel resource-deposit layer separated from terrain
+- [x] Deterministic seed-derived generation
+- [x] Food, timber, stone, and iron amounts
+- [x] Terrain-conditioned distribution and generation tests
+- [x] Tile inspector resource and traversal details
+- [x] Dedicated GPU resource texture and visualization mode
+- [x] Keep resource visualization out of the frozen Canvas fallback
+
+### Phase 2.2 — Simulation
+
 - [ ] Simulation clock
+
+### Phase 2.3 — First Entity
+
 - [ ] Entity system (creatures with needs, personality, AI)
 - [ ] GPU-instanced entity rendering
 - [ ] Reproduction, aging, death

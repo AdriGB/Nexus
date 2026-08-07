@@ -75,6 +75,21 @@
         <div class="legend-grid" id="legend-grid"></div>
       </div>
 
+      <!-- Visualization Layers -->
+      <div class="sidebar-section">
+        <label class="field-label">Visualization</label>
+        <div class="mode-switch" role="group" aria-label="Map visualization">
+          <button class="btn-secondary active" data-render-mode="terrain">Terrain</button>
+          <button class="btn-secondary" data-render-mode="resources">Resources</button>
+        </div>
+        <div class="resource-legend">
+          <span><i style="--resource-color:#4de559"></i>Food</span>
+          <span><i style="--resource-color:#1fb86b"></i>Timber</span>
+          <span><i style="--resource-color:#adb8c7"></i>Stone</span>
+          <span><i style="--resource-color:#eb6b2e"></i>Iron</span>
+        </div>
+      </div>
+
       <!-- Selected Tile -->
       <div class="sidebar-section" id="tile-inspector" style="display:none;">
         <label class="field-label">Selected Tile</label>

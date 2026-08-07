@@ -11,6 +11,9 @@ var<uniform> camera: CameraUniform;
 @group(0) @binding(1)
 var world_texture: texture_2d<u32>;
 
+@group(0) @binding(2)
+var resource_texture: texture_2d<u32>;
+
 const TERRAIN_H = array<f32, 13>(
     215.0, 205.0, 42.0, 85.0, 95.0, 110.0, 120.0,
     50.0, 30.0, 210.0, 35.0, 78.0, 180.0,
@@ -92,6 +95,26 @@ fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     lightness += (tile_jitter(tile) - 0.5) * jitter_range;
     lightness = clamp(lightness, 0.0, 100.0);
     var color = hsl_to_rgb(TERRAIN_H[terrain], TERRAIN_S[terrain], lightness);
+
+    if (camera.options.z > 0.5) {
+        let resource = textureLoad(resource_texture, tile, 0);
+        let kind = resource.r;
+        let amount = resource.g | (resource.b << 8u);
+        let abundance = clamp(f32(amount) / 900.0, 0.0, 1.0);
+        color = mix(vec3<f32>(0.035, 0.04, 0.05), color, 0.18);
+
+        if (kind > 0u) {
+            var resource_color = vec3<f32>(0.3, 0.9, 0.35);
+            if (kind == 2u) {
+                resource_color = vec3<f32>(0.12, 0.72, 0.42);
+            } else if (kind == 3u) {
+                resource_color = vec3<f32>(0.68, 0.72, 0.78);
+            } else if (kind == 4u) {
+                resource_color = vec3<f32>(0.92, 0.42, 0.18);
+            }
+            color = mix(color, resource_color, 0.55 + abundance * 0.4);
+        }
+    }
 
     let local = fract(world_position);
     let edge_distance = min(min(local.x, 1.0 - local.x), min(local.y, 1.0 - local.y)) * tile_size;

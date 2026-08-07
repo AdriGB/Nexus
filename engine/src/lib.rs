@@ -3,6 +3,7 @@ mod pathfinding;
 mod regions;
 #[cfg(target_arch = "wasm32")]
 mod renderer;
+mod resources;
 mod world;
 
 use wasm_bindgen::prelude::*;
@@ -55,9 +56,18 @@ impl GpuRenderer {
         selected_x: i32,
         selected_y: i32,
         show_grid: bool,
+        show_resources: bool,
     ) -> Result<(), JsValue> {
         self.state.render(
-            pan_x, pan_y, zoom, hover_x, hover_y, selected_x, selected_y, show_grid,
+            pan_x,
+            pan_y,
+            zoom,
+            hover_x,
+            hover_y,
+            selected_x,
+            selected_y,
+            show_grid,
+            show_resources,
         )
     }
 }
@@ -67,6 +77,7 @@ impl WorldBridge {
     #[wasm_bindgen(constructor)]
     pub fn new(seed: u32, width: u32, height: u32, sea_level: f64) -> WorldBridge {
         let mut grid = generation::generate_world(seed, width, height, sea_level);
+        resources::generate_resources(seed, &mut grid);
         regions::detect_regions(&mut grid);
         WorldBridge { grid }
     }
@@ -134,6 +145,25 @@ impl WorldBridge {
                         ("Unknown", 0, false)
                     };
                 let coastal = self.grid.is_coastal(x, y);
+                let movement_cost = tile
+                    .terrain
+                    .movement_cost()
+                    .map_or_else(|| "null".to_string(), |cost| format!("{cost:.1}"));
+                let resource = self
+                    .grid
+                    .resources
+                    .get(idx)
+                    .and_then(Option::as_ref)
+                    .map_or_else(
+                        || "null".to_string(),
+                        |deposit| {
+                            format!(
+                                r#"{{"kind":"{}","amount":{}}}"#,
+                                deposit.kind.label(),
+                                deposit.amount
+                            )
+                        },
+                    );
                 format!(
                     concat!(
                         r#"{{"terrain":"{}","#,
@@ -144,7 +174,10 @@ impl WorldBridge {
                         r#""region_id":{},"#,
                         r#""region_type":"{}","#,
                         r#""region_area":{},"#,
-                        r#""coastal":{}}}"#,
+                        r#""coastal":{},"#,
+                        r#""walkable":{},"#,
+                        r#""movement_cost":{},"#,
+                        r#""resource":{}}}"#,
                     ),
                     tile.terrain.label(),
                     tile.altitude,
@@ -156,6 +189,9 @@ impl WorldBridge {
                     r_kind,
                     r_area,
                     coastal,
+                    tile.terrain.is_walkable(),
+                    movement_cost,
+                    resource,
                 )
             }
             None => "{}".to_string(),
