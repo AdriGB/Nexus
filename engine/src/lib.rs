@@ -89,7 +89,8 @@ impl WorldBridge {
         let mut grid = generation::generate_world(seed, width, height, sea_level);
         resources::generate_resources(seed, &mut grid);
         regions::detect_regions(&mut grid);
-        let simulation = simulation::Simulation::with_first_entity(&grid);
+        let simulation =
+            simulation::Simulation::with_population(&grid, simulation::INITIAL_POPULATION);
         WorldBridge { grid, simulation }
     }
 
@@ -133,6 +134,35 @@ impl WorldBridge {
         self.simulation.entities().len() as u32
     }
 
+    pub fn spawn_entities(&mut self, count: u32) -> u32 {
+        self.simulation.spawn_entities(&self.grid, count)
+    }
+
+    pub fn population_stats(&self) -> String {
+        let stats = self.simulation.population_stats();
+        format!(
+            concat!(
+                r#"{{"population":{},"births":{},"deaths":{},"#,
+                r#""hungry":{},"seeking_food":{},"average_hunger":{:.2},"#,
+                r#""food_consumed":{}}}"#,
+            ),
+            stats.population,
+            stats.births,
+            stats.deaths,
+            stats.hungry,
+            stats.seeking_food,
+            stats.average_hunger,
+            stats.food_consumed,
+        )
+    }
+
+    pub fn first_entity_info(&self) -> String {
+        self.simulation
+            .entities()
+            .first()
+            .map_or_else(|| "{}".to_string(), format_entity_info)
+    }
+
     pub fn entity_info(&self, id: u32) -> String {
         let Some(entity) = self
             .simulation
@@ -143,18 +173,7 @@ impl WorldBridge {
             return "{}".to_string();
         };
 
-        format!(
-            concat!(
-                r#"{{"id":{},"x":{},"y":{},"hunger":{:.2},"#,
-                r#""activity":"{}","remaining_path":{}}}"#,
-            ),
-            entity.id,
-            entity.x,
-            entity.y,
-            entity.hunger,
-            entity.activity.label(),
-            entity.remaining_path_len(),
-        )
+        format_entity_info(entity)
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
@@ -306,4 +325,21 @@ impl WorldBridge {
             islands,
         )
     }
+}
+
+fn format_entity_info(entity: &simulation::Entity) -> String {
+    format!(
+        concat!(
+            r#"{{"id":{},"x":{},"y":{},"hunger":{:.2},"health":{:.2},"#,
+            r#""age_ticks":{},"activity":"{}","remaining_path":{}}}"#,
+        ),
+        entity.id,
+        entity.x,
+        entity.y,
+        entity.hunger,
+        entity.health,
+        entity.age_ticks,
+        entity.activity.label(),
+        entity.remaining_path_len(),
+    )
 }

@@ -9,6 +9,9 @@ export interface IWorldBridge {
   simulation_resume(): void;
   simulation_world_revision(): bigint;
   entity_count(): number;
+  spawn_entities(count: number): number;
+  population_stats(): string;
+  first_entity_info(): string;
   entity_info(id: number): string;
   get_tile_data(
     vx: number,
@@ -85,8 +88,20 @@ export interface EntityInfo {
   x: number;
   y: number;
   hunger: number;
-  activity: "Idle" | "Seeking food" | "Moving";
+  health: number;
+  age_ticks: number;
+  activity: "Idle" | "Seeking food" | "Moving" | "Starving";
   remaining_path: number;
+}
+
+export interface PopulationStats {
+  population: number;
+  births: number;
+  deaths: number;
+  hungry: number;
+  seeking_food: number;
+  average_hunger: number;
+  food_consumed: number;
 }
 
 export interface RegionStats {

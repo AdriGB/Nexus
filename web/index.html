@@ -115,11 +115,25 @@
           <option value="2">2×</option>
           <option value="4">4×</option>
         </select>
+        <label class="simulation-speed-label">Population</label>
+        <div class="info-grid population-readout">
+          <span class="info-key">Population</span><span class="info-val" id="population-count">0</span>
+          <span class="info-key">Births</span><span class="info-val" id="population-births">0</span>
+          <span class="info-key">Deaths</span><span class="info-val" id="population-deaths">0</span>
+          <span class="info-key">Hungry</span><span class="info-val" id="population-hungry">0</span>
+          <span class="info-key">Seeking food</span><span class="info-val" id="population-seeking">0</span>
+          <span class="info-key">Average hunger</span><span class="info-val" id="population-average-hunger">0.0%</span>
+          <span class="info-key">Food consumed</span><span class="info-val" id="population-food-consumed">0</span>
+        </div>
+        <div class="population-controls">
+          <button id="btn-spawn-10" class="btn-secondary">Spawn +10</button>
+          <button id="btn-spawn-100" class="btn-secondary">Spawn +100</button>
+        </div>
       </div>
 
-      <!-- First Entity -->
+      <!-- Entity debug -->
       <div class="sidebar-section" id="entity-inspector" hidden>
-        <label class="field-label">First Entity</label>
+        <label class="field-label">Entity Debug</label>
         <div class="entity-marker-preview"></div>
         <div class="info-grid" id="entity-info-grid"></div>
       </div>

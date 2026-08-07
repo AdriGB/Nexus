@@ -108,6 +108,9 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
 #simulation-state.running { color: #65c983; }
 .simulation-speed-label { display: block; margin: 9px 0 4px; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
 #simulation-speed { width: 100%; }
+.population-readout { padding-top: 2px; }
+.population-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 9px; }
+.population-controls .btn-secondary { padding: 7px 4px; }
 .entity-marker-preview { width: 12px; height: 12px; margin: 0 0 8px auto; border-radius: 50%; background: #40d1ff; box-shadow: 0 0 8px rgba(64,209,255,0.55); }
 .entity-activity { color: var(--accent); }
 .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }

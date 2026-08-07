@@ -1,6 +1,6 @@
 import { requestRender, state } from "./state";
 import { uploadSimulationToRenderer } from "./renderer/renderer";
-import type { EntityInfo } from "./types";
+import type { EntityInfo, PopulationStats } from "./types";
 import { updateTileInspector } from "./ui/tile-inspector";
 
 const BASE_TICKS_PER_SECOND = 4;
@@ -18,6 +18,13 @@ export function bindSimulationControls(): void {
   const speedSelect = document.getElementById(
     "simulation-speed",
   ) as HTMLSelectElement;
+
+  document.getElementById("btn-spawn-10")!.addEventListener("click", () => {
+    spawnEntities(10);
+  });
+  document.getElementById("btn-spawn-100")!.addEventListener("click", () => {
+    spawnEntities(100);
+  });
 
   playButton.addEventListener("click", () => {
     state.world?.simulation_resume();
@@ -61,6 +68,7 @@ export function syncSimulationUi(): void {
   stateElement.classList.toggle("running", !paused);
   document.getElementById("btn-sim-play")?.classList.toggle("active", !paused);
   document.getElementById("btn-sim-pause")?.classList.toggle("active", paused);
+  syncPopulationStats();
   syncEntityInspector();
 }
 
@@ -106,6 +114,29 @@ function handleSimulationChange(): void {
   requestRender();
 }
 
+function spawnEntities(count: number): void {
+  if (!state.world) return;
+  state.world.spawn_entities(count);
+  handleSimulationChange();
+}
+
+function syncPopulationStats(): void {
+  if (!state.world) return;
+  const stats: PopulationStats = JSON.parse(state.world.population_stats());
+  const values: Record<string, string> = {
+    "population-count": stats.population.toLocaleString(),
+    "population-births": stats.births.toLocaleString(),
+    "population-deaths": stats.deaths.toLocaleString(),
+    "population-hungry": stats.hungry.toLocaleString(),
+    "population-seeking": stats.seeking_food.toLocaleString(),
+    "population-average-hunger": `${stats.average_hunger.toFixed(1)}%`,
+    "population-food-consumed": stats.food_consumed.toLocaleString(),
+  };
+  for (const [id, value] of Object.entries(values)) {
+    document.getElementById(id)!.textContent = value;
+  }
+}
+
 function syncEntityInspector(): void {
   const panel = document.getElementById("entity-inspector")!;
   const grid = document.getElementById("entity-info-grid")!;
@@ -115,12 +146,14 @@ function syncEntityInspector(): void {
     return;
   }
 
-  const entity: EntityInfo = JSON.parse(state.world.entity_info(1));
+  const entity: EntityInfo = JSON.parse(state.world.first_entity_info());
   panel.hidden = false;
   grid.innerHTML = [
     `<span class="info-key">ID</span><span class="info-val">#${entity.id}</span>`,
     `<span class="info-key">Position</span><span class="info-val">(${entity.x}, ${entity.y})</span>`,
     `<span class="info-key">Hunger</span><span class="info-val">${entity.hunger.toFixed(0)} / 100</span>`,
+    `<span class="info-key">Health</span><span class="info-val">${entity.health.toFixed(0)} / 100</span>`,
+    `<span class="info-key">Age</span><span class="info-val">${entity.age_ticks.toLocaleString()} ticks</span>`,
     `<span class="info-key">Activity</span><span class="info-val entity-activity">${entity.activity}</span>`,
     `<span class="info-key">Path remaining</span><span class="info-val">${entity.remaining_path}</span>`,
   ].join("");

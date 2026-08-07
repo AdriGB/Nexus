@@ -80,7 +80,7 @@ Each deposit has an initial `u16` amount. The **Terrain / Resources** switch cha
 
 ## Traversal and route preview
 
-Terrain defines walkability and an initial movement cost. The Rust engine uses four-neighbor A* with a Manhattan heuristic to find the cheapest route between two tiles.
+Terrain defines walkability and an initial movement cost. The Rust engine uses eight-neighbor A* with diagonal costs, an octile heuristic, corner-cut prevention, and an iteration limit to find the cheapest route between two tiles. Smoothing is restricted to route visualization; entity movement retains the full tile-by-tile path.
 
 - Click a walkable tile to set the route origin.
 - Shift+Click another tile to calculate the destination.
@@ -101,11 +101,13 @@ The browser uses `requestAnimationFrame` only to measure elapsed time; Rust rece
 
 WGSL shaders are parsed and validated with Naga during `cargo test`, so invalid identifiers or shader syntax fail CI before reaching WebGPU at runtime.
 
-## First entity
+## Population and entity lifecycle
 
-Every generated world starts with one entity on the nearest walkable tile to the world center. `Simulation` owns its mutable state and receives `&mut Grid` for each world step, keeping spatial data separate from the logic that transforms it.
+Every generated world starts with a small population on deterministic walkable positions. `Simulation` owns mutable entity state and receives `&mut Grid` for each world step, keeping spatial data separate from the logic that transforms it.
 
-The entity begins with zero hunger. Each tick increases hunger; at the threshold it searches for nearby Food deposits, tests candidates with A*, stores one resulting path, and follows that path without recalculating it every tick. On arrival it consumes Food and updates the resource layer.
+Entities begin with zero hunger. Each tick increases hunger; at the threshold they search for nearby Food deposits, test candidates with A*, store a resulting path, and follow it without recalculating every tick. On arrival they consume the deposit's finite amount. The consumed amount is removed from `Grid.resources`, empty deposits disappear, the GPU resource texture is refreshed, and competing entities cannot consume the same units twice.
+
+At maximum hunger, health starts falling until the entity dies and is removed. Entities also age and eligible nearby adults can reproduce after a cooldown. Population, births, deaths, hunger, food seeking, average hunger, and total food consumed are exposed in the sidebar, together with controls for spawning 10 or 100 additional entities.
 
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
 

@@ -84,9 +84,19 @@
 - [x] Entity inspector and activity debug state
 - [x] Simulation mutates Grid through explicit world steps
 
+### Phase 2.4 — Population
+
+- [x] Deterministic multiple-entity spawning
+- [x] Population statistics and spawn controls
+- [x] Health, starvation, death, and entity removal
+- [x] Monotonic entity IDs without reuse
+- [x] Tick-based aging
+- [x] Adult reproduction with proximity and cooldown rules
+- [x] Finite resource consumption and competition tests
+- [x] 10, 100, and 1,000 entity scale tests
+
 ### Future Entity Systems
 
-- [ ] Reproduction, aging, death
 - [ ] Personality and relationships
 - [ ] Factions and groups
 
