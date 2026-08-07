@@ -2,7 +2,11 @@ import "./styles/main.css";
 
 import { state, setRenderCallback, requestRender } from "./state";
 import { loadWasm, createWorld } from "./wasm";
-import { resizeCanvas, render } from "./renderer/world-renderer";
+import {
+  initializeRenderer,
+  renderWorld,
+  uploadWorldToRenderer,
+} from "./renderer/renderer";
 import {
   fitWorld,
   screenToTile,
@@ -51,6 +55,7 @@ function generateWorld(): void {
   state.world = createWorld(seed, width, height, sea);
   state.worldW = state.world.width();
   state.worldH = state.world.height();
+  uploadWorldToRenderer();
 
   updateWorldInfo(seed, width, height, sea);
   updateRegionStats();
@@ -63,7 +68,7 @@ function generateWorld(): void {
 /* ── Render callback ──────────────────────── */
 
 function fullRender(): void {
-  render();
+  renderWorld();
   drawMinimapViewport();
 }
 
@@ -93,17 +98,15 @@ async function boot(): Promise<void> {
   setRenderCallback(fullRender);
 
   buildLegend();
-  resizeCanvas();
+  await initializeRenderer();
 
-  const canvas = document.getElementById(
-    "world-canvas",
-  ) as HTMLCanvasElement;
-  bindCamera(canvas);
+  const inputLayer = document.getElementById("world-input-layer")!;
+  bindCamera(inputLayer);
   bindControls(generateWorld);
   bindSaveControls(generateWorld);
 
-  canvas.addEventListener("mousemove", (e) => {
-    const rect = canvas.getBoundingClientRect();
+  inputLayer.addEventListener("mousemove", (e) => {
+    const rect = inputLayer.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     if (
@@ -118,14 +121,14 @@ async function boot(): Promise<void> {
     }
   });
 
-  canvas.addEventListener("mouseleave", () => {
+  inputLayer.addEventListener("mouseleave", () => {
     state.hoverTile = null;
     hideTooltip();
     requestRender();
   });
 
-  canvas.addEventListener("click", () => {
-    if (canvas.dataset.wasDrag === "true") return;
+  inputLayer.addEventListener("click", () => {
+    if (inputLayer.dataset.wasDrag === "true") return;
     if (state.hoverTile) {
       state.selectedTile = { ...state.hoverTile };
       updateTileInspector();

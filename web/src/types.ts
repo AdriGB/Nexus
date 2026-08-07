@@ -21,6 +21,22 @@ export interface WorldBridgeConstructor {
   ): IWorldBridge;
 }
 
+export interface IGpuRendererBridge {
+  resize(width: number, height: number, dpr: number): void;
+  upload_world(world: IWorldBridge): void;
+  render(
+    panX: number,
+    panY: number,
+    zoom: number,
+    hoverX: number,
+    hoverY: number,
+    selectedX: number,
+    selectedY: number,
+    showGrid: boolean,
+  ): void;
+  free(): void;
+}
+
 export interface TileCoord {
   x: number;
   y: number;

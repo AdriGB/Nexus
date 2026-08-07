@@ -1,6 +1,6 @@
 import { state, requestRender } from "../state";
 import { fitWorld } from "../renderer/camera";
-import { resizeCanvas } from "../renderer/world-renderer";
+import { resizeRenderer } from "../renderer/renderer";
 import { updateTileInspector } from "./tile-inspector";
 import type { RegionStats } from "../types";
 
@@ -63,7 +63,7 @@ export function bindControls(generateFn: () => void): void {
   });
 
   window.addEventListener("resize", () => {
-    resizeCanvas();
+    resizeRenderer();
     requestRender();
   });
 }

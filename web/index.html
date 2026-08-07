@@ -97,6 +97,8 @@
     <!-- Viewport -->
     <main id="viewport-wrap">
       <canvas id="world-canvas"></canvas>
+      <canvas id="world-gpu-canvas" hidden></canvas>
+      <div id="world-input-layer" aria-label="World viewport"></div>
       <div id="minimap-wrap">
         <span id="minimap-label">Minimap</span>
         <canvas id="minimap-canvas" width="180" height="180"></canvas>
@@ -108,6 +110,7 @@
         <span class="status-item">Alt:<span class="val" id="st-alt">&#8212;</span></span>
         <span class="status-item">Moist:<span class="val" id="st-moist">&#8212;</span></span>
         <span class="status-item">Temp:<span class="val" id="st-temp">&#8212;</span></span>
+        <span class="status-item">Renderer:<span class="accent" id="st-renderer">Canvas 2D</span></span>
         <span style="flex:1;"></span>
         <span class="status-item">Zoom:<span class="accent" id="st-zoom">100%</span></span>
       </div>

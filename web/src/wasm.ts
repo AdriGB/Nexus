@@ -1,5 +1,8 @@
-import init, { WorldBridge } from "./wasm/nexus_engine.js";
-import type { IWorldBridge } from "./types";
+import init, {
+  GpuRenderer,
+  WorldBridge,
+} from "./wasm/nexus_engine.js";
+import type { IGpuRendererBridge, IWorldBridge } from "./types";
 
 let ready = false;
 
@@ -18,4 +21,13 @@ export function createWorld(
     throw new Error("WASM engine not loaded");
   }
   return new WorldBridge(seed, width, height, seaLevel);
+}
+
+export async function createGpuRenderer(
+  canvasId: string,
+): Promise<IGpuRendererBridge> {
+  if (!ready) {
+    throw new Error("WASM engine not loaded");
+  }
+  return GpuRenderer.create(canvasId);
 }

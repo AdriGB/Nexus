@@ -28,18 +28,18 @@ export function screenToTile(sx: number, sy: number): TileCoord {
   };
 }
 
-export function bindCamera(canvas: HTMLCanvasElement): void {
+export function bindCamera(inputLayer: HTMLElement): void {
   let dragging = false;
   let moved = false;
   let lastMX = 0;
   let lastMY = 0;
 
-  canvas.addEventListener("mousedown", (e) => {
+  inputLayer.addEventListener("mousedown", (e) => {
     dragging = true;
     moved = false;
     lastMX = e.clientX;
     lastMY = e.clientY;
-    canvas.classList.add("dragging");
+    inputLayer.classList.add("dragging");
   });
 
   window.addEventListener("mousemove", (e) => {
@@ -55,16 +55,16 @@ export function bindCamera(canvas: HTMLCanvasElement): void {
 
   window.addEventListener("mouseup", () => {
     if (dragging && moved) {
-      canvas.dataset.wasDrag = "true";
+      inputLayer.dataset.wasDrag = "true";
       setTimeout(() => {
-        canvas.dataset.wasDrag = "";
+        inputLayer.dataset.wasDrag = "";
       }, 0);
     }
     dragging = false;
-    canvas.classList.remove("dragging");
+    inputLayer.classList.remove("dragging");
   });
 
-  canvas.addEventListener(
+  inputLayer.addEventListener(
     "wheel",
     (e) => {
       e.preventDefault();
@@ -76,7 +76,7 @@ export function bindCamera(canvas: HTMLCanvasElement): void {
         Math.min(MAX_ZOOM, state.zoom * factor),
       );
 
-      const rect = canvas.getBoundingClientRect();
+      const rect = inputLayer.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       const ratio = state.zoom / oldZoom;

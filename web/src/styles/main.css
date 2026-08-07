@@ -187,8 +187,11 @@ kbd {
 /* ── Viewport ───────────────────────────────── */
 
 #viewport-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg-void); }
-#world-canvas { position: absolute; top: 0; left: 0; cursor: grab; }
-#world-canvas.dragging { cursor: grabbing; }
+#world-canvas, #world-gpu-canvas { position: absolute; top: 0; left: 0; }
+#world-input-layer {
+  position: absolute; inset: 0; z-index: 3; cursor: grab;
+}
+#world-input-layer.dragging { cursor: grabbing; }
 #viewport-wrap::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   background: radial-gradient(80% 80% at 50% 50%, transparent 50%, rgba(7,8,12,0.5) 100%);

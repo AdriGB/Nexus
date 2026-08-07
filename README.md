@@ -1,19 +1,20 @@
 # NEXUS World Engine
 
-A procedural world generation tool built with Rust + WebAssembly + TypeScript.
+A procedural world generation tool built with Rust, WebAssembly, wgpu, and TypeScript.
 
 ## What it does
 
 - Generates worlds using fractal Brownian motion (Perlin noise)
 - Classifies terrain: ocean, beach, plains, forest, mountains, desert, tundra, swamp
-- Renders in Canvas 2D with pan, zoom, minimap, and tile inspection
+- Renders through Canvas 2D or an opt-in wgpu/WebGPU backend
+- Supports pan, zoom, minimap, regions, persistence, and tile inspection
 - Runs entirely in the browser — no backend required
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable)
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
-- [Node.js](https://nodejs.org/) (18+)
+- [Node.js](https://nodejs.org/) (20.19+)
 
 ## Quick start
 
@@ -26,3 +27,27 @@ wasm-pack build --target web --out-dir ../web/src/wasm
 cd ../web
 npm install
 npm run dev
+```
+
+Canvas 2D remains the default during the renderer migration. To run the GPU
+backend, open the development URL with:
+
+```text
+http://localhost:5173/?renderer=wgpu
+```
+
+If WebGPU initialization fails, NEXUS falls back to Canvas 2D automatically.
+
+## Renderer architecture
+
+The Rust engine owns world generation and the wgpu renderer. In GPU mode it
+uploads one RGBA texture where each pixel represents one tile:
+
+- R: terrain
+- G: altitude
+- B: moisture
+- A: temperature
+
+TypeScript continues to own the HTML interface, persistence, input handling,
+camera state, and minimap. Camera changes cross the WASM boundary as a small
+uniform update rather than as a full visible-tile buffer.
