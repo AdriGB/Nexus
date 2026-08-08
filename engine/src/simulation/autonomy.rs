@@ -1,4 +1,5 @@
 use super::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
+use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::{Entity, EntityActivity};
 use crate::pathfinding;
 use crate::world::{Grid, ResourceKind};
@@ -18,11 +19,18 @@ pub(super) fn update_entity(
     entity: &mut Entity,
     world: &mut Grid,
     tick: u64,
-    population: &[(u32, (u32, u32))],
+    population: &[EntitySnapshot],
+    spatial_grid: &SpatialGrid,
 ) -> u16 {
     let position = (entity.x, entity.y);
     perceive(&mut entity.mind, world, position, tick);
-    perceive_entities(&mut entity.mind, entity.id, position, population);
+    perceive_entities(
+        &mut entity.mind,
+        entity.id,
+        position,
+        population,
+        spatial_grid,
+    );
     invalidate_obsolete_food_plan(entity);
 
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
@@ -469,18 +477,29 @@ pub fn perceive_entities(
     mind: &mut Mind,
     entity_id: u32,
     position: (u32, u32),
-    population: &[(u32, (u32, u32))],
+    population: &[EntitySnapshot],
+    spatial_grid: &SpatialGrid,
 ) {
     mind.visible_entities.clear();
-    mind.visible_entities.extend(
-        population
-            .iter()
-            .filter(|(other_id, other_position)| {
-                *other_id != entity_id
-                    && manhattan(position, *other_position) <= mind.perception_radius
-            })
-            .map(|(other_id, _)| *other_id),
+
+    spatial_grid.visit_candidates(
+        position.0,
+        position.1,
+        mind.perception_radius,
+        |snapshot_index| {
+            let other = population[snapshot_index];
+
+            if other.id == entity_id {
+                return;
+            }
+
+            if manhattan(position, (other.x, other.y)) <= mind.perception_radius {
+                mind.visible_entities.push(other.id);
+            }
+        },
     );
+
+    mind.visible_entities.sort_unstable();
 }
 
 pub fn evaluate_goals(mind: &mut Mind, hunger: f32, health: f32) -> Goal {

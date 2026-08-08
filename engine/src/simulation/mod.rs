@@ -2,6 +2,7 @@ mod autonomy;
 mod config;
 mod entity;
 mod lifecycle;
+mod spatial;
 mod time;
 
 use self::autonomy::Mind;
@@ -15,6 +16,7 @@ use self::lifecycle::{
     founder_age_for, lifespan_for, process_due_pregnancies, sex_for, spawn_candidates,
     try_conceptions, DAILY_CONCEPTION_THRESHOLD,
 };
+use self::spatial::{EntitySnapshot, SpatialGrid};
 pub(crate) use self::time::years_from_ticks;
 use self::time::TICKS_PER_DAY;
 use crate::world::Grid;
@@ -41,6 +43,8 @@ pub struct Simulation {
     tick: u64,
     paused: bool,
     entities: Vec<Entity>,
+    population_cache: Vec<EntitySnapshot>,
+    spatial_grid: SpatialGrid,
     next_entity_id: u32,
     world_revision: u64,
     births: u64,
@@ -55,6 +59,8 @@ impl Default for Simulation {
             tick: 0,
             paused: true,
             entities: Vec::new(),
+            population_cache: Vec::new(),
+            spatial_grid: SpatialGrid::default(),
             next_entity_id: 1,
             world_revision: 0,
             births: 0,
@@ -248,11 +254,12 @@ impl Simulation {
     }
 
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
-        let population_snapshot: Vec<_> = self
-            .entities
-            .iter()
-            .map(|entity| (entity.id, (entity.x, entity.y)))
-            .collect();
+        self.rebuild_population_index(world);
+
+        let tick = self.tick;
+        let population_cache = &self.population_cache;
+        let spatial_grid = &self.spatial_grid;
+
         self.entities
             .iter_mut()
             .filter(|entity| entity.health > 0.0)
@@ -260,11 +267,29 @@ impl Simulation {
                 u64::from(autonomy::update_entity(
                     entity,
                     world,
-                    self.tick,
-                    &population_snapshot,
+                    tick,
+                    population_cache,
+                    spatial_grid,
                 ))
             })
             .sum()
+    }
+
+    fn rebuild_population_index(&mut self, world: &Grid) {
+        self.population_cache.clear();
+        self.spatial_grid.prepare(world.width, world.height);
+
+        for entity in &self.entities {
+            let snapshot_index = self.population_cache.len();
+
+            self.population_cache.push(EntitySnapshot {
+                id: entity.id,
+                x: entity.x,
+                y: entity.y,
+            });
+
+            self.spatial_grid.insert(snapshot_index, entity.x, entity.y);
+        }
     }
 
     fn resolve_starvation(&mut self) {

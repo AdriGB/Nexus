@@ -3,6 +3,7 @@ use super::entity::Pregnancy;
 use super::lifecycle::{
     conception_roll, female_is_fertile, male_is_fertile, DAILY_CONCEPTION_SCALE,
 };
+use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::{
     FEMALE_REPRODUCTIVE_AGE_END, FOUNDER_AGE_MAX, FOUNDER_AGE_MIN, GESTATION_TICKS,
     MALE_REPRODUCTIVE_AGE_END, POSTPARTUM_TICKS, REPRODUCTIVE_AGE_START, TICKS_PER_DAY,
@@ -10,6 +11,24 @@ use super::time::{
 };
 use super::*;
 use crate::world::{ResourceDeposit, ResourceKind, Terrain, Tile};
+
+fn linear_visible_entities(
+    entity_id: u32,
+    position: (u32, u32),
+    radius: u32,
+    population: &[EntitySnapshot],
+) -> Vec<u32> {
+    let mut visible: Vec<u32> = population
+        .iter()
+        .filter(|other| {
+            other.id != entity_id
+                && position.0.abs_diff(other.x) + position.1.abs_diff(other.y) <= radius
+        })
+        .map(|other| other.id)
+        .collect();
+    visible.sort_unstable();
+    visible
+}
 
 fn grid_from_rows(rows: &[&str]) -> Grid {
     let height = rows.len() as u32;
@@ -603,6 +622,48 @@ fn local_perception_reports_only_nearby_entities() {
     };
     simulation.step(&mut world);
     assert_eq!(simulation.entities()[0].mind.visible_entities, vec![2]);
+}
+
+#[test]
+fn spatial_perception_matches_linear_brute_force() {
+    let mut population = Vec::new();
+
+    for i in 0..100u32 {
+        let x = (i * 7) % 64;
+        let y = (i * 11) % 64;
+        population.push(EntitySnapshot { id: i, x, y });
+    }
+
+    let mut spatial = SpatialGrid::default();
+    spatial.prepare(64, 64);
+
+    for (index, snapshot) in population.iter().enumerate() {
+        spatial.insert(index, snapshot.x, snapshot.y);
+    }
+
+    let radius = 6;
+
+    for snapshot in &population {
+        let linear =
+            linear_visible_entities(snapshot.id, (snapshot.x, snapshot.y), radius, &population);
+
+        let mut spatial_result = Vec::new();
+        spatial.visit_candidates(snapshot.x, snapshot.y, radius, |index| {
+            let other = population[index];
+            if other.id != snapshot.id
+                && snapshot.x.abs_diff(other.x) + snapshot.y.abs_diff(other.y) <= radius
+            {
+                spatial_result.push(other.id);
+            }
+        });
+        spatial_result.sort_unstable();
+
+        assert_eq!(
+            linear, spatial_result,
+            "mismatch for entity {} at ({}, {})",
+            snapshot.id, snapshot.x, snapshot.y,
+        );
+    }
 }
 
 #[test]
