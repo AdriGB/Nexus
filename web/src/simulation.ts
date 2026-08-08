@@ -125,6 +125,9 @@ function syncPopulationStats(): void {
   const stats: PopulationStats = JSON.parse(state.world.population_stats());
   const values: Record<string, string> = {
     "population-count": stats.population.toLocaleString(),
+    "population-females": stats.females.toLocaleString(),
+    "population-males": stats.males.toLocaleString(),
+    "population-pregnant": stats.pregnant.toLocaleString(),
     "population-births": stats.births.toLocaleString(),
     "population-deaths": stats.deaths.toLocaleString(),
     "population-hungry": stats.hungry.toLocaleString(),
@@ -147,13 +150,23 @@ function syncEntityInspector(): void {
   }
 
   const entity: EntityInfo = JSON.parse(state.world.first_entity_info());
+  const dueInHours = entity.pregnancy_due_tick === null
+    ? null
+    : Math.max(0, entity.pregnancy_due_tick - Number(state.world.simulation_tick()));
   panel.hidden = false;
   grid.innerHTML = [
     `<span class="info-key">ID</span><span class="info-val">#${entity.id}</span>`,
+    `<span class="info-key">Sex</span><span class="info-val">${entity.sex}</span>`,
     `<span class="info-key">Position</span><span class="info-val">(${entity.x}, ${entity.y})</span>`,
     `<span class="info-key">Hunger</span><span class="info-val">${entity.hunger.toFixed(0)} / 100</span>`,
     `<span class="info-key">Health</span><span class="info-val">${entity.health.toFixed(0)} / 100</span>`,
-    `<span class="info-key">Age</span><span class="info-val">${entity.age_ticks.toLocaleString()} ticks</span>`,
+    `<span class="info-key">Age</span><span class="info-val">${entity.age_years.toFixed(1)} years</span>`,
+    `<span class="info-key">Age ticks</span><span class="info-val">${entity.age_ticks.toLocaleString()}</span>`,
+    `<span class="info-key">Lifespan</span><span class="info-val">${entity.lifespan_ticks.toLocaleString()} ticks</span>`,
+    `<span class="info-key">Pregnant</span><span class="info-val">${entity.pregnant ? "Yes" : "No"}</span>`,
+    ...(dueInHours === null
+      ? []
+      : [`<span class="info-key">Due</span><span class="info-val">${dueInHours.toLocaleString()} hours</span>`]),
     `<span class="info-key">Activity</span><span class="info-val entity-activity">${entity.activity}</span>`,
     `<span class="info-key">Goal</span><span class="info-val entity-goal">${entity.goal}</span>`,
     `<span class="info-key">Action</span><span class="info-val">${entity.action}</span>`,

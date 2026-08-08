@@ -90,8 +90,7 @@
 - [x] Population statistics and spawn controls
 - [x] Health, starvation, death, and entity removal
 - [x] Monotonic entity IDs without reuse
-- [x] Tick-based aging
-- [x] Adult reproduction with proximity and cooldown rules
+- [x] Initial tick-based aging and proximity reproduction prototype
 - [x] Finite resource consumption and competition tests
 - [x] 10, 100, and 1,000 entity scale tests
 
@@ -108,6 +107,27 @@
 - [x] Plan movement and consumption from remembered information only
 - [x] Record failed paths and temporarily avoid unreachable targets
 - [x] Cognition state and utility scores in the entity debug inspector
+
+### Phase 2.6 — Biology
+
+- [x] One tick represents one hour
+- [x] Female and male sex
+- [x] Deterministic founder demographics
+- [x] Individual natural lifespan
+- [x] Natural death
+- [x] Reproductive age windows
+- [x] Male and female reproduction requirement
+- [x] Deterministic daily conception
+- [x] Pregnancy state
+- [x] 40-week gestation
+- [x] Birth after gestation
+- [x] Postpartum cooldown
+- [x] Biology population statistics
+- [x] Biology inspector/debug state
+- [ ] Time-based movement
+- [ ] Pregnancy mobility penalty
+- [ ] Life stages
+- [ ] Child dependency
 
 ### Future Entity Systems
 

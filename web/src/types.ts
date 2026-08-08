@@ -89,7 +89,12 @@ export interface EntityInfo {
   y: number;
   hunger: number;
   health: number;
+  sex: "Female" | "Male";
   age_ticks: number;
+  age_years: number;
+  lifespan_ticks: number;
+  pregnant: boolean;
+  pregnancy_due_tick: number | null;
   activity:
     | "Idle"
     | "Seeking food"
@@ -115,6 +120,9 @@ export interface PopulationStats {
   population: number;
   births: number;
   deaths: number;
+  females: number;
+  males: number;
+  pregnant: number;
   hungry: number;
   seeking_food: number;
   average_hunger: number;

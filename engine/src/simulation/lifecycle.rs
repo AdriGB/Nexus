@@ -1,62 +1,147 @@
-use super::Entity;
+use super::entity::{Entity, Pregnancy, Sex};
+use super::time::{
+    BASE_LIFESPAN_TICKS, FEMALE_REPRODUCTIVE_AGE_END, FOUNDER_AGE_MAX, FOUNDER_AGE_MIN,
+    GESTATION_TICKS, LIFESPAN_VARIATION_TICKS, MALE_REPRODUCTIVE_AGE_END, POSTPARTUM_TICKS,
+    REPRODUCTIVE_AGE_START,
+};
 use crate::world::{Grid, ResourceKind};
 use std::collections::HashSet;
 
-pub(super) const ADULT_AGE_TICKS: u64 = 200;
-pub(super) const REPRODUCTION_COOLDOWN_TICKS: u32 = 300;
 const REPRODUCTION_MAX_HUNGER: f32 = 35.0;
 const REPRODUCTION_MAX_DISTANCE: u32 = 2;
+pub(super) const DAILY_CONCEPTION_SCALE: u64 = 10_000;
+pub(super) const DAILY_CONCEPTION_THRESHOLD: u64 = 100;
 
-pub(super) fn can_reproduce(entity: &Entity, max_health: f32) -> bool {
-    entity.age_ticks >= ADULT_AGE_TICKS
-        && entity.reproduction_cooldown == 0
+const SEX_SALT: u64 = 0x19d6_7a4e_2f91_b5c3;
+const LIFESPAN_SALT: u64 = 0xa7c5_31e8_42d9_f60b;
+const FOUNDER_AGE_SALT: u64 = 0x62e4_b19f_d03a_875c;
+
+pub(super) fn sex_for(seed: u64, id: u32) -> Sex {
+    if entity_random(seed, id, SEX_SALT) & 1 == 0 {
+        Sex::Female
+    } else {
+        Sex::Male
+    }
+}
+
+pub(super) fn lifespan_for(seed: u64, id: u32) -> u64 {
+    let minimum = BASE_LIFESPAN_TICKS - LIFESPAN_VARIATION_TICKS;
+    let span = LIFESPAN_VARIATION_TICKS * 2 + 1;
+    minimum + entity_random(seed, id, LIFESPAN_SALT) % span
+}
+
+pub(super) fn founder_age_for(seed: u64, id: u32) -> u64 {
+    let span = FOUNDER_AGE_MAX - FOUNDER_AGE_MIN + 1;
+    FOUNDER_AGE_MIN + entity_random(seed, id, FOUNDER_AGE_SALT) % span
+}
+
+pub(super) fn female_is_fertile(entity: &Entity, tick: u64, max_health: f32) -> bool {
+    entity.sex == Sex::Female
+        && entity.age_ticks >= REPRODUCTIVE_AGE_START
+        && entity.age_ticks < FEMALE_REPRODUCTIVE_AGE_END
+        && entity.pregnancy.is_none()
+        && tick >= entity.postpartum_until_tick
         && entity.hunger <= REPRODUCTION_MAX_HUNGER
         && entity.health >= max_health * 0.8
 }
 
-pub(super) fn within_reproduction_distance(left: &Entity, right: &Entity) -> bool {
-    manhattan((left.x, left.y), (right.x, right.y)) <= REPRODUCTION_MAX_DISTANCE
+pub(super) fn male_is_fertile(entity: &Entity, max_health: f32) -> bool {
+    entity.sex == Sex::Male
+        && entity.age_ticks >= REPRODUCTIVE_AGE_START
+        && entity.age_ticks < MALE_REPRODUCTIVE_AGE_END
+        && entity.hunger <= REPRODUCTION_MAX_HUNGER
+        && entity.health >= max_health * 0.8
 }
 
-pub(super) fn reproduction_positions(
+pub(super) fn try_conceptions(
     entities: &mut [Entity],
-    world: &Grid,
+    tick: u64,
+    seed: u64,
     max_health: f32,
-) -> Vec<(u32, u32)> {
-    if entities.len() < 2 {
-        return Vec::new();
-    }
-    let mut paired = vec![false; entities.len()];
-    let mut occupied: HashSet<_> = entities.iter().map(|entity| (entity.x, entity.y)).collect();
-    let mut plans = Vec::new();
-
-    for left in 0..entities.len() {
-        if paired[left] || !can_reproduce(&entities[left], max_health) {
+    threshold: u64,
+) -> u32 {
+    let mut conceptions = 0;
+    for female_index in 0..entities.len() {
+        if !female_is_fertile(&entities[female_index], tick, max_health) {
             continue;
         }
-        for right in (left + 1)..entities.len() {
-            if paired[right]
-                || !can_reproduce(&entities[right], max_health)
-                || !within_reproduction_distance(&entities[left], &entities[right])
-            {
-                continue;
-            }
-            let parent_position = (entities[left].x, entities[left].y);
-            if let Some(position) = adjacent_birth_position(world, parent_position, &occupied) {
-                occupied.insert(position);
-                paired[left] = true;
-                paired[right] = true;
-                plans.push((left, right, position));
-            }
+        let female_position = (entities[female_index].x, entities[female_index].y);
+        let male = entities
+            .iter()
+            .filter(|candidate| male_is_fertile(candidate, max_health))
+            .filter(|candidate| {
+                manhattan(female_position, (candidate.x, candidate.y)) <= REPRODUCTION_MAX_DISTANCE
+            })
+            .min_by_key(|candidate| {
+                (
+                    manhattan(female_position, (candidate.x, candidate.y)),
+                    candidate.id,
+                )
+            })
+            .map(|candidate| candidate.id);
+        let Some(father_id) = male else {
+            continue;
+        };
+        if conception_roll(seed, entities[female_index].id, father_id, tick) >= threshold {
+            continue;
+        }
+        entities[female_index].pregnancy = Some(Pregnancy {
+            father_id,
+            conceived_tick: tick,
+            due_tick: tick.saturating_add(GESTATION_TICKS),
+        });
+        conceptions += 1;
+    }
+    conceptions
+}
+
+pub(super) fn process_due_pregnancies(
+    entities: &mut [Entity],
+    world: &Grid,
+    tick: u64,
+    max_births: usize,
+) -> Vec<(u32, u32)> {
+    let mut occupied: HashSet<_> = entities.iter().map(|entity| (entity.x, entity.y)).collect();
+    let mut births = Vec::new();
+    for mother in entities.iter_mut() {
+        if births.len() >= max_births {
             break;
         }
+        let Some(pregnancy) = mother.pregnancy else {
+            continue;
+        };
+        if pregnancy.due_tick > tick {
+            continue;
+        }
+        let Some(position) = adjacent_birth_position(world, (mother.x, mother.y), &occupied) else {
+            continue;
+        };
+        occupied.insert(position);
+        mother.pregnancy = None;
+        mother.postpartum_until_tick = tick.saturating_add(POSTPARTUM_TICKS);
+        births.push(position);
     }
+    births
+}
 
-    for &(left, right, _) in &plans {
-        entities[left].reproduction_cooldown = REPRODUCTION_COOLDOWN_TICKS;
-        entities[right].reproduction_cooldown = REPRODUCTION_COOLDOWN_TICKS;
-    }
-    plans.into_iter().map(|(_, _, position)| position).collect()
+pub(super) fn conception_roll(seed: u64, female_id: u32, male_id: u32, tick: u64) -> u64 {
+    let value = seed
+        ^ u64::from(female_id).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ u64::from(male_id).wrapping_mul(0xbf58_476d_1ce4_e5b9)
+        ^ tick.wrapping_mul(0x94d0_49bb_1331_11eb);
+    mix64(value) % DAILY_CONCEPTION_SCALE
+}
+
+fn entity_random(seed: u64, id: u32, salt: u64) -> u64 {
+    mix64(seed ^ u64::from(id).wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ salt)
+}
+
+fn mix64(mut value: u64) -> u64 {
+    value ^= value >> 30;
+    value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value ^= value >> 27;
+    value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
 }
 
 pub(super) fn adjacent_birth_position(

@@ -96,7 +96,7 @@ Route visualization is intentionally unavailable in the frozen Canvas 2D fallbac
 
 ## Simulation clock
 
-The Rust engine owns a deterministic simulation clock that starts paused at tick zero. Rendering remains independent from simulation time:
+The Rust engine owns a deterministic simulation clock that starts paused at tick zero. One tick represents one biological hour, while rendering remains independent from simulation time:
 
 - **Play** lets TypeScript translate elapsed real time into batched Rust ticks.
 - **Pause** stops automatic advancement.
@@ -113,7 +113,15 @@ Every generated world starts with a small population on deterministic walkable p
 
 Entities begin with zero hunger. Each tick increases hunger; at the threshold they search for nearby Food deposits, test candidates with A*, store a resulting path, and follow it without recalculating every tick. On arrival they consume the deposit's finite amount. The consumed amount is removed from `Grid.resources`, empty deposits disappear, the GPU resource texture is refreshed, and competing entities cannot consume the same units twice.
 
-At maximum hunger, health starts falling until the entity dies and is removed. Entities also age and eligible nearby adults can reproduce after a cooldown. Population, births, deaths, hunger, food seeking, average hunger, and total food consumed are exposed in the sidebar, together with controls for spawning 10 or 100 additional entities.
+At maximum hunger, health starts falling until the entity dies and is removed. Population, births, deaths, sex distribution, pregnancies, hunger, food seeking, average hunger, and total food consumed are exposed in the sidebar, together with controls for spawning 10 or 100 additional founders.
+
+## Biological time and lifecycle
+
+Biological time is defined centrally in `simulation/time.rs`: one tick is one hour, a day is 24 ticks, and a year is 8,760 ticks. Founder/debug entities receive deterministic ages between 18 and 40 years. Real newborns begin at age zero.
+
+Sex, founder age, and individual lifespan are derived deterministically from the world seed and monotonic entity ID. Lifespans vary from roughly 650,000 to 950,000 ticks, avoiding synchronized natural deaths.
+
+Eligible nearby females and males receive one deterministic conception roll per simulated day. Conception creates a pregnancy rather than a child. After a 40-week gestation, a newborn is placed on a walkable tile adjacent to the mother; the mother then enters a 180-day postpartum period. Reproductive age windows, pregnancy, postpartum state, health, and hunger all constrain conception. Movement speed remains tile-per-tick and is intentionally unaffected by pregnancy until time-based movement is implemented.
 
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
 

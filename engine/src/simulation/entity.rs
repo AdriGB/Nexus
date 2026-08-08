@@ -1,5 +1,27 @@
 use super::autonomy::Mind;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Sex {
+    Female,
+    Male,
+}
+
+impl Sex {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Female => "Female",
+            Self::Male => "Male",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pregnancy {
+    pub father_id: u32,
+    pub conceived_tick: u64,
+    pub due_tick: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum EntityActivity {
@@ -29,6 +51,8 @@ pub struct Entity {
     pub id: u32,
     pub x: u32,
     pub y: u32,
+    pub sex: Sex,
+    pub lifespan_ticks: u64,
     pub hunger: f32,
     pub health: f32,
     pub age_ticks: u64,
@@ -36,7 +60,8 @@ pub struct Entity {
     pub path_index: usize,
     pub activity: EntityActivity,
     pub mind: Mind,
-    pub(super) reproduction_cooldown: u32,
+    pub pregnancy: Option<Pregnancy>,
+    pub postpartum_until_tick: u64,
 }
 
 impl Entity {

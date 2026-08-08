@@ -89,8 +89,11 @@ impl WorldBridge {
         let mut grid = generation::generate_world(seed, width, height, sea_level);
         resources::generate_resources(seed, &mut grid);
         regions::detect_regions(&mut grid);
-        let simulation =
-            simulation::Simulation::with_population(&grid, simulation::INITIAL_POPULATION);
+        let simulation = simulation::Simulation::with_population(
+            u64::from(seed),
+            &grid,
+            simulation::INITIAL_POPULATION,
+        );
         WorldBridge { grid, simulation }
     }
 
@@ -143,12 +146,16 @@ impl WorldBridge {
         format!(
             concat!(
                 r#"{{"population":{},"births":{},"deaths":{},"#,
+                r#""females":{},"males":{},"pregnant":{},"#,
                 r#""hungry":{},"seeking_food":{},"average_hunger":{:.2},"#,
                 r#""food_consumed":{}}}"#,
             ),
             stats.population,
             stats.births,
             stats.deaths,
+            stats.females,
+            stats.males,
+            stats.pregnant,
             stats.hungry,
             stats.seeking_food,
             stats.average_hunger,
@@ -340,10 +347,15 @@ fn format_entity_info(entity: &simulation::Entity, tick: u64) -> String {
         .mind
         .current_goal
         .map_or(0, |_| tick.saturating_sub(entity.mind.goal_since_tick));
+    let pregnancy_due_tick = entity.pregnancy.map_or_else(
+        || "null".to_string(),
+        |pregnancy| pregnancy.due_tick.to_string(),
+    );
     format!(
         concat!(
-            r#"{{"id":{},"x":{},"y":{},"hunger":{:.2},"health":{:.2},"#,
-            r#""age_ticks":{},"activity":"{}","remaining_path":{},"#,
+            r#"{{"id":{},"x":{},"y":{},"sex":"{}","hunger":{:.2},"health":{:.2},"#,
+            r#""age_ticks":{},"age_years":{:.3},"lifespan_ticks":{},"#,
+            r#""pregnant":{},"pregnancy_due_tick":{},"activity":"{}","remaining_path":{},"#,
             r#""goal":"{}","action":"{}","goal_age_ticks":{},"#,
             r#""known_resources":{},"known_chunks":{},"visible_entities":{},"utilities":{{"#,
             r#""eat":{:.3},"explore":{:.3},"rest":{:.3}}}}}"#,
@@ -351,9 +363,14 @@ fn format_entity_info(entity: &simulation::Entity, tick: u64) -> String {
         entity.id,
         entity.x,
         entity.y,
+        entity.sex.label(),
         entity.hunger,
         entity.health,
         entity.age_ticks,
+        simulation::years_from_ticks(entity.age_ticks),
+        entity.lifespan_ticks,
+        entity.pregnancy.is_some(),
+        pregnancy_due_tick,
         entity.activity.label(),
         entity.remaining_path_len(),
         goal,
