@@ -9,26 +9,32 @@ A procedural world generation tool built with Rust, WebAssembly, wgpu, and TypeS
 - Renders primarily through wgpu/WebGPU, with a frozen Canvas 2D compatibility fallback
 - Supports pan, zoom, minimap, regions, persistence, and tile inspection
 - Generates deterministic food, timber, stone, and iron deposits
+- Simulates autonomous populations with hunger, health, aging, reproduction, and death
+- Gives each entity local perception, imperfect memory, persistent goals, and action plans
 - Runs entirely in the browser — no backend required
 
 ## Architecture
 
 ```text
 Browser / TypeScript
-├── UI (HTML/CSS)
-├── Input handling
-├── Persistence (localStorage)
-├── Camera state
-└── Minimap
-          │
-          │ WASM bridge (function calls + uniform updates)
-          ▼
+|-- UI, input, persistence, camera, minimap
+|-- simulation timing and renderer coordination
+|
+| WASM bridge
+v
 Rust Engine
-├── World generation (fBm Perlin noise)
-├── Region detection (biome classification)
-└── wgpu renderer (GPU texture uploads)
-          │
-          ▼
+|-- world generation, terrain, regions, resources
+|-- traversal and eight-neighbor A*
+|-- simulation
+|   |-- entity state
+|   |-- lifecycle and population
+|   `-- autonomy: perception, memory, goals, actions
+`-- wgpu renderer
+    |-- terrain and resource textures
+    |-- routes and selection overlays
+    `-- instanced entities
+|
+v
 WebGPU
 ```
 
@@ -110,6 +116,20 @@ Entities begin with zero hunger. Each tick increases hunger; at the threshold th
 At maximum hunger, health starts falling until the entity dies and is removed. Entities also age and eligible nearby adults can reproduce after a cooldown. Population, births, deaths, hunger, food seeking, average hunger, and total food consumed are exposed in the sidebar, together with controls for spawning 10 or 100 additional entities.
 
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
+
+## Entity cognition
+
+Entities do not query the full resource grid when making decisions. Each one has a `Mind` with a bounded perception radius, imperfect memory, a persistent goal, and a short action plan:
+
+```text
+perceive locally -> update memory -> score goals -> retain or choose goal -> plan -> act
+```
+
+Perception records nearby resource deposits, explored knowledge chunks, and visible entities. Food memories contain their last observed amount and tick. Memories expire, are corrected when an entity sees that a deposit has been depleted, and are temporarily suppressed when pathfinding reports that a remembered target is unreachable.
+
+The current Utility AI scores `Eat`, `Explore`, and `Rest`. A viable goal persists across ticks instead of being selected again every frame, although urgent hunger can interrupt exploration when remembered food is available. Exploration selects walkable tiles in unknown chunks, so satisfied entities expand their personal knowledge rather than remaining idle. Eating is planned as separate movement and consumption actions, and consumption still deducts the finite amount from the shared world.
+
+The entity debug inspector exposes the current goal, action, retained-goal age, known resources and chunks, visible entities, and the last utility scores. This cognition layer is deterministic and rule-based; it does not use generative AI or machine learning.
 
 ## Prerequisites
 

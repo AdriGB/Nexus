@@ -157,10 +157,10 @@ impl WorldBridge {
     }
 
     pub fn first_entity_info(&self) -> String {
-        self.simulation
-            .entities()
-            .first()
-            .map_or_else(|| "{}".to_string(), format_entity_info)
+        self.simulation.entities().first().map_or_else(
+            || "{}".to_string(),
+            |entity| format_entity_info(entity, self.simulation.tick()),
+        )
     }
 
     pub fn entity_info(&self, id: u32) -> String {
@@ -173,7 +173,7 @@ impl WorldBridge {
             return "{}".to_string();
         };
 
-        format_entity_info(entity)
+        format_entity_info(entity, self.simulation.tick())
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
@@ -327,11 +327,26 @@ impl WorldBridge {
     }
 }
 
-fn format_entity_info(entity: &simulation::Entity) -> String {
+fn format_entity_info(entity: &simulation::Entity, tick: u64) -> String {
+    let goal = entity
+        .mind
+        .current_goal
+        .map_or("None", simulation::Goal::label);
+    let action = entity
+        .mind
+        .current_action()
+        .map_or("None", simulation::Action::label);
+    let goal_age_ticks = entity
+        .mind
+        .current_goal
+        .map_or(0, |_| tick.saturating_sub(entity.mind.goal_since_tick));
     format!(
         concat!(
             r#"{{"id":{},"x":{},"y":{},"hunger":{:.2},"health":{:.2},"#,
-            r#""age_ticks":{},"activity":"{}","remaining_path":{}}}"#,
+            r#""age_ticks":{},"activity":"{}","remaining_path":{},"#,
+            r#""goal":"{}","action":"{}","goal_age_ticks":{},"#,
+            r#""known_resources":{},"known_chunks":{},"visible_entities":{},"utilities":{{"#,
+            r#""eat":{:.3},"explore":{:.3},"rest":{:.3}}}}}"#,
         ),
         entity.id,
         entity.x,
@@ -341,5 +356,14 @@ fn format_entity_info(entity: &simulation::Entity) -> String {
         entity.age_ticks,
         entity.activity.label(),
         entity.remaining_path_len(),
+        goal,
+        action,
+        goal_age_ticks,
+        entity.mind.memory.known_resources.len(),
+        entity.mind.memory.known_chunk_count(),
+        entity.mind.visible_entities.len(),
+        entity.mind.utility_scores.eat,
+        entity.mind.utility_scores.explore,
+        entity.mind.utility_scores.rest,
     )
 }

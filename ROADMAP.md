@@ -95,6 +95,20 @@
 - [x] Finite resource consumption and competition tests
 - [x] 10, 100, and 1,000 entity scale tests
 
+### Phase 2.5 — Autonomy
+
+- [x] Split simulation orchestration, entity state, lifecycle, and autonomy
+- [x] Entity Mind with perception, memory, goals, and action plans
+- [x] Local terrain, resource, and nearby-entity perception
+- [x] Remember discovered Food with estimated amount and observation tick
+- [x] Expire stale memories and correct depleted-resource beliefs
+- [x] Utility scoring for Eat, Explore, and Rest
+- [x] Persistent goals with urgent-hunger interruption
+- [x] Explore unknown knowledge chunks instead of remaining idle
+- [x] Plan movement and consumption from remembered information only
+- [x] Record failed paths and temporarily avoid unreachable targets
+- [x] Cognition state and utility scores in the entity debug inspector
+
 ### Future Entity Systems
 
 - [ ] Personality and relationships
@@ -131,7 +145,9 @@
 ## Future
 
 - [ ] Native wgpu renderer for the desktop build
-- [ ] GPU-instanced entity rendering
+- [ ] Reusable entity instance buffers with `queue.write_buffer`
+- [ ] Partial resource-texture updates
+- [ ] Chunk-based spatial indexes for entities and resources
 - [ ] Compute-driven spatial simulations
 - [ ] Multiplayer (shared world editing)
 - [ ] AI-assisted consequence suggestions

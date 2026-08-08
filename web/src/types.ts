@@ -90,8 +90,25 @@ export interface EntityInfo {
   hunger: number;
   health: number;
   age_ticks: number;
-  activity: "Idle" | "Seeking food" | "Moving" | "Starving";
+  activity:
+    | "Idle"
+    | "Seeking food"
+    | "Moving"
+    | "Starving"
+    | "Exploring"
+    | "Resting";
   remaining_path: number;
+  goal: "None" | "Eat" | "Explore" | "Rest";
+  action: string;
+  goal_age_ticks: number;
+  known_resources: number;
+  known_chunks: number;
+  visible_entities: number;
+  utilities: {
+    eat: number;
+    explore: number;
+    rest: number;
+  };
 }
 
 export interface PopulationStats {

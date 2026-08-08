@@ -1,5 +1,12 @@
-use crate::pathfinding;
-use crate::world::{Grid, ResourceKind};
+mod autonomy;
+mod entity;
+mod lifecycle;
+
+use self::autonomy::Mind;
+pub(crate) use self::autonomy::{Action, Goal};
+pub use self::entity::{Entity, EntityActivity};
+use self::lifecycle::{reproduction_positions, spawn_candidates, REPRODUCTION_COOLDOWN_TICKS};
+use crate::world::Grid;
 use std::collections::HashSet;
 
 pub const INITIAL_POPULATION: u32 = 10;
@@ -8,54 +15,7 @@ const MAX_HUNGER: f32 = 100.0;
 const MAX_HEALTH: f32 = 100.0;
 const HUNGER_PER_TICK: f32 = 1.0;
 const FOOD_SEARCH_THRESHOLD: f32 = 60.0;
-const FOOD_SEARCH_RADIUS: u32 = 30;
-const FOOD_CONSUMED_PER_MEAL: u16 = 10;
-const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
 const STARVATION_DAMAGE_PER_TICK: f32 = 2.0;
-const ADULT_AGE_TICKS: u64 = 200;
-const REPRODUCTION_COOLDOWN_TICKS: u32 = 300;
-const REPRODUCTION_MAX_HUNGER: f32 = 35.0;
-const REPRODUCTION_MAX_DISTANCE: u32 = 2;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u32)]
-pub enum EntityActivity {
-    Idle = 0,
-    SeekingFood = 1,
-    Moving = 2,
-    Starving = 3,
-}
-
-impl EntityActivity {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Idle => "Idle",
-            Self::SeekingFood => "Seeking food",
-            Self::Moving => "Moving",
-            Self::Starving => "Starving",
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Entity {
-    pub id: u32,
-    pub x: u32,
-    pub y: u32,
-    pub hunger: f32,
-    pub health: f32,
-    pub age_ticks: u64,
-    pub path: Vec<(u32, u32)>,
-    pub path_index: usize,
-    pub activity: EntityActivity,
-    reproduction_cooldown: u32,
-}
-
-impl Entity {
-    pub fn remaining_path_len(&self) -> usize {
-        self.path.len().saturating_sub(self.path_index)
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct PopulationStats {
@@ -214,6 +174,7 @@ impl Simulation {
             path: Vec::new(),
             path_index: 0,
             activity: EntityActivity::Idle,
+            mind: Mind::default(),
             reproduction_cooldown,
         });
         Some(id)
@@ -221,108 +182,79 @@ impl Simulation {
 
     fn step_world(&mut self, world: &mut Grid) {
         self.tick = self.tick.saturating_add(1);
-        let mut consumed_this_tick = 0u64;
+        self.update_physiology();
+        let consumed_this_tick = self.update_autonomy(world);
+        self.resolve_starvation();
+        self.record_resource_changes(consumed_this_tick);
+        self.remove_dead_entities();
+        self.reproduce(world);
+    }
 
-        for entity in &mut self.entities {
+    fn update_physiology(&mut self) {
+        for entity in self
+            .entities
+            .iter_mut()
+            .filter(|entity| entity.health > 0.0)
+        {
             entity.age_ticks = entity.age_ticks.saturating_add(1);
             entity.reproduction_cooldown = entity.reproduction_cooldown.saturating_sub(1);
             entity.hunger = (entity.hunger + HUNGER_PER_TICK).min(MAX_HUNGER);
+        }
+    }
 
-            let mut consumed = 0;
-            if entity.path_index < entity.path.len() {
-                let next = entity.path[entity.path_index];
-                entity.x = next.0;
-                entity.y = next.1;
-                entity.path_index += 1;
-                entity.activity = EntityActivity::Moving;
+    fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
+        let population_snapshot: Vec<_> = self
+            .entities
+            .iter()
+            .map(|entity| (entity.id, (entity.x, entity.y)))
+            .collect();
+        self.entities
+            .iter_mut()
+            .filter(|entity| entity.health > 0.0)
+            .map(|entity| {
+                u64::from(autonomy::update_entity(
+                    entity,
+                    world,
+                    self.tick,
+                    &population_snapshot,
+                ))
+            })
+            .sum()
+    }
 
-                if entity.path_index == entity.path.len() {
-                    entity.path.clear();
-                    entity.path_index = 0;
-                    entity.activity = EntityActivity::Idle;
-                    consumed = consume_food(entity, world);
-                }
-            } else if entity.hunger >= FOOD_SEARCH_THRESHOLD {
-                consumed = consume_food(entity, world);
-                if consumed == 0 {
-                    if let Some(path) = find_path_to_food(world, (entity.x, entity.y)) {
-                        entity.path = path.into_iter().skip(1).collect();
-                        entity.path_index = 0;
-                        entity.activity = if entity.path.is_empty() {
-                            EntityActivity::Idle
-                        } else {
-                            EntityActivity::SeekingFood
-                        };
-                    } else {
-                        entity.activity = EntityActivity::Idle;
-                    }
-                }
-            }
-
-            consumed_this_tick += u64::from(consumed);
+    fn resolve_starvation(&mut self) {
+        for entity in self
+            .entities
+            .iter_mut()
+            .filter(|entity| entity.health > 0.0)
+        {
             if entity.hunger >= MAX_HUNGER {
                 entity.health = (entity.health - STARVATION_DAMAGE_PER_TICK).max(0.0);
                 entity.activity = EntityActivity::Starving;
             }
         }
+    }
 
+    fn record_resource_changes(&mut self, consumed_this_tick: u64) {
         if consumed_this_tick > 0 {
             self.food_consumed = self.food_consumed.saturating_add(consumed_this_tick);
             self.world_revision = self.world_revision.saturating_add(1);
         }
+    }
 
+    fn remove_dead_entities(&mut self) {
         let population_before_deaths = self.entities.len();
         self.entities.retain(|entity| entity.health > 0.0);
         self.deaths = self
             .deaths
             .saturating_add((population_before_deaths - self.entities.len()) as u64);
-
-        self.reproduce(world);
     }
 
     fn reproduce(&mut self, world: &Grid) {
-        if self.entities.len() < 2 || self.entities.len() >= MAX_POPULATION {
+        if self.entities.len() >= MAX_POPULATION {
             return;
         }
-
-        let mut paired = vec![false; self.entities.len()];
-        let mut occupied: HashSet<_> = self
-            .entities
-            .iter()
-            .map(|entity| (entity.x, entity.y))
-            .collect();
-        let mut plans = Vec::new();
-
-        for left in 0..self.entities.len() {
-            if paired[left] || !can_reproduce(&self.entities[left]) {
-                continue;
-            }
-            for right in (left + 1)..self.entities.len() {
-                if paired[right]
-                    || !can_reproduce(&self.entities[right])
-                    || manhattan(
-                        (self.entities[left].x, self.entities[left].y),
-                        (self.entities[right].x, self.entities[right].y),
-                    ) > REPRODUCTION_MAX_DISTANCE
-                {
-                    continue;
-                }
-                let parent_position = (self.entities[left].x, self.entities[left].y);
-                if let Some(position) = adjacent_birth_position(world, parent_position, &occupied) {
-                    occupied.insert(position);
-                    paired[left] = true;
-                    paired[right] = true;
-                    plans.push((left, right, position));
-                }
-                break;
-            }
-        }
-
-        for &(left, right, _) in &plans {
-            self.entities[left].reproduction_cooldown = REPRODUCTION_COOLDOWN_TICKS;
-            self.entities[right].reproduction_cooldown = REPRODUCTION_COOLDOWN_TICKS;
-        }
-        for (_, _, position) in plans {
+        for position in reproduction_positions(&mut self.entities, world, MAX_HEALTH) {
             if self.entities.len() >= MAX_POPULATION {
                 break;
             }
@@ -336,148 +268,12 @@ impl Simulation {
     }
 }
 
-fn can_reproduce(entity: &Entity) -> bool {
-    entity.age_ticks >= ADULT_AGE_TICKS
-        && entity.reproduction_cooldown == 0
-        && entity.hunger <= REPRODUCTION_MAX_HUNGER
-        && entity.health >= MAX_HEALTH * 0.8
-}
-
-fn adjacent_birth_position(
-    world: &Grid,
-    origin: (u32, u32),
-    occupied: &HashSet<(u32, u32)>,
-) -> Option<(u32, u32)> {
-    (-1..=1)
-        .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
-        .filter(|&(dx, dy)| dx != 0 || dy != 0)
-        .filter_map(|(dx, dy)| {
-            let x = i64::from(origin.0) + i64::from(dx);
-            let y = i64::from(origin.1) + i64::from(dy);
-            (x >= 0 && y >= 0 && x < i64::from(world.width) && y < i64::from(world.height))
-                .then_some((x as u32, y as u32))
-        })
-        .find(|&(x, y)| {
-            !occupied.contains(&(x, y))
-                && world
-                    .get(x, y)
-                    .is_some_and(|tile| tile.terrain.is_walkable())
-        })
-}
-
-fn spawn_candidates(world: &Grid) -> Vec<(u32, u32)> {
-    let center = (world.width / 2, world.height / 2);
-    let mut food_tiles: Vec<_> = world
-        .resources
-        .iter()
-        .enumerate()
-        .filter_map(|(index, deposit)| {
-            let deposit = deposit.as_ref()?;
-            (deposit.kind == ResourceKind::Food && deposit.amount > 0).then(|| {
-                let index = index as u32;
-                (index % world.width, index / world.width)
-            })
-        })
-        .collect();
-    food_tiles.sort_unstable_by_key(|&coordinate| manhattan(coordinate, center));
-
-    let mut seen = HashSet::new();
-    let mut candidates = Vec::new();
-    for food in food_tiles {
-        for radius in 6..=12i32 {
-            for dx in -radius..=radius {
-                let dy = radius - dx.abs();
-                for signed_dy in [dy, -dy] {
-                    let x = i64::from(food.0) + i64::from(dx);
-                    let y = i64::from(food.1) + i64::from(signed_dy);
-                    if x < 0 || y < 0 || x >= i64::from(world.width) || y >= i64::from(world.height)
-                    {
-                        continue;
-                    }
-                    let candidate = (x as u32, y as u32);
-                    if seen.insert(candidate)
-                        && world
-                            .get(candidate.0, candidate.1)
-                            .is_some_and(|tile| tile.terrain.is_walkable())
-                    {
-                        candidates.push(candidate);
-                    }
-                }
-            }
-        }
-    }
-
-    let mut fallback: Vec<_> = world
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, tile)| tile.terrain.is_walkable())
-        .map(|(index, _)| {
-            let index = index as u32;
-            (index % world.width, index / world.width)
-        })
-        .collect();
-    fallback.sort_unstable_by_key(|&coordinate| manhattan(coordinate, center));
-    candidates.extend(
-        fallback
-            .into_iter()
-            .filter(|position| seen.insert(*position)),
-    );
-    candidates
-}
-
-fn find_path_to_food(world: &Grid, origin: (u32, u32)) -> Option<Vec<(u32, u32)>> {
-    let mut candidates: Vec<_> = world
-        .resources
-        .iter()
-        .enumerate()
-        .filter_map(|(index, deposit)| {
-            let deposit = deposit.as_ref()?;
-            if deposit.kind != ResourceKind::Food || deposit.amount == 0 {
-                return None;
-            }
-            let index = index as u32;
-            let coordinate = (index % world.width, index / world.width);
-            let distance = manhattan(origin, coordinate);
-            (distance <= FOOD_SEARCH_RADIUS).then_some((distance, coordinate))
-        })
-        .collect();
-    candidates.sort_unstable_by_key(|candidate| *candidate);
-    candidates
-        .into_iter()
-        .find_map(|(_, destination)| pathfinding::find_path(world, origin, destination))
-}
-
-fn consume_food(entity: &mut Entity, world: &mut Grid) -> u16 {
-    let index = (entity.y * world.width + entity.x) as usize;
-    let Some(slot) = world.resources.get_mut(index) else {
-        return 0;
-    };
-    let Some(deposit) = slot.as_mut() else {
-        return 0;
-    };
-    if deposit.kind != ResourceKind::Food {
-        return 0;
-    }
-
-    let consumed = deposit.amount.min(FOOD_CONSUMED_PER_MEAL);
-    deposit.amount -= consumed;
-    let meal_fraction = f32::from(consumed) / f32::from(FOOD_CONSUMED_PER_MEAL);
-    entity.hunger = (entity.hunger - HUNGER_REDUCTION_PER_MEAL * meal_fraction).max(0.0);
-    if deposit.amount == 0 {
-        *slot = None;
-    }
-    consumed
-}
-
-fn manhattan(left: (u32, u32), right: (u32, u32)) -> u32 {
-    left.0.abs_diff(right.0) + left.1.abs_diff(right.1)
-}
-
 #[cfg(test)]
 mod tests {
+    use super::autonomy::URGENT_HUNGER_THRESHOLD;
+    use super::lifecycle::ADULT_AGE_TICKS;
     use super::*;
-    use crate::world::{ResourceDeposit, Terrain, Tile};
+    use crate::world::{ResourceDeposit, ResourceKind, Terrain, Tile};
 
     fn grid_from_rows(rows: &[&str]) -> Grid {
         let height = rows.len() as u32;
@@ -534,6 +330,7 @@ mod tests {
             path: Vec::new(),
             path_index: 0,
             activity: EntityActivity::Idle,
+            mind: Mind::default(),
             reproduction_cooldown: 0,
         }
     }
@@ -587,9 +384,10 @@ mod tests {
         simulation.step(&mut world);
         let original_path = simulation.entities()[0].path.clone();
         assert!(original_path.len() > 2);
+        assert_eq!(simulation.entities()[0].path_index, 1);
         simulation.step(&mut world);
         assert_eq!(simulation.entities()[0].path, original_path);
-        assert_eq!(simulation.entities()[0].path_index, 1);
+        assert_eq!(simulation.entities()[0].path_index, 2);
     }
 
     #[test]
@@ -675,6 +473,140 @@ mod tests {
         assert_eq!(stats.population, 1);
         assert_eq!(stats.food_consumed, 10);
         assert!(stats.average_hunger < FOOD_SEARCH_THRESHOLD);
+        assert_eq!(
+            simulation.entities()[0].mind.memory.known_resources[0].estimated_amount,
+            10
+        );
+    }
+
+    #[test]
+    fn distant_food_is_not_known_without_perception() {
+        let mut world = grid_from_rows(&["PPPPPPPPPPPPPPPPPPPF"]);
+        let mut simulation = simulation_with_entity(0, 0, 90.0);
+        simulation.step(&mut world);
+
+        let entity = &simulation.entities()[0];
+        assert!(entity.mind.memory.known_resources.is_empty());
+        assert_eq!(entity.mind.current_goal, Some(Goal::Explore));
+    }
+
+    #[test]
+    fn entity_remembers_seen_food_and_interrupts_exploration_when_hungry() {
+        let mut world = grid_from_rows(&["PPPPPFPPPPPPPPPP"]);
+        let mut simulation = simulation_with_entity(0, 0, 0.0);
+        simulation.step(&mut world);
+        assert_eq!(
+            simulation.entities()[0].mind.memory.known_resources.len(),
+            1
+        );
+        assert_eq!(
+            simulation.entities()[0].mind.current_goal,
+            Some(Goal::Explore)
+        );
+
+        simulation.entities[0].hunger = URGENT_HUNGER_THRESHOLD;
+        simulation.step(&mut world);
+        assert_eq!(simulation.entities()[0].mind.current_goal, Some(Goal::Eat));
+        assert!(simulation.entities()[0]
+            .mind
+            .current_plan
+            .iter()
+            .any(|action| matches!(action, Action::Consume(ResourceKind::Food))));
+    }
+
+    #[test]
+    fn exploration_goal_is_retained_while_its_plan_is_viable() {
+        let mut world = plain_grid(32, 8);
+        let mut simulation = simulation_with_entity(0, 0, 0.0);
+        simulation.step(&mut world);
+        let goal_since = simulation.entities()[0].mind.goal_since_tick;
+        assert_eq!(
+            simulation.entities()[0].mind.current_goal,
+            Some(Goal::Explore)
+        );
+
+        simulation.step(&mut world);
+        assert_eq!(
+            simulation.entities()[0].mind.current_goal,
+            Some(Goal::Explore)
+        );
+        assert_eq!(simulation.entities()[0].mind.goal_since_tick, goal_since);
+    }
+
+    #[test]
+    fn stale_resource_memory_is_forgotten() {
+        let mut world = grid_from_rows(&["FPPPPPPPPPPPPPPPPPPP"]);
+        let mut observer = entity(1, 0, 0, 0.0);
+        autonomy::perceive(&mut observer.mind, &world, (0, 0), 0);
+        assert_eq!(observer.mind.memory.known_resources.len(), 1);
+
+        autonomy::perceive(&mut observer.mind, &world, (19, 0), 3_000);
+        assert!(observer.mind.memory.known_resources.is_empty());
+        world.resources[0] = None;
+    }
+
+    #[test]
+    fn unreachable_food_is_temporarily_avoided() {
+        let mut world = grid_from_rows(&["P#F"]);
+        let mut simulation = simulation_with_entity(0, 0, 90.0);
+        simulation.step(&mut world);
+
+        let remembered = &simulation.entities()[0].mind.memory.known_resources[0];
+        assert_eq!(remembered.failed_attempts, 1);
+        assert!(remembered.avoid_until_tick > simulation.tick());
+        assert_ne!(simulation.entities()[0].mind.current_goal, Some(Goal::Eat));
+    }
+
+    #[test]
+    fn false_food_memory_is_corrected_when_the_target_becomes_visible() {
+        let mut world = plain_grid(6, 1);
+        let mut observer = entity(1, 0, 0, 90.0);
+        observer.mind.perception_radius = 1;
+        observer
+            .mind
+            .memory
+            .known_resources
+            .push(autonomy::KnownResource {
+                x: 4,
+                y: 0,
+                kind: ResourceKind::Food,
+                last_seen_tick: 0,
+                estimated_amount: 20,
+                failed_attempts: 0,
+                avoid_until_tick: 0,
+            });
+        let mut simulation = Simulation {
+            entities: vec![observer],
+            next_entity_id: 2,
+            ..Simulation::default()
+        };
+
+        for _ in 0..4 {
+            simulation.step(&mut world);
+        }
+        assert!(simulation.entities()[0]
+            .mind
+            .memory
+            .known_resources
+            .is_empty());
+        assert_ne!(simulation.entities()[0].mind.current_goal, Some(Goal::Eat));
+        assert_eq!(simulation.food_consumed, 0);
+    }
+
+    #[test]
+    fn local_perception_reports_only_nearby_entities() {
+        let mut world = plain_grid(20, 1);
+        let mut simulation = Simulation {
+            entities: vec![
+                entity(1, 0, 0, 0.0),
+                entity(2, 3, 0, 0.0),
+                entity(3, 15, 0, 0.0),
+            ],
+            next_entity_id: 4,
+            ..Simulation::default()
+        };
+        simulation.step(&mut world);
+        assert_eq!(simulation.entities()[0].mind.visible_entities, vec![2]);
     }
 
     #[test]

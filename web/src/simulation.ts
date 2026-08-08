@@ -155,6 +155,15 @@ function syncEntityInspector(): void {
     `<span class="info-key">Health</span><span class="info-val">${entity.health.toFixed(0)} / 100</span>`,
     `<span class="info-key">Age</span><span class="info-val">${entity.age_ticks.toLocaleString()} ticks</span>`,
     `<span class="info-key">Activity</span><span class="info-val entity-activity">${entity.activity}</span>`,
+    `<span class="info-key">Goal</span><span class="info-val entity-goal">${entity.goal}</span>`,
+    `<span class="info-key">Action</span><span class="info-val">${entity.action}</span>`,
+    `<span class="info-key">Goal retained</span><span class="info-val">${entity.goal_age_ticks.toLocaleString()} ticks</span>`,
     `<span class="info-key">Path remaining</span><span class="info-val">${entity.remaining_path}</span>`,
+    `<span class="info-key">Known resources</span><span class="info-val">${entity.known_resources}</span>`,
+    `<span class="info-key">Known chunks</span><span class="info-val">${entity.known_chunks}</span>`,
+    `<span class="info-key">Visible entities</span><span class="info-val">${entity.visible_entities}</span>`,
+    `<span class="info-key">Utility: eat</span><span class="info-val">${entity.utilities.eat.toFixed(2)}</span>`,
+    `<span class="info-key">Utility: explore</span><span class="info-val">${entity.utilities.explore.toFixed(2)}</span>`,
+    `<span class="info-key">Utility: rest</span><span class="info-val">${entity.utilities.rest.toFixed(2)}</span>`,
   ].join("");
 }
