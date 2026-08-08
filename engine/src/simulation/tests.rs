@@ -606,6 +606,30 @@ fn local_perception_reports_only_nearby_entities() {
 }
 
 #[test]
+fn exploration_never_targets_a_different_land_region() {
+    let rows = [
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+        "PPPPPPPP########PPPPPPPP",
+    ];
+    let mut world = grid_from_rows(&rows);
+    crate::regions::detect_regions(&mut world);
+    let origin = (3, 3);
+    let origin_region = world.region_id_at(origin.0, origin.1);
+    let mut mind = Mind::default();
+    autonomy::perceive(&mut mind, &world, origin, 0);
+
+    let target = autonomy::exploration_target(&mind, &world, origin, 1, 0);
+
+    assert!(target.is_none_or(|(x, y)| world.region_id_at(x, y) == origin_region));
+}
+
+#[test]
 fn handles_10_100_and_1000_entity_populations() {
     for count in [10, 100, 1_000] {
         let mut world = plain_grid(40, 25);

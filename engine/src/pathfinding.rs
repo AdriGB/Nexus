@@ -55,6 +55,15 @@ pub fn find_path_with_limit(
         return Some(vec![start]);
     }
 
+    if let (Some(start_region), Some(goal_region)) = (
+        grid.region_id_at(start.0, start.1),
+        grid.region_id_at(goal.0, goal.1),
+    ) {
+        if start_region != goal_region {
+            return None;
+        }
+    }
+
     let max_iters = max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS);
     let start_index = index(grid, start);
     let goal_index = index(grid, goal);
@@ -316,6 +325,14 @@ mod tests {
         let grid = grid_from_rows(&["P#"]);
         assert!(find_path(&grid, (0, 0), (1, 0)).is_none());
         assert!(find_path(&grid, (2, 0), (0, 0)).is_none());
+    }
+
+    #[test]
+    fn rejects_endpoints_in_different_known_regions() {
+        let mut grid = grid_from_rows(&["PPP"]);
+        grid.region_ids = vec![0, 0, 1];
+
+        assert!(find_path(&grid, (0, 0), (2, 0)).is_none());
     }
 
     #[test]

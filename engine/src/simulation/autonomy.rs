@@ -8,6 +8,7 @@ pub const DEFAULT_PERCEPTION_RADIUS: u32 = 6;
 const KNOWLEDGE_CHUNK_SIZE: u32 = 8;
 const RESOURCE_MEMORY_TTL: u64 = 2_000;
 const FAILED_TARGET_RETRY_TICKS: u64 = 120;
+const FAILED_EXPLORATION_RETRY_TICKS: u64 = 240;
 const FOOD_CONSUMED_PER_MEAL: u16 = 10;
 const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
 pub(super) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
@@ -100,12 +101,19 @@ fn plan_goal(entity: &mut Entity, world: &Grid, tick: u64, goal: Goal) {
 
 fn plan_exploration(entity: &mut Entity, world: &Grid, tick: u64) {
     let origin = (entity.x, entity.y);
-    let Some(target) = exploration_target(&entity.mind, world, origin, entity.id) else {
+    entity.mind.memory.prune_exploration_failures(tick);
+
+    let Some(target) = exploration_target(&entity.mind, world, origin, entity.id, tick) else {
         entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
         entity.activity = EntityActivity::Resting;
         return;
     };
     let Some(path) = pathfinding::find_path(world, origin, target) else {
+        let failed_chunk = chunk_index(world, target.0, target.1);
+        entity
+            .mind
+            .memory
+            .mark_exploration_failed(failed_chunk, tick);
         entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
         entity.activity = EntityActivity::Resting;
         return;
@@ -258,10 +266,17 @@ pub struct KnownResource {
     pub avoid_until_tick: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FailedExploration {
+    chunk_index: u32,
+    retry_after_tick: u64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Memory {
     pub known_resources: Vec<KnownResource>,
     known_chunks: HashSet<u32>,
+    failed_exploration: Vec<FailedExploration>,
 }
 
 impl Memory {
@@ -271,6 +286,34 @@ impl Memory {
 
     pub fn remembers_chunk(&self, world: &Grid, x: u32, y: u32) -> bool {
         self.known_chunks.contains(&chunk_index(world, x, y))
+    }
+
+    fn exploration_on_cooldown(&self, chunk_index: u32, tick: u64) -> bool {
+        self.failed_exploration
+            .iter()
+            .any(|failure| failure.chunk_index == chunk_index && tick < failure.retry_after_tick)
+    }
+
+    fn mark_exploration_failed(&mut self, chunk_index: u32, tick: u64) {
+        let retry_after_tick = tick.saturating_add(FAILED_EXPLORATION_RETRY_TICKS);
+
+        if let Some(failure) = self
+            .failed_exploration
+            .iter_mut()
+            .find(|failure| failure.chunk_index == chunk_index)
+        {
+            failure.retry_after_tick = retry_after_tick;
+        } else {
+            self.failed_exploration.push(FailedExploration {
+                chunk_index,
+                retry_after_tick,
+            });
+        }
+    }
+
+    fn prune_exploration_failures(&mut self, tick: u64) {
+        self.failed_exploration
+            .retain(|failure| tick < failure.retry_after_tick);
     }
 
     pub fn forget_resource(&mut self, position: (u32, u32), kind: ResourceKind) {
@@ -475,6 +518,7 @@ pub fn exploration_target(
     world: &Grid,
     origin: (u32, u32),
     entity_id: u32,
+    tick: u64,
 ) -> Option<(u32, u32)> {
     let chunks_wide = world.width.div_ceil(KNOWLEDGE_CHUNK_SIZE);
     let chunks_high = world.height.div_ceil(KNOWLEDGE_CHUNK_SIZE);
@@ -482,32 +526,78 @@ pub fn exploration_target(
         origin.0 / KNOWLEDGE_CHUNK_SIZE,
         origin.1 / KNOWLEDGE_CHUNK_SIZE,
     );
-    let max_ring = chunks_wide.max(chunks_high);
+    let origin_region = world.region_id_at(origin.0, origin.1);
+    let max_ring = origin_chunk
+        .0
+        .max(chunks_wide - 1 - origin_chunk.0)
+        .max(origin_chunk.1)
+        .max(chunks_high - 1 - origin_chunk.1);
 
     for ring in 1..=max_ring {
-        let mut chunks = Vec::new();
-        for cy in 0..chunks_high {
-            for cx in 0..chunks_wide {
-                if cx.abs_diff(origin_chunk.0).max(cy.abs_diff(origin_chunk.1)) == ring {
-                    chunks.push((cx, cy));
-                }
-            }
-        }
+        let mut chunks = ring_perimeter(
+            origin_chunk.0 as i32,
+            origin_chunk.1 as i32,
+            ring as i32,
+            chunks_wide as i32,
+            chunks_high as i32,
+        );
         chunks.sort_unstable_by_key(|&(cx, cy)| {
             let index = cy * chunks_wide + cx;
             index.wrapping_add(entity_id.wrapping_mul(2_654_435_761))
         });
         for (cx, cy) in chunks {
+            let candidate_chunk = cy * chunks_wide + cx;
+            if mind.memory.exploration_on_cooldown(candidate_chunk, tick) {
+                continue;
+            }
+
             let x = (cx * KNOWLEDGE_CHUNK_SIZE + KNOWLEDGE_CHUNK_SIZE / 2).min(world.width - 1);
             let y = (cy * KNOWLEDGE_CHUNK_SIZE + KNOWLEDGE_CHUNK_SIZE / 2).min(world.height - 1);
-            if !mind.memory.remembers_chunk(world, x, y) {
-                if let Some(target) = walkable_in_chunk(world, cx, cy) {
-                    return Some(target);
-                }
+            if mind.memory.remembers_chunk(world, x, y) {
+                continue;
+            }
+
+            if let Some(target) = walkable_in_chunk(world, cx, cy, origin_region) {
+                return Some(target);
             }
         }
     }
-    deterministic_wander_target(world, origin, entity_id)
+
+    deterministic_wander_target(mind, world, origin, entity_id, tick, origin_region)
+}
+
+fn ring_perimeter(
+    center_x: i32,
+    center_y: i32,
+    ring: i32,
+    chunks_wide: i32,
+    chunks_high: i32,
+) -> Vec<(u32, u32)> {
+    debug_assert!(ring > 0);
+
+    let mut chunks = Vec::with_capacity((ring as usize).saturating_mul(8));
+
+    for dx in -ring..=ring {
+        for y in [center_y - ring, center_y + ring] {
+            let x = center_x + dx;
+
+            if x >= 0 && y >= 0 && x < chunks_wide && y < chunks_high {
+                chunks.push((x as u32, y as u32));
+            }
+        }
+    }
+
+    for dy in (-ring + 1)..ring {
+        for x in [center_x - ring, center_x + ring] {
+            let y = center_y + dy;
+
+            if x >= 0 && y >= 0 && x < chunks_wide && y < chunks_high {
+                chunks.push((x as u32, y as u32));
+            }
+        }
+    }
+
+    chunks
 }
 
 fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount: u16, tick: u64) {
@@ -534,7 +624,12 @@ fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount
     }
 }
 
-fn walkable_in_chunk(world: &Grid, chunk_x: u32, chunk_y: u32) -> Option<(u32, u32)> {
+fn walkable_in_chunk(
+    world: &Grid,
+    chunk_x: u32,
+    chunk_y: u32,
+    required_region: Option<u32>,
+) -> Option<(u32, u32)> {
     let start_x = chunk_x * KNOWLEDGE_CHUNK_SIZE;
     let start_y = chunk_y * KNOWLEDGE_CHUNK_SIZE;
     let end_x = (start_x + KNOWLEDGE_CHUNK_SIZE).min(world.width);
@@ -542,16 +637,28 @@ fn walkable_in_chunk(world: &Grid, chunk_x: u32, chunk_y: u32) -> Option<(u32, u
     (start_y..end_y)
         .flat_map(|y| (start_x..end_x).map(move |x| (x, y)))
         .find(|&(x, y)| {
-            world
+            let walkable = world
                 .get(x, y)
-                .is_some_and(|tile| tile.terrain.is_walkable())
+                .is_some_and(|tile| tile.terrain.is_walkable());
+
+            if !walkable {
+                return false;
+            }
+
+            match required_region {
+                Some(region_id) => world.region_id_at(x, y) == Some(region_id),
+                None => true,
+            }
         })
 }
 
 fn deterministic_wander_target(
+    mind: &Mind,
     world: &Grid,
     origin: (u32, u32),
     entity_id: u32,
+    tick: u64,
+    required_region: Option<u32>,
 ) -> Option<(u32, u32)> {
     let offsets = [
         (8i32, 0i32),
@@ -576,9 +683,18 @@ fn deterministic_wander_target(
                 .then_some((x as u32, y as u32))
         })
         .find(|&(x, y)| {
-            world
+            let walkable = world
                 .get(x, y)
-                .is_some_and(|tile| tile.terrain.is_walkable())
+                .is_some_and(|tile| tile.terrain.is_walkable());
+            let in_required_region = match required_region {
+                Some(region_id) => world.region_id_at(x, y) == Some(region_id),
+                None => true,
+            };
+            let target_chunk = chunk_index(world, x, y);
+
+            walkable
+                && in_required_region
+                && !mind.memory.exploration_on_cooldown(target_chunk, tick)
         })
 }
 
@@ -589,4 +705,80 @@ fn chunk_index(world: &Grid, x: u32, y: u32) -> u32 {
 
 fn manhattan(left: (u32, u32), right: (u32, u32)) -> u32 {
     left.0.abs_diff(right.0) + left.1.abs_diff(right.1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::world::{Terrain, Tile};
+    use std::collections::HashSet;
+
+    fn plain_grid(width: u32, height: u32) -> Grid {
+        Grid {
+            width,
+            height,
+            tiles: (0..width * height)
+                .map(|_| Tile {
+                    terrain: Terrain::Plains,
+                    altitude: 0.0,
+                    moisture: 0.5,
+                    temperature: 0.5,
+                })
+                .collect(),
+            region_ids: Vec::new(),
+            regions: Vec::new(),
+            resources: vec![None; (width * height) as usize],
+        }
+    }
+
+    #[test]
+    fn ring_perimeter_contains_exactly_eight_r_tiles_when_unclipped() {
+        let ring = ring_perimeter(5, 5, 3, 20, 20);
+
+        assert_eq!(ring.len(), 24);
+        let unique: HashSet<_> = ring.iter().copied().collect();
+        assert_eq!(unique.len(), ring.len());
+    }
+
+    #[test]
+    fn ring_perimeter_clips_to_world_without_duplicates() {
+        let ring = ring_perimeter(0, 0, 3, 10, 10);
+
+        assert!(ring.iter().all(|&(x, y)| x < 10 && y < 10));
+        let unique: HashSet<_> = ring.iter().copied().collect();
+        assert_eq!(unique.len(), ring.len());
+    }
+
+    #[test]
+    fn failed_exploration_chunk_is_skipped_until_retry_tick() {
+        let world = plain_grid(32, 32);
+        let mut mind = Mind::default();
+        let origin = (12, 12);
+        let entity_id = 1;
+        let first = exploration_target(&mind, &world, origin, entity_id, 0).unwrap();
+        let failed_chunk = chunk_index(&world, first.0, first.1);
+
+        mind.memory.mark_exploration_failed(failed_chunk, 0);
+        mind.memory.mark_exploration_failed(failed_chunk, 0);
+        assert_eq!(mind.memory.failed_exploration.len(), 1);
+
+        let during_cooldown = exploration_target(&mind, &world, origin, entity_id, 1).unwrap();
+        let after_cooldown = exploration_target(
+            &mind,
+            &world,
+            origin,
+            entity_id,
+            FAILED_EXPLORATION_RETRY_TICKS,
+        )
+        .unwrap();
+
+        assert_ne!(
+            chunk_index(&world, during_cooldown.0, during_cooldown.1),
+            failed_chunk
+        );
+        assert_eq!(
+            chunk_index(&world, after_cooldown.0, after_cooldown.1),
+            failed_chunk
+        );
+    }
 }

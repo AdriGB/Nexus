@@ -131,6 +131,17 @@ impl Grid {
         }
     }
 
+    pub fn region_id_at(&self, x: u32, y: u32) -> Option<u32> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+
+        self.region_ids
+            .get((y * self.width + x) as usize)
+            .copied()
+            .filter(|&region_id| region_id != u32::MAX)
+    }
+
     pub fn is_coastal(&self, x: u32, y: u32) -> bool {
         if let Some(tile) = self.get(x, y) {
             if tile.terrain.is_water() {
@@ -194,6 +205,23 @@ mod tests {
         assert!(grid.get(10, 0).is_none());
         assert!(grid.get(0, 10).is_none());
         assert!(grid.get(100, 100).is_none());
+    }
+
+    #[test]
+    fn region_id_at_returns_known_region() {
+        let mut grid = make_grid(2, 1);
+        grid.region_ids = vec![3, 7];
+
+        assert_eq!(grid.region_id_at(0, 0), Some(3));
+        assert_eq!(grid.region_id_at(1, 0), Some(7));
+    }
+
+    #[test]
+    fn region_id_at_returns_none_when_regions_are_unavailable() {
+        let grid = make_grid(2, 1);
+
+        assert_eq!(grid.region_id_at(0, 0), None);
+        assert_eq!(grid.region_id_at(2, 0), None);
     }
 
     #[test]
