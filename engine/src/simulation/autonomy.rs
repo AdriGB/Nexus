@@ -474,6 +474,16 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
     let min_y = (i64::from(position.1) - radius).max(0) as u32;
     let max_y = (i64::from(position.1) + radius).min(i64::from(world.height) - 1) as u32;
 
+    let radius = mind.perception_radius;
+    mind.memory.known_resources.retain(|known| {
+        if manhattan(position, (known.x, known.y)) > radius {
+            return true;
+        }
+
+        let index = (known.y * world.width + known.x) as usize;
+        world.resources.get(index).is_some_and(Option::is_some)
+    });
+
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             if manhattan(position, (x, y)) > mind.perception_radius {
@@ -481,12 +491,8 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
             }
             mind.memory.known_chunks.insert(chunk_index(world, x, y));
             let deposit = world.resources[(y * world.width + x) as usize];
-            match deposit {
-                Some(deposit) => remember_resource(mind, x, y, deposit.kind, deposit.amount, tick),
-                None => mind
-                    .memory
-                    .known_resources
-                    .retain(|known| (known.x, known.y) != (x, y)),
+            if let Some(deposit) = deposit {
+                remember_resource(mind, x, y, deposit.kind, deposit.amount, tick);
             }
         }
     }
@@ -748,7 +754,7 @@ fn manhattan(left: (u32, u32), right: (u32, u32)) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::{Terrain, Tile};
+    use crate::world::{ResourceDeposit, Terrain, Tile};
     use std::collections::HashSet;
 
     fn plain_grid(width: u32, height: u32) -> Grid {
@@ -818,5 +824,92 @@ mod tests {
             chunk_index(&world, after_cooldown.0, after_cooldown.1),
             failed_chunk
         );
+    }
+
+    #[test]
+    fn perception_forgets_visible_depleted_resource() {
+        let mut world = plain_grid(16, 16);
+        let position = (5, 5);
+        let index = (position.1 * world.width + position.0) as usize;
+
+        world.resources[index] = Some(ResourceDeposit {
+            kind: ResourceKind::Food,
+            amount: 100,
+        });
+
+        let mut mind = Mind::default();
+        perceive(&mut mind, &world, position, 10);
+
+        assert!(mind
+            .memory
+            .known_resources
+            .iter()
+            .any(|known| (known.x, known.y) == position));
+
+        world.resources[index] = None;
+        perceive(&mut mind, &world, position, 11);
+
+        assert!(!mind
+            .memory
+            .known_resources
+            .iter()
+            .any(|known| (known.x, known.y) == position));
+    }
+
+    #[test]
+    fn perception_keeps_resource_outside_current_view() {
+        let mut world = plain_grid(32, 32);
+        let resource_position = (20, 20);
+        let index = (resource_position.1 * world.width + resource_position.0) as usize;
+
+        world.resources[index] = Some(ResourceDeposit {
+            kind: ResourceKind::Food,
+            amount: 100,
+        });
+
+        let mut mind = Mind::default();
+        perceive(&mut mind, &world, resource_position, 10);
+
+        world.resources[index] = None;
+        perceive(&mut mind, &world, (5, 5), 11);
+
+        assert!(mind
+            .memory
+            .known_resources
+            .iter()
+            .any(|known| (known.x, known.y) == resource_position));
+    }
+
+    #[test]
+    fn perception_refreshes_visible_resource() {
+        let mut world = plain_grid(16, 16);
+        let position = (5, 5);
+        let index = (position.1 * world.width + position.0) as usize;
+
+        world.resources[index] = Some(ResourceDeposit {
+            kind: ResourceKind::Food,
+            amount: 100,
+        });
+
+        let mut mind = Mind::default();
+        perceive(&mut mind, &world, position, 10);
+
+        world.resources[index] = Some(ResourceDeposit {
+            kind: ResourceKind::Food,
+            amount: 40,
+        });
+        perceive(&mut mind, &world, position, 25);
+
+        let known = mind
+            .memory
+            .known_resources
+            .iter()
+            .find(|known| {
+                (known.x, known.y, known.kind) == (position.0, position.1, ResourceKind::Food)
+            })
+            .unwrap();
+
+        assert_eq!(known.estimated_amount, 40);
+        assert_eq!(known.last_seen_tick, 25);
     }
 }
