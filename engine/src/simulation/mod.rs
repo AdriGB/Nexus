@@ -19,6 +19,7 @@ use self::lifecycle::{
 use self::spatial::{EntitySnapshot, SpatialGrid};
 pub(crate) use self::time::years_from_ticks;
 use self::time::TICKS_PER_DAY;
+use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use std::collections::HashSet;
 
@@ -45,6 +46,7 @@ pub struct Simulation {
     entities: Vec<Entity>,
     population_cache: Vec<EntitySnapshot>,
     spatial_grid: SpatialGrid,
+    pathfinding_workspace: PathfindingWorkspace,
     next_entity_id: u32,
     world_revision: u64,
     births: u64,
@@ -61,6 +63,7 @@ impl Default for Simulation {
             entities: Vec::new(),
             population_cache: Vec::new(),
             spatial_grid: SpatialGrid::default(),
+            pathfinding_workspace: PathfindingWorkspace::new(),
             next_entity_id: 1,
             world_revision: 0,
             births: 0,
@@ -259,20 +262,26 @@ impl Simulation {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
+        let pathfinding_workspace = &mut self.pathfinding_workspace;
 
-        self.entities
+        let mut consumed = 0u64;
+
+        for entity in self
+            .entities
             .iter_mut()
             .filter(|entity| entity.health > 0.0)
-            .map(|entity| {
-                u64::from(autonomy::update_entity(
-                    entity,
-                    world,
-                    tick,
-                    population_cache,
-                    spatial_grid,
-                ))
-            })
-            .sum()
+        {
+            consumed += u64::from(autonomy::update_entity(
+                entity,
+                world,
+                tick,
+                population_cache,
+                spatial_grid,
+                pathfinding_workspace,
+            ));
+        }
+
+        consumed
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {

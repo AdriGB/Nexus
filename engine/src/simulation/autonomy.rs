@@ -1,7 +1,7 @@
 use super::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::{Entity, EntityActivity};
-use crate::pathfinding;
+use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 use std::collections::HashSet;
 
@@ -21,6 +21,7 @@ pub(super) fn update_entity(
     tick: u64,
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
+    pathfinding_workspace: &mut PathfindingWorkspace,
 ) -> u16 {
     let position = (entity.x, entity.y);
     perceive(&mut entity.mind, world, position, tick);
@@ -48,7 +49,7 @@ pub(super) fn update_entity(
     if entity.mind.current_action().is_none() {
         entity.mind.clear_goal();
         let goal = evaluate_goals(&mut entity.mind, entity.hunger, entity.health);
-        plan_goal(entity, world, tick, goal);
+        plan_goal(entity, world, tick, goal, pathfinding_workspace);
     }
 
     execute_current_action(entity, world, tick)
@@ -78,12 +79,23 @@ fn invalidate_obsolete_food_plan(entity: &mut Entity) {
     }
 }
 
-fn plan_goal(entity: &mut Entity, world: &Grid, tick: u64, goal: Goal) {
+fn plan_goal(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    goal: Goal,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+) {
     let origin = (entity.x, entity.y);
     match goal {
         Goal::Eat => {
             for target in entity.mind.remembered_food_targets(origin, tick) {
-                if let Some(path) = pathfinding::find_path(world, origin, target) {
+                if let Some(path) = pathfinding::find_path_with_workspace(
+                    pathfinding_workspace,
+                    world,
+                    origin,
+                    target,
+                ) {
                     entity.path = path.into_iter().skip(1).collect();
                     entity.path_index = 0;
                     let mut actions = Vec::new();
@@ -97,9 +109,9 @@ fn plan_goal(entity: &mut Entity, world: &Grid, tick: u64, goal: Goal) {
                 }
                 entity.mind.memory.mark_unreachable(target, tick);
             }
-            plan_exploration(entity, world, tick);
+            plan_exploration(entity, world, tick, pathfinding_workspace);
         }
-        Goal::Explore => plan_exploration(entity, world, tick),
+        Goal::Explore => plan_exploration(entity, world, tick, pathfinding_workspace),
         Goal::Rest => {
             entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
             entity.activity = EntityActivity::Resting;
@@ -107,7 +119,12 @@ fn plan_goal(entity: &mut Entity, world: &Grid, tick: u64, goal: Goal) {
     }
 }
 
-fn plan_exploration(entity: &mut Entity, world: &Grid, tick: u64) {
+fn plan_exploration(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+) {
     let origin = (entity.x, entity.y);
     entity.mind.memory.prune_exploration_failures(tick);
 
@@ -116,7 +133,9 @@ fn plan_exploration(entity: &mut Entity, world: &Grid, tick: u64) {
         entity.activity = EntityActivity::Resting;
         return;
     };
-    let Some(path) = pathfinding::find_path(world, origin, target) else {
+    let Some(path) =
+        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target)
+    else {
         let failed_chunk = chunk_index(world, target.0, target.1);
         entity
             .mind

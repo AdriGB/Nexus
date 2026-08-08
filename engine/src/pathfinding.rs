@@ -35,6 +35,27 @@ impl Ord for OpenNode {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PathfindingWorkspace {
+    open: BinaryHeap<OpenNode>,
+    came_from: Vec<Option<usize>>,
+    costs: Vec<f32>,
+}
+
+impl PathfindingWorkspace {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    fn prepare(&mut self, tile_count: usize) {
+        self.open.clear();
+        self.came_from.resize(tile_count, None);
+        self.costs.resize(tile_count, f32::INFINITY);
+        self.came_from.fill(None);
+        self.costs.fill(f32::INFINITY);
+    }
+}
+
 pub fn find_path(grid: &Grid, start: (u32, u32), goal: (u32, u32)) -> Option<Vec<(u32, u32)>> {
     find_path_with_limit(grid, start, goal, None)
 }
@@ -45,6 +66,28 @@ pub fn find_path_with_limit(
     goal: (u32, u32),
     max_iterations: Option<usize>,
 ) -> Option<Vec<(u32, u32)>> {
+    let mut workspace = PathfindingWorkspace::new();
+    find_path_with_workspace_and_limit(&mut workspace, grid, start, goal, max_iterations)
+}
+
+pub(crate) fn find_path_with_workspace(
+    workspace: &mut PathfindingWorkspace,
+    grid: &Grid,
+    start: (u32, u32),
+    goal: (u32, u32),
+) -> Option<Vec<(u32, u32)>> {
+    find_path_with_workspace_and_limit(workspace, grid, start, goal, None)
+}
+
+fn find_path_with_workspace_and_limit(
+    workspace: &mut PathfindingWorkspace,
+    grid: &Grid,
+    start: (u32, u32),
+    goal: (u32, u32),
+    max_iterations: Option<usize>,
+) -> Option<Vec<(u32, u32)>> {
+    workspace.prepare(grid.tiles.len());
+
     if !grid.get(start.0, start.1)?.terrain.is_walkable()
         || !grid.get(goal.0, goal.1)?.terrain.is_walkable()
     {
@@ -68,25 +111,21 @@ pub fn find_path_with_limit(
     let start_index = index(grid, start);
     let goal_index = index(grid, goal);
 
-    let mut open = BinaryHeap::new();
-    let mut came_from = vec![None; grid.tiles.len()];
-    let mut costs = vec![f32::INFINITY; grid.tiles.len()];
-
-    costs[start_index] = 0.0;
-    open.push(OpenNode {
+    workspace.costs[start_index] = 0.0;
+    workspace.open.push(OpenNode {
         position: start_index,
         estimated_total: octile(start, goal),
     });
 
     let mut iterations = 0;
 
-    while let Some(current) = open.pop() {
+    while let Some(current) = workspace.open.pop() {
         iterations += 1;
         if iterations > max_iters {
             return None;
         }
 
-        let current_cost = costs[current.position];
+        let current_cost = workspace.costs[current.position];
         let best_estimate = current_cost + octile(coordinate(grid, current.position), goal);
 
         if current.estimated_total > best_estimate {
@@ -94,7 +133,12 @@ pub fn find_path_with_limit(
         }
 
         if current.position == goal_index {
-            return Some(reconstruct_path(grid, &came_from, start_index, goal_index));
+            return Some(reconstruct_path(
+                grid,
+                &workspace.came_from,
+                start_index,
+                goal_index,
+            ));
         }
 
         for (neighbor, base_move_cost) in neighbors_8dir(grid, coordinate(grid, current.position)) {
@@ -107,10 +151,10 @@ pub fn find_path_with_limit(
             let step_cost = base_move_cost * terrain_cost;
             let candidate_cost = current_cost + step_cost;
 
-            if candidate_cost < costs[neighbor_index] {
-                came_from[neighbor_index] = Some(current.position);
-                costs[neighbor_index] = candidate_cost;
-                open.push(OpenNode {
+            if candidate_cost < workspace.costs[neighbor_index] {
+                workspace.came_from[neighbor_index] = Some(current.position);
+                workspace.costs[neighbor_index] = candidate_cost;
+                workspace.open.push(OpenNode {
                     position: neighbor_index,
                     estimated_total: candidate_cost + octile(neighbor, goal),
                 });
@@ -427,5 +471,32 @@ mod tests {
 
         let path = find_path_with_limit(&grid, (0, 0), (199, 199), Some(100));
         assert!(path.is_none());
+    }
+
+    #[test]
+    fn reusable_workspace_does_not_leak_state_between_searches() {
+        let grid = grid_from_rows(&["PPPPPP", "PPPPPP", "PPPPPP", "PPPPPP"]);
+        let mut workspace = PathfindingWorkspace::new();
+
+        let first = find_path_with_workspace(&mut workspace, &grid, (0, 0), (5, 3));
+        let second = find_path_with_workspace(&mut workspace, &grid, (5, 3), (0, 0));
+
+        assert_eq!(first, find_path(&grid, (0, 0), (5, 3)));
+        assert_eq!(second, find_path(&grid, (5, 3), (0, 0)));
+    }
+
+    #[test]
+    fn workspace_recovers_after_limited_search_failure() {
+        let row = "P".repeat(32);
+        let rows: Vec<_> = (0..32).map(|_| row.as_str()).collect();
+        let grid = grid_from_rows(&rows);
+        let mut workspace = PathfindingWorkspace::new();
+
+        let failed =
+            find_path_with_workspace_and_limit(&mut workspace, &grid, (0, 0), (31, 31), Some(1));
+        assert!(failed.is_none());
+
+        let recovered = find_path_with_workspace(&mut workspace, &grid, (0, 0), (31, 31));
+        assert_eq!(recovered, find_path(&grid, (0, 0), (31, 31)));
     }
 }
