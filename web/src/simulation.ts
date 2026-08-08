@@ -4,7 +4,19 @@ import type { EntityInfo, PopulationStats } from "./types";
 import { updateTileInspector } from "./ui/tile-inspector";
 
 const BASE_TICKS_PER_SECOND = 4;
+const PERF_DEBUG_MODE = "perf";
+const MAX_BENCHMARK_TICKS = 100_000;
 const MAX_FRAME_DELTA_SECONDS = 0.25;
+
+export interface SimulationBenchmark {
+  ticks: number;
+  startTick: number;
+  endTick: number;
+  population: number;
+  totalMs: number;
+  msPerTick: number;
+  ticksPerSecond: number;
+}
 
 let speed = 1;
 let accumulator = 0;
@@ -54,6 +66,61 @@ export function bindSimulationControls(): void {
 
   requestAnimationFrame(runSimulationFrame);
   syncSimulationUi();
+  installPerformanceDebug();
+}
+
+export function benchmarkSimulation(
+  ticks = 1000,
+): SimulationBenchmark | null {
+  const world = state.world;
+
+  if (
+    !world ||
+    !Number.isInteger(ticks) ||
+    ticks <= 0 ||
+    ticks > MAX_BENCHMARK_TICKS
+  ) {
+    console.warn(
+      "benchmarkSimulation: world unavailable or invalid tick count",
+    );
+    return null;
+  }
+
+  const wasPaused = world.simulation_is_paused();
+  const startTick = Number(world.simulation_tick());
+  const population = world.entity_count();
+
+  if (wasPaused) {
+    world.simulation_resume();
+  }
+
+  let totalMs: number;
+
+  try {
+    const startedAt = performance.now();
+    world.simulation_advance(ticks);
+    totalMs = performance.now() - startedAt;
+  } finally {
+    if (wasPaused) {
+      world.simulation_pause();
+    }
+  }
+
+  const endTick = Number(world.simulation_tick());
+
+  const result: SimulationBenchmark = {
+    ticks,
+    startTick,
+    endTick,
+    population,
+    totalMs,
+    msPerTick: totalMs / ticks,
+    ticksPerSecond: ticks / (totalMs / 1000),
+  };
+
+  handleSimulationChange();
+
+  return result;
 }
 
 export function syncSimulationUi(): void {
@@ -179,4 +246,30 @@ function syncEntityInspector(): void {
     `<span class="info-key">Utility: explore</span><span class="info-val">${entity.utilities.explore.toFixed(2)}</span>`,
     `<span class="info-key">Utility: rest</span><span class="info-val">${entity.utilities.rest.toFixed(2)}</span>`,
   ].join("");
+}
+
+declare global {
+  interface Window {
+    nexusBenchmark?: (ticks?: number) => SimulationBenchmark | null;
+  }
+}
+
+function installPerformanceDebug(): void {
+  const debugMode = new URLSearchParams(window.location.search).get("debug");
+
+  if (debugMode !== PERF_DEBUG_MODE) {
+    return;
+  }
+
+  window.nexusBenchmark = (ticks = 1000) => {
+    const result = benchmarkSimulation(ticks);
+
+    if (result) {
+      console.table(result);
+    }
+
+    return result;
+  };
+
+  console.info("Performance benchmark enabled. Use: nexusBenchmark(ticks)");
 }
