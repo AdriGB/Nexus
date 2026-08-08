@@ -1,3 +1,4 @@
+mod bridge;
 mod generation;
 mod pathfinding;
 mod regions;
@@ -142,45 +143,25 @@ impl WorldBridge {
     }
 
     pub fn population_stats(&self) -> String {
-        let stats = self.simulation.population_stats();
-        format!(
-            concat!(
-                r#"{{"population":{},"births":{},"deaths":{},"#,
-                r#""females":{},"males":{},"pregnant":{},"#,
-                r#""hungry":{},"seeking_food":{},"average_hunger":{:.2},"#,
-                r#""food_consumed":{}}}"#,
-            ),
-            stats.population,
-            stats.births,
-            stats.deaths,
-            stats.females,
-            stats.males,
-            stats.pregnant,
-            stats.hungry,
-            stats.seeking_food,
-            stats.average_hunger,
-            stats.food_consumed,
-        )
+        bridge::population_stats_json(self.simulation.population_stats())
     }
 
     pub fn first_entity_info(&self) -> String {
         self.simulation.entities().first().map_or_else(
             || "{}".to_string(),
-            |entity| format_entity_info(entity, self.simulation.tick()),
+            |entity| bridge::entity_info_json(entity, self.simulation.tick()),
         )
     }
 
     pub fn entity_info(&self, id: u32) -> String {
-        let Some(entity) = self
-            .simulation
+        self.simulation
             .entities()
             .iter()
             .find(|entity| entity.id == id)
-        else {
-            return "{}".to_string();
-        };
-
-        format_entity_info(entity, self.simulation.tick())
+            .map_or_else(
+                || "{}".to_string(),
+                |entity| bridge::entity_info_json(entity, self.simulation.tick()),
+            )
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
@@ -216,171 +197,10 @@ impl WorldBridge {
     }
 
     pub fn tile_info(&self, x: u32, y: u32) -> String {
-        match self.grid.get(x, y) {
-            Some(tile) => {
-                let idx = (y * self.grid.width + x) as usize;
-                let rid = if idx < self.grid.region_ids.len() {
-                    self.grid.region_ids[idx]
-                } else {
-                    u32::MAX
-                };
-                let (r_kind, r_area, _r_border) =
-                    if rid != u32::MAX && (rid as usize) < self.grid.regions.len() {
-                        let r = &self.grid.regions[rid as usize];
-                        (
-                            match r.kind {
-                                world::RegionKind::Land => "Land",
-                                world::RegionKind::Water => "Water",
-                            },
-                            r.tile_count,
-                            r.touches_border,
-                        )
-                    } else {
-                        ("Unknown", 0, false)
-                    };
-                let coastal = self.grid.is_coastal(x, y);
-                let movement_cost = tile
-                    .terrain
-                    .movement_cost()
-                    .map_or_else(|| "null".to_string(), |cost| format!("{cost:.1}"));
-                let resource = self
-                    .grid
-                    .resources
-                    .get(idx)
-                    .and_then(Option::as_ref)
-                    .map_or_else(
-                        || "null".to_string(),
-                        |deposit| {
-                            format!(
-                                r#"{{"kind":"{}","amount":{}}}"#,
-                                deposit.kind.label(),
-                                deposit.amount
-                            )
-                        },
-                    );
-                format!(
-                    concat!(
-                        r#"{{"terrain":"{}","#,
-                        r#""altitude":{:.6},"#,
-                        r#""moisture":{:.6},"#,
-                        r#""temperature":{:.6},"#,
-                        r#""x":{},"y":{},"#,
-                        r#""region_id":{},"#,
-                        r#""region_type":"{}","#,
-                        r#""region_area":{},"#,
-                        r#""coastal":{},"#,
-                        r#""walkable":{},"#,
-                        r#""movement_cost":{},"#,
-                        r#""resource":{}}}"#,
-                    ),
-                    tile.terrain.label(),
-                    tile.altitude,
-                    tile.moisture,
-                    tile.temperature,
-                    x,
-                    y,
-                    rid,
-                    r_kind,
-                    r_area,
-                    coastal,
-                    tile.terrain.is_walkable(),
-                    movement_cost,
-                    resource,
-                )
-            }
-            None => "{}".to_string(),
-        }
+        bridge::tile_info_json(&self.grid, x, y)
     }
 
     pub fn region_stats(&self) -> String {
-        let total = (self.grid.width * self.grid.height) as f64;
-        let land: Vec<_> = self
-            .grid
-            .regions
-            .iter()
-            .filter(|r| r.kind == world::RegionKind::Land)
-            .collect();
-        let water_count = self
-            .grid
-            .regions
-            .iter()
-            .filter(|r| r.kind == world::RegionKind::Water)
-            .count();
-        let land_tiles: u32 = land.iter().map(|r| r.tile_count).sum();
-        let water_tiles: u32 = total as u32 - land_tiles;
-        let largest = land.iter().map(|r| r.tile_count).max().unwrap_or(0);
-        let islands = land.iter().filter(|r| !r.touches_border).count();
-
-        format!(
-            concat!(
-                r#"{{"land_regions":{},"#,
-                r#""water_regions":{},"#,
-                r#""land_tiles":{},"#,
-                r#""water_tiles":{},"#,
-                r#""total_tiles":{},"#,
-                r#""land_coverage":{:.4},"#,
-                r#""largest_landmass_pct":{:.4},"#,
-                r#""islands":{}}}"#,
-            ),
-            land.len(),
-            water_count,
-            land_tiles,
-            water_tiles,
-            total as u32,
-            land_tiles as f64 / total,
-            largest as f64 / total,
-            islands,
-        )
+        bridge::region_stats_json(&self.grid)
     }
-}
-
-fn format_entity_info(entity: &simulation::Entity, tick: u64) -> String {
-    let goal = entity
-        .mind
-        .current_goal
-        .map_or("None", simulation::Goal::label);
-    let action = entity
-        .mind
-        .current_action()
-        .map_or("None", simulation::Action::label);
-    let goal_age_ticks = entity
-        .mind
-        .current_goal
-        .map_or(0, |_| tick.saturating_sub(entity.mind.goal_since_tick));
-    let pregnancy_due_tick = entity.pregnancy.map_or_else(
-        || "null".to_string(),
-        |pregnancy| pregnancy.due_tick.to_string(),
-    );
-    format!(
-        concat!(
-            r#"{{"id":{},"x":{},"y":{},"sex":"{}","hunger":{:.2},"health":{:.2},"#,
-            r#""age_ticks":{},"age_years":{:.3},"lifespan_ticks":{},"#,
-            r#""pregnant":{},"pregnancy_due_tick":{},"activity":"{}","remaining_path":{},"#,
-            r#""goal":"{}","action":"{}","goal_age_ticks":{},"#,
-            r#""known_resources":{},"known_chunks":{},"visible_entities":{},"utilities":{{"#,
-            r#""eat":{:.3},"explore":{:.3},"rest":{:.3}}}}}"#,
-        ),
-        entity.id,
-        entity.x,
-        entity.y,
-        entity.sex.label(),
-        entity.hunger,
-        entity.health,
-        entity.age_ticks,
-        simulation::years_from_ticks(entity.age_ticks),
-        entity.lifespan_ticks,
-        entity.pregnancy.is_some(),
-        pregnancy_due_tick,
-        entity.activity.label(),
-        entity.remaining_path_len(),
-        goal,
-        action,
-        goal_age_ticks,
-        entity.mind.memory.known_resources.len(),
-        entity.mind.memory.known_chunk_count(),
-        entity.mind.visible_entities.len(),
-        entity.mind.utility_scores.eat,
-        entity.mind.utility_scores.explore,
-        entity.mind.utility_scores.rest,
-    )
 }
