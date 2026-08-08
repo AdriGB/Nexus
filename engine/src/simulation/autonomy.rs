@@ -1,4 +1,5 @@
-use super::{Entity, EntityActivity, FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
+use super::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
+use super::{Entity, EntityActivity};
 use crate::pathfinding;
 use crate::world::{Grid, ResourceKind};
 use std::collections::HashSet;
