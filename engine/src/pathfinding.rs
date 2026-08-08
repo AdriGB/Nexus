@@ -86,8 +86,6 @@ fn find_path_with_workspace_and_limit(
     goal: (u32, u32),
     max_iterations: Option<usize>,
 ) -> Option<Vec<(u32, u32)>> {
-    workspace.prepare(grid.tiles.len());
-
     if !grid.get(start.0, start.1)?.terrain.is_walkable()
         || !grid.get(goal.0, goal.1)?.terrain.is_walkable()
     {
@@ -110,6 +108,8 @@ fn find_path_with_workspace_and_limit(
     let max_iters = max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS);
     let start_index = index(grid, start);
     let goal_index = index(grid, goal);
+
+    workspace.prepare(grid.tiles.len());
 
     workspace.costs[start_index] = 0.0;
     workspace.open.push(OpenNode {
