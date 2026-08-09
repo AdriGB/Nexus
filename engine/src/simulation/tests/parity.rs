@@ -65,6 +65,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
 
         // Memory state
         assert_eq!(a.mind.memory.known_resources, b.mind.memory.known_resources);
+        assert_eq!(a.mind.memory.known_entities, b.mind.memory.known_entities);
         assert_eq!(
             a.mind.memory.known_chunk_count(),
             b.mind.memory.known_chunk_count()

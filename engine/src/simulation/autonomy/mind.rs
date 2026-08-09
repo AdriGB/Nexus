@@ -68,6 +68,16 @@ pub struct KnownResource {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnownEntity {
+    pub id: u32,
+    pub first_seen_tick: u64,
+    pub last_seen_tick: u64,
+    pub last_seen_x: u32,
+    pub last_seen_y: u32,
+    pub observed_ticks: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FailedExploration {
     chunk_index: u32,
     retry_after_tick: u64,
@@ -78,6 +88,7 @@ pub struct Memory {
     pub known_resources: Vec<KnownResource>,
     pub(super) known_chunks: HashSet<u32>,
     failed_exploration: Vec<FailedExploration>,
+    pub known_entities: Vec<KnownEntity>,
 }
 
 impl Memory {

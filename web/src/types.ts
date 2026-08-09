@@ -107,6 +107,7 @@ export interface EntityInfo {
   action: string;
   goal_age_ticks: number;
   known_resources: number;
+  known_entities: number;
   known_chunks: number;
   visible_entities: number;
   movement_credit: number;

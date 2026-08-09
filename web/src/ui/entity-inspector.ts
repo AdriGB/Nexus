@@ -72,6 +72,7 @@ export function syncEntityInspector(): void {
     infoRow("Goal retained", `${entity.goal_age_ticks.toLocaleString()} ticks`),
     infoRow("Path remaining", entity.remaining_path.toString()),
     infoRow("Known resources", entity.known_resources.toString()),
+    infoRow("Known individuals", entity.known_entities.toString()),
     infoRow("Known chunks", entity.known_chunks.toString()),
     infoRow("Visible entities", entity.visible_entities.toString()),
     infoRow("Utility: eat", entity.utilities.eat.toFixed(2)),

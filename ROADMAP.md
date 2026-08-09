@@ -136,7 +136,7 @@
   - [x] Personality affects utility scoring
     - [x] Curiosity and caution affect explore and rest utilities
     - [x] Persistence affects goal retention
-  - [ ] Persistent relationship memory
+  - [x] Persistent relationship memory
   - [ ] Relationship affinity
   - [ ] Social interaction
   - [ ] Relationship-driven behavior

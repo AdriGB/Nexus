@@ -1,5 +1,5 @@
 use super::super::spatial::{EntitySnapshot, SpatialGrid};
-use super::mind::{manhattan, KnownResource, Mind, KNOWLEDGE_CHUNK_SIZE};
+use super::mind::{manhattan, KnownEntity, KnownResource, Mind, KNOWLEDGE_CHUNK_SIZE};
 use crate::world::{Grid, ResourceKind};
 
 const RESOURCE_MEMORY_TTL: u64 = 2_000;
@@ -69,6 +69,35 @@ fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) 
                 let index = chunk_y * chunks_wide + chunk_x;
                 mind.memory.known_chunks.insert(index);
             }
+        }
+    }
+}
+
+fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
+    match mind
+        .memory
+        .known_entities
+        .binary_search_by_key(&other.id, |known| known.id)
+    {
+        Ok(index) => {
+            let known = &mut mind.memory.known_entities[index];
+            known.last_seen_tick = tick;
+            known.last_seen_x = other.x;
+            known.last_seen_y = other.y;
+            known.observed_ticks = known.observed_ticks.saturating_add(1);
+        }
+        Err(index) => {
+            mind.memory.known_entities.insert(
+                index,
+                KnownEntity {
+                    id: other.id,
+                    first_seen_tick: tick,
+                    last_seen_tick: tick,
+                    last_seen_x: other.x,
+                    last_seen_y: other.y,
+                    observed_ticks: 1,
+                },
+            );
         }
     }
 }
@@ -159,6 +188,7 @@ pub(super) fn perceive_entities(
     mind: &mut Mind,
     entity_id: u32,
     position: (u32, u32),
+    tick: u64,
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
 ) {
@@ -177,6 +207,7 @@ pub(super) fn perceive_entities(
 
             if manhattan(position, (other.x, other.y)) <= mind.perception_radius {
                 mind.visible_entities.push(other.id);
+                remember_entity(mind, other, tick);
             }
         },
     );
@@ -206,6 +237,70 @@ mod tests {
             regions: Vec::new(),
             resources: vec![None; (width * height) as usize],
         }
+    }
+
+    #[test]
+    fn seeing_entity_adds_it_to_memory() {
+        let mut mind = Mind::default();
+        let snapshot = EntitySnapshot {
+            id: 5,
+            x: 10,
+            y: 20,
+        };
+        remember_entity(&mut mind, snapshot, 100);
+
+        assert_eq!(mind.memory.known_entities.len(), 1);
+        let known = &mind.memory.known_entities[0];
+        assert_eq!(known.id, 5);
+        assert_eq!(known.first_seen_tick, 100);
+        assert_eq!(known.last_seen_tick, 100);
+        assert_eq!(known.last_seen_x, 10);
+        assert_eq!(known.last_seen_y, 20);
+        assert_eq!(known.observed_ticks, 1);
+    }
+
+    #[test]
+    fn seeing_same_entity_updates_existing_memory() {
+        let mut mind = Mind::default();
+        let snapshot_a = EntitySnapshot {
+            id: 5,
+            x: 10,
+            y: 20,
+        };
+        remember_entity(&mut mind, snapshot_a, 100);
+
+        let snapshot_b = EntitySnapshot {
+            id: 5,
+            x: 15,
+            y: 25,
+        };
+        remember_entity(&mut mind, snapshot_b, 200);
+
+        assert_eq!(mind.memory.known_entities.len(), 1);
+        let known = &mind.memory.known_entities[0];
+        assert_eq!(known.first_seen_tick, 100);
+        assert_eq!(known.last_seen_tick, 200);
+        assert_eq!(known.last_seen_x, 15);
+        assert_eq!(known.last_seen_y, 25);
+        assert_eq!(known.observed_ticks, 2);
+    }
+
+    #[test]
+    fn known_entities_remain_sorted_by_id() {
+        let mut mind = Mind::default();
+
+        for id in [30, 10, 50, 20, 40] {
+            let snapshot = EntitySnapshot { id, x: 0, y: 0 };
+            remember_entity(&mut mind, snapshot, 0);
+        }
+
+        let ids: Vec<u32> = mind
+            .memory
+            .known_entities
+            .iter()
+            .map(|known| known.id)
+            .collect();
+        assert_eq!(ids, vec![10, 20, 30, 40, 50]);
     }
 
     #[test]

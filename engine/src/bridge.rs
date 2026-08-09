@@ -147,6 +147,7 @@ struct EntityInfoDto {
     action: &'static str,
     goal_age_ticks: u64,
     known_resources: usize,
+    known_entities: usize,
     known_chunks: usize,
     visible_entities: usize,
     utilities: UtilityScoresDto,
@@ -190,6 +191,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         action,
         goal_age_ticks,
         known_resources: entity.mind.memory.known_resources.len(),
+        known_entities: entity.mind.memory.known_entities.len(),
         known_chunks: entity.mind.memory.known_chunk_count(),
         visible_entities: entity.mind.visible_entities.len(),
         utilities: UtilityScoresDto {
@@ -398,6 +400,10 @@ mod tests {
             "stage_movement_factor",
             "caregiver_id",
             "personality",
+            "known_resources",
+            "known_entities",
+            "known_chunks",
+            "visible_entities",
         ] {
             assert!(entity.get(key).is_some(), "missing entity field {key}");
         }

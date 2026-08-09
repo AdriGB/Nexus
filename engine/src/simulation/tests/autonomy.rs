@@ -206,3 +206,47 @@ fn exploration_never_targets_a_different_land_region() {
 
     assert!(target.is_none_or(|(x, y)| world.region_id_at(x, y) == origin_region));
 }
+
+#[test]
+fn entity_memory_persists_outside_perception() {
+    let mut world = plain_grid(20, 1);
+    let mut simulation = Simulation {
+        entities: vec![entity(1, 0, 0, 0.0), entity(2, 3, 0, 0.0)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+    for entity in &mut simulation.entities {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+    }
+
+    simulation.step(&mut world);
+
+    assert!(simulation.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .any(|known| known.id == 2));
+    assert_eq!(simulation.entities()[0].mind.visible_entities, vec![2]);
+
+    simulation.entities[1].x = 19;
+    simulation.step(&mut world);
+
+    assert!(simulation.entities()[0].mind.visible_entities.is_empty());
+    assert!(simulation.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .any(|known| known.id == 2));
+
+    let known = simulation.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|known| known.id == 2)
+        .unwrap();
+    assert_eq!(known.first_seen_tick, 1);
+    assert_eq!(known.last_seen_tick, 1);
+}

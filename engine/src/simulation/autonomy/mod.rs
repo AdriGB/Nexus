@@ -36,6 +36,7 @@ pub(super) fn update_entity(
         &mut entity.mind,
         entity.id,
         position,
+        tick,
         population,
         spatial_grid,
     );

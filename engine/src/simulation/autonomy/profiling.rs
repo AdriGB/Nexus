@@ -59,6 +59,7 @@ fn profiled_update_entity(
         &mut entity.mind,
         entity.id,
         position,
+        tick,
         population,
         spatial_grid,
     );
