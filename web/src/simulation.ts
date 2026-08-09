@@ -30,6 +30,17 @@ interface SimulationPhaseProfile {
   total_us: number;
 }
 
+interface SimulationAutonomyProfile {
+  resource_perception_us: number;
+  entity_perception_us: number;
+  plan_validation_us: number;
+  planning_us: number;
+  action_us: number;
+  sampled_entities: number;
+  planned_entities: number;
+  urgent_interrupts: number;
+}
+
 let speed = 1;
 let accumulator = 0;
 let previousTimestamp: number | null = null;
@@ -264,6 +275,7 @@ declare global {
   interface Window {
     nexusBenchmark?: (ticks?: number) => SimulationBenchmark | null;
     nexusProfile?: () => SimulationPhaseProfile | null;
+    nexusProfileAutonomy?: () => SimulationAutonomyProfile | null;
   }
 }
 
@@ -326,6 +338,79 @@ function installPerformanceDebug(): void {
       ms: (unaccountedUs / 1000).toFixed(3),
       percent: `${((unaccountedUs / totalUs) * 100).toFixed(1)}%`,
     });
+
+    console.table(rows);
+    return profile;
+  };
+
+  window.nexusProfileAutonomy = () => {
+    const world = state.world;
+
+    if (!world) {
+      console.warn("No world loaded");
+      return null;
+    }
+
+    const profiledWorld = world as typeof world & {
+      simulation_profile_autonomy_step(): string;
+    };
+    const profile = JSON.parse(
+      profiledWorld.simulation_profile_autonomy_step(),
+    ) as SimulationAutonomyProfile;
+
+    handleSimulationChange();
+
+    const totalUs =
+      profile.resource_perception_us +
+      profile.entity_perception_us +
+      profile.plan_validation_us +
+      profile.planning_us +
+      profile.action_us;
+    const totalSafe = Math.max(totalUs, 1);
+
+    const rows = [
+      {
+        phase: "resource_perception",
+        ms: (profile.resource_perception_us / 1000).toFixed(3),
+        percent: `${((profile.resource_perception_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "entity_perception",
+        ms: (profile.entity_perception_us / 1000).toFixed(3),
+        percent: `${((profile.entity_perception_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "plan_validation",
+        ms: (profile.plan_validation_us / 1000).toFixed(3),
+        percent: `${((profile.plan_validation_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "planning",
+        ms: (profile.planning_us / 1000).toFixed(3),
+        percent: `${((profile.planning_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "action",
+        ms: (profile.action_us / 1000).toFixed(3),
+        percent: `${((profile.action_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      { phase: "---", ms: "---", percent: "---" },
+      {
+        phase: "sampled_entities",
+        ms: String(profile.sampled_entities),
+        percent: "",
+      },
+      {
+        phase: "planned_entities",
+        ms: String(profile.planned_entities),
+        percent: "",
+      },
+      {
+        phase: "urgent_interrupts",
+        ms: String(profile.urgent_interrupts),
+        percent: "",
+      },
+    ];
 
     console.table(rows);
     return profile;

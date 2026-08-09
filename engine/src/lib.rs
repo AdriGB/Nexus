@@ -127,6 +127,11 @@ impl WorldBridge {
         bridge::phase_profile_json(&profile)
     }
 
+    pub fn simulation_profile_autonomy_step(&mut self) -> String {
+        let profile = self.simulation.profile_autonomy_step(&mut self.grid);
+        bridge::autonomy_profile_json(&profile)
+    }
+
     pub fn simulation_pause(&mut self) {
         self.simulation.pause();
     }

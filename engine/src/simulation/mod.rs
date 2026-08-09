@@ -6,7 +6,7 @@ mod spatial;
 mod time;
 
 use self::autonomy::Mind;
-pub(crate) use self::autonomy::{Action, Goal};
+pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{
     FOOD_SEARCH_THRESHOLD, HUNGER_PER_TICK, MAX_HEALTH, MAX_HUNGER, MAX_POPULATION,
     STARVATION_DAMAGE_PER_TICK,
@@ -222,6 +222,34 @@ impl Simulation {
             conceptions_us,
             total_us: total_start.elapsed().as_micros() as u64,
         }
+    }
+
+    pub(crate) fn profile_autonomy_step(&mut self, world: &mut Grid) -> AutonomyProfile {
+        self.tick = self.tick.saturating_add(1);
+        self.update_physiology();
+        self.rebuild_population_index(world);
+
+        let tick = self.tick;
+        let population_cache = &self.population_cache;
+        let spatial_grid = &self.spatial_grid;
+        let pathfinding_workspace = &mut self.pathfinding_workspace;
+
+        let (consumed_this_tick, profile) = autonomy::profile_autonomy(
+            &mut self.entities,
+            world,
+            tick,
+            population_cache,
+            spatial_grid,
+            pathfinding_workspace,
+        );
+
+        self.resolve_starvation();
+        self.record_resource_changes(consumed_this_tick);
+        self.remove_dead_entities();
+        self.update_pregnancies(world);
+        self.try_daily_conceptions();
+
+        profile
     }
 
     pub fn pause(&mut self) {

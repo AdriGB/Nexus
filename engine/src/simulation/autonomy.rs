@@ -4,6 +4,7 @@ use super::{Entity, EntityActivity};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 use std::collections::HashSet;
+use web_time::Instant;
 
 pub const DEFAULT_PERCEPTION_RADIUS: u32 = 6;
 const KNOWLEDGE_CHUNK_SIZE: u32 = 8;
@@ -14,6 +15,19 @@ const FOOD_CONSUMED_PER_MEAL: u16 = 10;
 const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
 pub(super) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
 const REST_HEALTH_PER_TICK: f32 = 0.25;
+const PROFILE_SAMPLE_RATE: usize = 4;
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct AutonomyProfile {
+    pub resource_perception_us: u64,
+    pub entity_perception_us: u64,
+    pub plan_validation_us: u64,
+    pub planning_us: u64,
+    pub action_us: u64,
+    pub sampled_entities: u32,
+    pub planned_entities: u32,
+    pub urgent_interrupts: u32,
+}
 
 pub(super) fn update_entity(
     entity: &mut Entity,
@@ -53,6 +67,110 @@ pub(super) fn update_entity(
     }
 
     execute_current_action(entity, world, tick)
+}
+
+// Keep this behaviorally identical to update_entity().
+// This duplicate exists only to keep profiling instrumentation
+// out of the normal simulation hot path.
+fn profiled_update_entity(
+    entity: &mut Entity,
+    world: &mut Grid,
+    tick: u64,
+    population: &[EntitySnapshot],
+    spatial_grid: &SpatialGrid,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    profile: &mut AutonomyProfile,
+) -> u16 {
+    let position = (entity.x, entity.y);
+
+    let start = Instant::now();
+    perceive(&mut entity.mind, world, position, tick);
+    profile.resource_perception_us += start.elapsed().as_micros() as u64;
+
+    let start = Instant::now();
+    perceive_entities(
+        &mut entity.mind,
+        entity.id,
+        position,
+        population,
+        spatial_grid,
+    );
+    profile.entity_perception_us += start.elapsed().as_micros() as u64;
+
+    let start = Instant::now();
+    invalidate_obsolete_food_plan(entity);
+
+    let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
+        && entity.mind.current_goal != Some(Goal::Eat)
+        && !entity
+            .mind
+            .remembered_food_targets(position, tick)
+            .is_empty();
+    if should_interrupt {
+        profile.urgent_interrupts += 1;
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+    }
+    profile.plan_validation_us += start.elapsed().as_micros() as u64;
+
+    if entity.mind.current_action().is_none() {
+        profile.planned_entities += 1;
+
+        let start = Instant::now();
+        entity.mind.clear_goal();
+        let goal = evaluate_goals(&mut entity.mind, entity.hunger, entity.health);
+        plan_goal(entity, world, tick, goal, pathfinding_workspace);
+        profile.planning_us += start.elapsed().as_micros() as u64;
+    }
+
+    let start = Instant::now();
+    let consumed = execute_current_action(entity, world, tick);
+    profile.action_us += start.elapsed().as_micros() as u64;
+    profile.sampled_entities += 1;
+
+    consumed
+}
+
+pub(crate) fn profile_autonomy(
+    entities: &mut [Entity],
+    world: &mut Grid,
+    tick: u64,
+    population: &[EntitySnapshot],
+    spatial_grid: &SpatialGrid,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+) -> (u64, AutonomyProfile) {
+    let mut profile = AutonomyProfile::default();
+    let mut consumed = 0u64;
+
+    for (index, entity) in entities
+        .iter_mut()
+        .filter(|entity| entity.health > 0.0)
+        .enumerate()
+    {
+        if index % PROFILE_SAMPLE_RATE == 0 {
+            consumed += u64::from(profiled_update_entity(
+                entity,
+                world,
+                tick,
+                population,
+                spatial_grid,
+                pathfinding_workspace,
+                &mut profile,
+            ));
+        } else {
+            consumed += u64::from(update_entity(
+                entity,
+                world,
+                tick,
+                population,
+                spatial_grid,
+                pathfinding_workspace,
+            ));
+        }
+    }
+
+    (consumed, profile)
 }
 
 fn invalidate_obsolete_food_plan(entity: &mut Entity) {

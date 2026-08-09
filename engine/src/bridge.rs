@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::simulation::{self, Entity, PhaseProfile, PopulationStats};
+use crate::simulation::{self, AutonomyProfile, Entity, PhaseProfile, PopulationStats};
 use crate::world::{Grid, RegionKind};
 
 fn to_json<T: Serialize>(value: &T) -> String {
@@ -31,6 +31,31 @@ pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
         pregnancies_us: profile.pregnancies_us,
         conceptions_us: profile.conceptions_us,
         total_us: profile.total_us,
+    })
+}
+
+#[derive(Serialize)]
+struct AutonomyProfileDto {
+    resource_perception_us: u64,
+    entity_perception_us: u64,
+    plan_validation_us: u64,
+    planning_us: u64,
+    action_us: u64,
+    sampled_entities: u32,
+    planned_entities: u32,
+    urgent_interrupts: u32,
+}
+
+pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
+    to_json(&AutonomyProfileDto {
+        resource_perception_us: profile.resource_perception_us,
+        entity_perception_us: profile.entity_perception_us,
+        plan_validation_us: profile.plan_validation_us,
+        planning_us: profile.planning_us,
+        action_us: profile.action_us,
+        sampled_entities: profile.sampled_entities,
+        planned_entities: profile.planned_entities,
+        urgent_interrupts: profile.urgent_interrupts,
     })
 }
 
@@ -361,5 +386,25 @@ mod tests {
 
         assert_eq!(json["autonomy_us"], 3);
         assert_eq!(json["total_us"], 36);
+    }
+
+    #[test]
+    fn autonomy_profile_payload_is_valid_json() {
+        let profile = AutonomyProfile {
+            resource_perception_us: 1000,
+            entity_perception_us: 500,
+            plan_validation_us: 200,
+            planning_us: 3000,
+            action_us: 100,
+            sampled_entities: 500,
+            planned_entities: 87,
+            urgent_interrupts: 3,
+        };
+
+        let payload = autonomy_profile_json(&profile);
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+
+        assert_eq!(json["sampled_entities"], 500);
+        assert_eq!(json["planned_entities"], 87);
     }
 }
