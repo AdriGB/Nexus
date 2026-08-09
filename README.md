@@ -121,7 +121,7 @@ Biological time is defined centrally in `simulation/time.rs`: one tick is one ho
 
 Sex, founder age, and individual lifespan are derived deterministically from the world seed and monotonic entity ID. Lifespans vary from roughly 650,000 to 950,000 ticks, avoiding synchronized natural deaths.
 
-Eligible nearby females and males receive one deterministic conception roll per simulated day. Conception creates a pregnancy rather than a child. After a 40-week gestation, a newborn is placed on a walkable tile adjacent to the mother; the mother then enters a 180-day postpartum period. Reproductive age windows, pregnancy, postpartum state, health, and hunger all constrain conception. Movement now accumulates hourly credit and spends it according to terrain and diagonal step costs; pregnancy does not yet modify movement speed.
+Eligible nearby females and males receive one deterministic conception roll per simulated day. Conception creates a pregnancy rather than a child. After a 40-week gestation, a newborn is placed on a walkable tile adjacent to the mother; the mother then enters a 180-day postpartum period. Reproductive age windows, pregnancy, postpartum state, health, and hunger all constrain conception. Movement accumulates hourly credit and spends it according to terrain and diagonal step costs. Pregnancy progressively reduces the rate at which movement credit is gained as gestation advances.
 
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
 

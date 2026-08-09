@@ -1,5 +1,10 @@
-use super::config::{BASE_MOVEMENT_SPEED, FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
+use super::config::{
+    BASE_MOVEMENT_SPEED, FOOD_SEARCH_THRESHOLD, MAX_HEALTH, PREGNANCY_PHASE_2_START_WEEK,
+    PREGNANCY_PHASE_3_START_WEEK, PREGNANCY_PHASE_4_START_WEEK, PREGNANCY_SPEED_PHASE_1,
+    PREGNANCY_SPEED_PHASE_2, PREGNANCY_SPEED_PHASE_3, PREGNANCY_SPEED_PHASE_4,
+};
 use super::spatial::{EntitySnapshot, SpatialGrid};
+use super::time::TICKS_PER_WEEK;
 use super::{Entity, EntityActivity};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
@@ -298,6 +303,27 @@ fn plan_exploration(
     }
 }
 
+pub(super) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
+    let Some(pregnancy) = entity.pregnancy else {
+        return BASE_MOVEMENT_SPEED;
+    };
+
+    let elapsed = tick.saturating_sub(pregnancy.conceived_tick);
+    let weeks = elapsed / TICKS_PER_WEEK;
+
+    let factor = if weeks < PREGNANCY_PHASE_2_START_WEEK {
+        PREGNANCY_SPEED_PHASE_1
+    } else if weeks < PREGNANCY_PHASE_3_START_WEEK {
+        PREGNANCY_SPEED_PHASE_2
+    } else if weeks < PREGNANCY_PHASE_4_START_WEEK {
+        PREGNANCY_SPEED_PHASE_3
+    } else {
+        PREGNANCY_SPEED_PHASE_4
+    };
+
+    BASE_MOVEMENT_SPEED * factor
+}
+
 fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u16 {
     let Some(action) = entity.mind.current_action() else {
         entity.activity = EntityActivity::Idle;
@@ -305,7 +331,7 @@ fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u
     };
     match action {
         Action::MoveTo(_, _) | Action::ExploreArea(_, _) => {
-            entity.movement_credit += BASE_MOVEMENT_SPEED;
+            entity.movement_credit += effective_movement_speed(entity, tick);
 
             if entity.path_index < entity.path.len() {
                 let next = entity.path[entity.path_index];

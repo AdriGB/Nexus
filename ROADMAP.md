@@ -125,7 +125,7 @@
 - [x] Biology population statistics
 - [x] Biology inspector/debug state
 - [x] Time-based movement
-- [ ] Pregnancy mobility penalty
+- [x] Pregnancy mobility penalty
 - [ ] Life stages
 - [ ] Child dependency
 
