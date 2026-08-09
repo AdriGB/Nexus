@@ -3,6 +3,7 @@ mod biology;
 mod core;
 mod dependency;
 mod movement;
+mod parity;
 mod personality;
 mod resources;
 mod support;
