@@ -123,6 +123,8 @@ Sex, founder age, and individual lifespan are derived deterministically from the
 
 Eligible nearby females and males receive one deterministic conception roll per simulated day. Conception creates a pregnancy rather than a child. After a 40-week gestation, a newborn is placed on a walkable tile adjacent to the mother; the mother then enters a 180-day postpartum period. Reproductive age windows, pregnancy, postpartum state, health, and hunger all constrain conception. Movement accumulates hourly credit and spends it according to terrain and diagonal step costs. Pregnancy progressively reduces the rate at which movement credit is gained as gestation advances.
 
+Entities derive a life stage from biological age: Infant, Child, Adolescent, Adult, or Elder. Life stage modifies movement speed while sex-specific reproductive age windows remain unchanged.
+
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
 
 ## Entity cognition

@@ -11,7 +11,7 @@ use self::config::{
     FOOD_SEARCH_THRESHOLD, HUNGER_PER_TICK, MAX_HEALTH, MAX_HUNGER, MAX_POPULATION,
     STARVATION_DAMAGE_PER_TICK,
 };
-pub use self::entity::{Entity, EntityActivity, Sex};
+pub use self::entity::{Entity, EntityActivity, LifeStage, Sex};
 use self::lifecycle::{
     founder_age_for, lifespan_for, process_due_pregnancies, sex_for, spawn_candidates,
     try_conceptions, DAILY_CONCEPTION_THRESHOLD,

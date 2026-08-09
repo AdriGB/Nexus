@@ -126,7 +126,7 @@
 - [x] Biology inspector/debug state
 - [x] Time-based movement
 - [x] Pregnancy mobility penalty
-- [ ] Life stages
+- [x] Life stages
 - [ ] Child dependency
 
 ### Future Entity Systems

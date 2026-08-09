@@ -17,3 +17,8 @@ pub const LIFESPAN_VARIATION_TICKS: u64 = 150_000;
 pub fn years_from_ticks(ticks: u64) -> f64 {
     ticks as f64 / TICKS_PER_YEAR as f64
 }
+
+pub const INFANT_AGE_END: u64 = 3 * TICKS_PER_YEAR;
+pub const CHILD_AGE_END: u64 = 12 * TICKS_PER_YEAR;
+pub const ADOLESCENT_AGE_END: u64 = 18 * TICKS_PER_YEAR;
+pub const ELDER_AGE_START: u64 = 65 * TICKS_PER_YEAR;

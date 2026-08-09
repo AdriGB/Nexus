@@ -6,9 +6,10 @@ use super::lifecycle::{
 };
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::{
-    FEMALE_REPRODUCTIVE_AGE_END, FOUNDER_AGE_MAX, FOUNDER_AGE_MIN, GESTATION_TICKS,
-    MALE_REPRODUCTIVE_AGE_END, POSTPARTUM_TICKS, REPRODUCTIVE_AGE_START, TICKS_PER_DAY,
-    TICKS_PER_HOUR, TICKS_PER_WEEK, TICKS_PER_YEAR,
+    ADOLESCENT_AGE_END, CHILD_AGE_END, ELDER_AGE_START, FEMALE_REPRODUCTIVE_AGE_END,
+    FOUNDER_AGE_MAX, FOUNDER_AGE_MIN, GESTATION_TICKS, INFANT_AGE_END, MALE_REPRODUCTIVE_AGE_END,
+    POSTPARTUM_TICKS, REPRODUCTIVE_AGE_START, TICKS_PER_DAY, TICKS_PER_HOUR, TICKS_PER_WEEK,
+    TICKS_PER_YEAR,
 };
 use super::*;
 use crate::world::{ResourceDeposit, ResourceKind, Terrain, Tile};
@@ -148,6 +149,7 @@ fn paused_simulation_does_not_change_entities() {
 fn entity_stores_and_follows_unsmoothed_path() {
     let mut world = grid_from_rows(&["PPPPP", "P###F", "PPPPP"]);
     let mut simulation = simulation_with_entity(0, 1, 59.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
     let original_path = simulation.entities()[0].path.clone();
     assert!(original_path.len() > 2);
@@ -161,6 +163,7 @@ fn entity_stores_and_follows_unsmoothed_path() {
 fn mountain_movement_requires_four_ticks() {
     let mut world = grid_from_rows(&["PMF"]);
     let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
 
     for _ in 0..3 {
         simulation.step(&mut world);
@@ -197,6 +200,7 @@ fn resting_clears_movement_credit() {
 fn diagonal_movement_requires_sqrt2_credit() {
     let mut world = plain_grid(2, 2);
     let mut mover = entity(1, 0, 0, 0.0);
+    mover.age_ticks = 25 * TICKS_PER_YEAR;
     mover.path = vec![(1, 1)];
     mover
         .mind
@@ -226,6 +230,7 @@ fn diagonal_movement_requires_sqrt2_credit() {
 fn pregnant_entity_moves_slower() {
     let mut world = plain_grid(10, 1);
     let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
 
     simulation.entities[0].path = vec![(1, 0), (2, 0)];
     simulation.entities[0]
@@ -281,7 +286,7 @@ fn pregnancy_speed_transitions_at_phase_boundaries() {
             lifespan_ticks: 800_000,
             hunger: 0.0,
             health: MAX_HEALTH,
-            age_ticks: 0,
+            age_ticks: 25 * TICKS_PER_YEAR,
             path: Vec::new(),
             path_index: 0,
             activity: EntityActivity::Idle,
@@ -360,6 +365,86 @@ fn age_increases_once_per_tick() {
     let mut simulation = simulation_with_entity(0, 0, 0.0);
     simulation.step(&mut world);
     assert_eq!(simulation.entities()[0].age_ticks, 1);
+}
+
+#[test]
+fn life_stage_transitions_at_correct_ages() {
+    use super::entity::LifeStage;
+
+    assert_eq!(LifeStage::from_age_ticks(0), LifeStage::Infant);
+    assert_eq!(
+        LifeStage::from_age_ticks(INFANT_AGE_END - 1),
+        LifeStage::Infant
+    );
+    assert_eq!(LifeStage::from_age_ticks(INFANT_AGE_END), LifeStage::Child);
+    assert_eq!(
+        LifeStage::from_age_ticks(CHILD_AGE_END - 1),
+        LifeStage::Child
+    );
+    assert_eq!(
+        LifeStage::from_age_ticks(CHILD_AGE_END),
+        LifeStage::Adolescent
+    );
+    assert_eq!(
+        LifeStage::from_age_ticks(ADOLESCENT_AGE_END - 1),
+        LifeStage::Adolescent
+    );
+    assert_eq!(
+        LifeStage::from_age_ticks(ADOLESCENT_AGE_END),
+        LifeStage::Adult
+    );
+    assert_eq!(
+        LifeStage::from_age_ticks(ELDER_AGE_START - 1),
+        LifeStage::Adult
+    );
+    assert_eq!(LifeStage::from_age_ticks(ELDER_AGE_START), LifeStage::Elder);
+    assert_eq!(LifeStage::from_age_ticks(FOUNDER_AGE_MIN), LifeStage::Adult);
+    assert_eq!(LifeStage::from_age_ticks(FOUNDER_AGE_MAX), LifeStage::Adult);
+}
+
+#[test]
+fn life_stages_gate_reproduction() {
+    use super::entity::LifeStage;
+
+    let mut underage = fertile_entity(1, Sex::Female, 0, 0);
+    underage.age_ticks = ADOLESCENT_AGE_END - TICKS_PER_YEAR;
+    assert_eq!(
+        LifeStage::from_age_ticks(underage.age_ticks),
+        LifeStage::Adolescent
+    );
+    assert!(!female_is_fertile(&underage, 0, MAX_HEALTH));
+
+    let mut female_54 = fertile_entity(2, Sex::Female, 0, 0);
+    female_54.age_ticks = 54 * TICKS_PER_YEAR;
+    assert_eq!(
+        LifeStage::from_age_ticks(female_54.age_ticks),
+        LifeStage::Adult
+    );
+    assert!(female_is_fertile(&female_54, 0, MAX_HEALTH));
+
+    let mut female_55 = fertile_entity(3, Sex::Female, 0, 0);
+    female_55.age_ticks = 55 * TICKS_PER_YEAR;
+    assert!(!female_is_fertile(&female_55, 0, MAX_HEALTH));
+
+    let mut male_66 = fertile_entity(4, Sex::Male, 0, 0);
+    male_66.age_ticks = 66 * TICKS_PER_YEAR;
+    assert_eq!(
+        LifeStage::from_age_ticks(male_66.age_ticks),
+        LifeStage::Elder
+    );
+    assert!(male_is_fertile(&male_66, MAX_HEALTH));
+
+    let mut male_69 = fertile_entity(5, Sex::Male, 0, 0);
+    male_69.age_ticks = 69 * TICKS_PER_YEAR;
+    assert!(male_is_fertile(&male_69, MAX_HEALTH));
+
+    let mut male_70 = fertile_entity(6, Sex::Male, 0, 0);
+    male_70.age_ticks = 70 * TICKS_PER_YEAR;
+    assert!(!male_is_fertile(&male_70, MAX_HEALTH));
+
+    let mut elder_female = fertile_entity(7, Sex::Female, 0, 0);
+    elder_female.age_ticks = 66 * TICKS_PER_YEAR;
+    assert!(!female_is_fertile(&elder_female, 0, MAX_HEALTH));
 }
 
 #[test]
@@ -728,6 +813,7 @@ fn unreachable_food_is_temporarily_avoided() {
 fn false_food_memory_is_corrected_when_the_target_becomes_visible() {
     let mut world = plain_grid(6, 1);
     let mut observer = entity(1, 0, 0, 90.0);
+    observer.age_ticks = 25 * TICKS_PER_YEAR;
     observer.mind.perception_radius = 1;
     observer
         .mind

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::simulation::{self, AutonomyProfile, Entity, PhaseProfile, PopulationStats};
+use crate::simulation::{self, AutonomyProfile, Entity, LifeStage, PhaseProfile, PopulationStats};
 use crate::world::{Grid, RegionKind};
 
 fn to_json<T: Serialize>(value: &T) -> String {
@@ -128,6 +128,8 @@ struct EntityInfoDto {
     visible_entities: usize,
     utilities: UtilityScoresDto,
     movement_credit: f32,
+    life_stage: &'static str,
+    stage_movement_factor: f32,
 }
 
 pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
@@ -143,6 +145,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         .mind
         .current_goal
         .map_or(0, |_| tick.saturating_sub(entity.mind.goal_since_tick));
+    let life_stage = LifeStage::from_age_ticks(entity.age_ticks);
 
     to_json(&EntityInfoDto {
         id: entity.id,
@@ -170,6 +173,8 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
             rest: entity.mind.utility_scores.rest,
         },
         movement_credit: entity.movement_credit,
+        life_stage: life_stage.label(),
+        stage_movement_factor: life_stage.movement_factor(),
     })
 }
 
@@ -362,6 +367,8 @@ mod tests {
             "action",
             "utilities",
             "movement_credit",
+            "life_stage",
+            "stage_movement_factor",
         ] {
             assert!(entity.get(key).is_some(), "missing entity field {key}");
         }

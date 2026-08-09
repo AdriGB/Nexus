@@ -5,7 +5,7 @@ use super::config::{
 };
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::TICKS_PER_WEEK;
-use super::{Entity, EntityActivity};
+use super::{Entity, EntityActivity, LifeStage};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 use std::cmp::Reverse;
@@ -304,14 +304,16 @@ fn plan_exploration(
 }
 
 pub(super) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
+    let stage_factor = LifeStage::from_age_ticks(entity.age_ticks).movement_factor();
+
     let Some(pregnancy) = entity.pregnancy else {
-        return BASE_MOVEMENT_SPEED;
+        return BASE_MOVEMENT_SPEED * stage_factor;
     };
 
     let elapsed = tick.saturating_sub(pregnancy.conceived_tick);
     let weeks = elapsed / TICKS_PER_WEEK;
 
-    let factor = if weeks < PREGNANCY_PHASE_2_START_WEEK {
+    let pregnancy_factor = if weeks < PREGNANCY_PHASE_2_START_WEEK {
         PREGNANCY_SPEED_PHASE_1
     } else if weeks < PREGNANCY_PHASE_3_START_WEEK {
         PREGNANCY_SPEED_PHASE_2
@@ -321,7 +323,7 @@ pub(super) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
         PREGNANCY_SPEED_PHASE_4
     };
 
-    BASE_MOVEMENT_SPEED * factor
+    BASE_MOVEMENT_SPEED * stage_factor * pregnancy_factor
 }
 
 fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u16 {

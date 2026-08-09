@@ -110,6 +110,8 @@ export interface EntityInfo {
   known_chunks: number;
   visible_entities: number;
   movement_credit: number;
+  life_stage: string;
+  stage_movement_factor: number;
   utilities: {
     eat: number;
     explore: number;

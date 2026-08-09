@@ -254,6 +254,8 @@ function syncEntityInspector(): void {
     `<span class="info-key">Sex</span><span class="info-val">${entity.sex}</span>`,
     `<span class="info-key">Position</span><span class="info-val">(${entity.x}, ${entity.y})</span>`,
     `<span class="info-key">Movement Credit</span><span class="info-val">${entity.movement_credit.toFixed(2)}</span>`,
+    `<span class="info-key">Life Stage</span><span class="info-val">${entity.life_stage}</span>`,
+    `<span class="info-key">Stage Speed</span><span class="info-val">${(entity.stage_movement_factor * 100).toFixed(0)}%</span>`,
     `<span class="info-key">Hunger</span><span class="info-val">${entity.hunger.toFixed(0)} / 100</span>`,
     `<span class="info-key">Health</span><span class="info-val">${entity.health.toFixed(0)} / 100</span>`,
     `<span class="info-key">Age</span><span class="info-val">${entity.age_years.toFixed(1)} years</span>`,

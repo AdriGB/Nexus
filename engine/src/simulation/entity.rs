@@ -70,3 +70,50 @@ impl Entity {
         self.path.len().saturating_sub(self.path_index)
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LifeStage {
+    Infant,
+    Child,
+    Adolescent,
+    Adult,
+    Elder,
+}
+
+impl LifeStage {
+    pub fn from_age_ticks(age_ticks: u64) -> Self {
+        use super::time::{ADOLESCENT_AGE_END, CHILD_AGE_END, ELDER_AGE_START, INFANT_AGE_END};
+
+        if age_ticks < INFANT_AGE_END {
+            Self::Infant
+        } else if age_ticks < CHILD_AGE_END {
+            Self::Child
+        } else if age_ticks < ADOLESCENT_AGE_END {
+            Self::Adolescent
+        } else if age_ticks < ELDER_AGE_START {
+            Self::Adult
+        } else {
+            Self::Elder
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Infant => "Infant",
+            Self::Child => "Child",
+            Self::Adolescent => "Adolescent",
+            Self::Adult => "Adult",
+            Self::Elder => "Elder",
+        }
+    }
+
+    pub fn movement_factor(self) -> f32 {
+        match self {
+            Self::Infant => 0.2,
+            Self::Child => 0.5,
+            Self::Adolescent => 0.85,
+            Self::Adult => 1.0,
+            Self::Elder => 0.7,
+        }
+    }
+}

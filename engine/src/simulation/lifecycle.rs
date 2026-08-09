@@ -1,4 +1,4 @@
-use super::entity::{Entity, Pregnancy, Sex};
+use super::entity::{Entity, LifeStage, Pregnancy, Sex};
 use super::time::{
     BASE_LIFESPAN_TICKS, FEMALE_REPRODUCTIVE_AGE_END, FOUNDER_AGE_MAX, FOUNDER_AGE_MIN,
     GESTATION_TICKS, LIFESPAN_VARIATION_TICKS, MALE_REPRODUCTIVE_AGE_END, POSTPARTUM_TICKS,
@@ -36,7 +36,10 @@ pub(super) fn founder_age_for(seed: u64, id: u32) -> u64 {
 }
 
 pub(super) fn female_is_fertile(entity: &Entity, tick: u64, max_health: f32) -> bool {
+    let stage = LifeStage::from_age_ticks(entity.age_ticks);
+
     entity.sex == Sex::Female
+        && matches!(stage, LifeStage::Adult | LifeStage::Elder)
         && entity.age_ticks >= REPRODUCTIVE_AGE_START
         && entity.age_ticks < FEMALE_REPRODUCTIVE_AGE_END
         && entity.pregnancy.is_none()
@@ -46,7 +49,10 @@ pub(super) fn female_is_fertile(entity: &Entity, tick: u64, max_health: f32) -> 
 }
 
 pub(super) fn male_is_fertile(entity: &Entity, max_health: f32) -> bool {
+    let stage = LifeStage::from_age_ticks(entity.age_ticks);
+
     entity.sex == Sex::Male
+        && matches!(stage, LifeStage::Adult | LifeStage::Elder)
         && entity.age_ticks >= REPRODUCTIVE_AGE_START
         && entity.age_ticks < MALE_REPRODUCTIVE_AGE_END
         && entity.hunger <= REPRODUCTION_MAX_HUNGER
