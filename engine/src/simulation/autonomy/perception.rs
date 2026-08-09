@@ -96,6 +96,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
                     last_seen_x: other.x,
                     last_seen_y: other.y,
                     observed_ticks: 1,
+                    affinity: super::mind::NEUTRAL_AFFINITY,
                 },
             );
         }
@@ -217,7 +218,7 @@ pub(super) fn perceive_entities(
 
 #[cfg(test)]
 mod tests {
-    use super::super::mind::{chunk_index, manhattan, Mind};
+    use super::super::mind::{chunk_index, manhattan, Mind, NEUTRAL_AFFINITY};
     use super::*;
     use crate::world::{ResourceDeposit, ResourceKind, Terrain, Tile};
 
@@ -257,6 +258,7 @@ mod tests {
         assert_eq!(known.last_seen_x, 10);
         assert_eq!(known.last_seen_y, 20);
         assert_eq!(known.observed_ticks, 1);
+        assert_eq!(known.affinity, NEUTRAL_AFFINITY);
     }
 
     #[test]
@@ -283,6 +285,33 @@ mod tests {
         assert_eq!(known.last_seen_x, 15);
         assert_eq!(known.last_seen_y, 25);
         assert_eq!(known.observed_ticks, 2);
+    }
+
+    #[test]
+    fn seeing_entity_again_preserves_affinity() {
+        let mut mind = Mind::default();
+
+        let snapshot = EntitySnapshot {
+            id: 3,
+            x: 10,
+            y: 20,
+        };
+        remember_entity(&mut mind, snapshot, 100);
+
+        assert_eq!(mind.memory.affinity_to(3), Some(NEUTRAL_AFFINITY));
+        assert!(mind.memory.adjust_affinity(3, 300));
+        assert_eq!(mind.memory.affinity_to(3), Some(300));
+
+        let snapshot_again = EntitySnapshot {
+            id: 3,
+            x: 12,
+            y: 22,
+        };
+        remember_entity(&mut mind, snapshot_again, 200);
+
+        assert_eq!(mind.memory.affinity_to(3), Some(300));
+        assert_eq!(mind.memory.known_entities.len(), 1);
+        assert_eq!(mind.memory.known_entities[0].observed_ticks, 2);
     }
 
     #[test]

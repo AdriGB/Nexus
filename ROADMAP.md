@@ -137,7 +137,7 @@
     - [x] Curiosity and caution affect explore and rest utilities
     - [x] Persistence affects goal retention
   - [x] Persistent relationship memory
-  - [ ] Relationship affinity
+  - [x] Relationship affinity
   - [ ] Social interaction
   - [ ] Relationship-driven behavior
 - [ ] Factions and groups

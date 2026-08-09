@@ -56,6 +56,12 @@ impl Action {
     }
 }
 
+#[allow(dead_code, reason = "used by the upcoming social interaction system")]
+const MIN_AFFINITY: i16 = -1_000;
+pub(super) const NEUTRAL_AFFINITY: i16 = 0;
+#[allow(dead_code, reason = "used by the upcoming social interaction system")]
+const MAX_AFFINITY: i16 = 1_000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KnownResource {
     pub x: u32,
@@ -75,6 +81,7 @@ pub struct KnownEntity {
     pub last_seen_x: u32,
     pub last_seen_y: u32,
     pub observed_ticks: u32,
+    pub affinity: i16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +138,32 @@ impl Memory {
     #[cfg(test)]
     pub(super) fn failed_exploration_count(&self) -> usize {
         self.failed_exploration.len()
+    }
+
+    #[allow(dead_code, reason = "used by the upcoming social interaction system")]
+    pub fn affinity_to(&self, entity_id: u32) -> Option<i16> {
+        self.known_entities
+            .binary_search_by_key(&entity_id, |known| known.id)
+            .ok()
+            .map(|index| self.known_entities[index].affinity)
+    }
+
+    #[allow(dead_code, reason = "used by the upcoming social interaction system")]
+    pub fn adjust_affinity(&mut self, entity_id: u32, delta: i16) -> bool {
+        let Ok(index) = self
+            .known_entities
+            .binary_search_by_key(&entity_id, |known| known.id)
+        else {
+            return false;
+        };
+
+        let known = &mut self.known_entities[index];
+        known.affinity = known
+            .affinity
+            .saturating_add(delta)
+            .clamp(MIN_AFFINITY, MAX_AFFINITY);
+
+        true
     }
 
     pub fn forget_resource(&mut self, position: (u32, u32), kind: ResourceKind) {
@@ -267,6 +300,53 @@ pub(super) fn chunk_index(world: &Grid, x: u32, y: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn known_entity(id: u32) -> KnownEntity {
+        KnownEntity {
+            id,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 0,
+            last_seen_y: 0,
+            observed_ticks: 1,
+            affinity: NEUTRAL_AFFINITY,
+        }
+    }
+
+    #[test]
+    fn affinity_adjustment_is_clamped() {
+        let mut memory = Memory::default();
+        memory.known_entities.push(known_entity(1));
+
+        assert!(memory.adjust_affinity(1, 400));
+        assert_eq!(memory.affinity_to(1), Some(400));
+
+        assert!(memory.adjust_affinity(1, 900));
+        assert_eq!(memory.affinity_to(1), Some(MAX_AFFINITY));
+
+        assert!(memory.adjust_affinity(1, -3_000));
+        assert_eq!(memory.affinity_to(1), Some(MIN_AFFINITY));
+    }
+
+    #[test]
+    fn adjusting_unknown_affinity_returns_false() {
+        let mut memory = Memory::default();
+
+        assert!(!memory.adjust_affinity(99, 100));
+        assert_eq!(memory.affinity_to(99), None);
+    }
+
+    #[test]
+    fn affinity_adjustment_only_changes_target() {
+        let mut memory = Memory::default();
+        memory.known_entities.push(known_entity(1));
+        memory.known_entities.push(known_entity(2));
+
+        assert!(memory.adjust_affinity(1, 250));
+
+        assert_eq!(memory.affinity_to(1), Some(250));
+        assert_eq!(memory.affinity_to(2), Some(0));
+    }
 
     #[test]
     fn replanning_same_goal_preserves_goal_since_tick() {
