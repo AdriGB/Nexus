@@ -1,4 +1,4 @@
-use super::autonomy::URGENT_HUNGER_THRESHOLD;
+use super::autonomy::{evaluate_goals, URGENT_HUNGER_THRESHOLD};
 use super::config::{
     BASE_MOVEMENT_SPEED, FOOD_CONSUMED_PER_MEAL, HUNGER_PER_TICK, HUNGER_REDUCTION_PER_MEAL,
 };
@@ -1036,6 +1036,137 @@ fn personality_generation_matches_snapshot() {
     assert_eq!(personality.cooperativeness.to_bits(), 0x3ea6_f421);
     assert_eq!(personality.caution.to_bits(), 0x3ef0_49d3);
     assert_eq!(personality.persistence.to_bits(), 0x3f15_f141);
+}
+
+#[test]
+fn curious_entity_explores_more() {
+    let mut mind_base = Mind::default();
+    let mut mind_curious = Mind::default();
+
+    let base = Personality {
+        curiosity: 0.5,
+        sociability: 0.5,
+        cooperativeness: 0.5,
+        caution: 0.5,
+        persistence: 0.5,
+    };
+
+    let curious = Personality {
+        curiosity: 1.0,
+        ..base
+    };
+
+    let hunger = 30.0;
+    let health = MAX_HEALTH;
+    let age = 25 * TICKS_PER_YEAR;
+
+    evaluate_goals(&mut mind_base, hunger, health, age, &base);
+    evaluate_goals(&mut mind_curious, hunger, health, age, &curious);
+
+    assert!(mind_curious.utility_scores.explore > mind_base.utility_scores.explore);
+    assert_eq!(
+        mind_curious.utility_scores.eat,
+        mind_base.utility_scores.eat
+    );
+    assert_eq!(
+        mind_curious.utility_scores.rest,
+        mind_base.utility_scores.rest
+    );
+}
+
+#[test]
+fn cautious_entity_rests_more_and_explores_less() {
+    let mut mind_base = Mind::default();
+    let mut mind_cautious = Mind::default();
+
+    let base = Personality {
+        curiosity: 0.5,
+        sociability: 0.5,
+        cooperativeness: 0.5,
+        caution: 0.5,
+        persistence: 0.5,
+    };
+
+    let cautious = Personality {
+        caution: 1.0,
+        ..base
+    };
+
+    let hunger = 10.0;
+    let health = 50.0;
+    let age = 25 * TICKS_PER_YEAR;
+
+    evaluate_goals(&mut mind_base, hunger, health, age, &base);
+    evaluate_goals(&mut mind_cautious, hunger, health, age, &cautious);
+
+    assert!(mind_cautious.utility_scores.rest > mind_base.utility_scores.rest);
+    assert!(mind_cautious.utility_scores.explore < mind_base.utility_scores.explore);
+    assert_eq!(
+        mind_cautious.utility_scores.eat,
+        mind_base.utility_scores.eat
+    );
+}
+
+#[test]
+fn neutral_personality_preserves_base_utilities() {
+    let mut mind = Mind::default();
+    let neutral = Personality {
+        curiosity: 0.5,
+        sociability: 0.5,
+        cooperativeness: 0.5,
+        caution: 0.5,
+        persistence: 0.5,
+    };
+
+    let hunger = 40.0;
+    let health = 70.0;
+    let age = 25 * TICKS_PER_YEAR;
+
+    evaluate_goals(&mut mind, hunger, health, age, &neutral);
+
+    let hunger_ratio = 0.4;
+    let food_confidence = 0.25;
+    let health_deficit = 0.3;
+    let expected_eat = hunger_ratio * (0.65 + 0.35 * food_confidence);
+    let expected_explore = (1.0 - hunger_ratio) * 0.55 + (1.0 - food_confidence) * 0.2;
+    let expected_rest = health_deficit * 0.8 + 0.05;
+
+    assert!((mind.utility_scores.eat - expected_eat).abs() < 0.001);
+    assert!((mind.utility_scores.explore - expected_explore).abs() < 0.001);
+    assert!((mind.utility_scores.rest - expected_rest).abs() < 0.001);
+}
+
+#[test]
+fn personality_does_not_affect_eat_utility() {
+    let mut mind_extreme = Mind::default();
+    let mut mind_neutral = Mind::default();
+
+    let extreme = Personality {
+        curiosity: 1.0,
+        sociability: 1.0,
+        cooperativeness: 1.0,
+        caution: 1.0,
+        persistence: 1.0,
+    };
+    let neutral = Personality {
+        curiosity: 0.5,
+        sociability: 0.5,
+        cooperativeness: 0.5,
+        caution: 0.5,
+        persistence: 0.5,
+    };
+
+    let hunger = 60.0;
+    let health = 80.0;
+    let age = 25 * TICKS_PER_YEAR;
+
+    evaluate_goals(&mut mind_extreme, hunger, health, age, &extreme);
+    evaluate_goals(&mut mind_neutral, hunger, health, age, &neutral);
+
+    assert_eq!(
+        mind_extreme.utility_scores.eat,
+        mind_neutral.utility_scores.eat
+    );
 }
 
 #[test]

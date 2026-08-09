@@ -6,7 +6,7 @@ use super::config::{
 };
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::TICKS_PER_WEEK;
-use super::{Entity, EntityActivity, LifeStage};
+use super::{Entity, EntityActivity, LifeStage, Personality};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 use std::cmp::Reverse;
@@ -78,6 +78,7 @@ pub(super) fn update_entity(
             entity.hunger,
             entity.health,
             entity.age_ticks,
+            &entity.personality,
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
@@ -152,6 +153,7 @@ fn profiled_update_entity(
             entity.hunger,
             entity.health,
             entity.age_ticks,
+            &entity.personality,
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
         profile.planning_us += start.elapsed().as_micros() as u64;
@@ -859,7 +861,13 @@ pub fn perceive_entities(
     mind.visible_entities.sort_unstable();
 }
 
-pub fn evaluate_goals(mind: &mut Mind, hunger: f32, health: f32, age_ticks: u64) -> Goal {
+pub fn evaluate_goals(
+    mind: &mut Mind,
+    hunger: f32,
+    health: f32,
+    age_ticks: u64,
+    personality: &Personality,
+) -> Goal {
     let stage = LifeStage::from_age_ticks(age_ticks);
 
     if stage == LifeStage::Child {
@@ -897,10 +905,16 @@ pub fn evaluate_goals(mind: &mut Mind, hunger: f32, health: f32, age_ticks: u64)
     };
     let hunger_ratio = (hunger / 100.0).clamp(0.0, 1.0);
     let health_deficit = (1.0 - health / 100.0).clamp(0.0, 1.0);
+    let curiosity_factor = 0.75 + personality.curiosity * 0.50;
+    let caution_explore_factor = 1.15 - personality.caution * 0.30;
+    let caution_rest_factor = 0.85 + personality.caution * 0.30;
+
     mind.utility_scores = UtilityScores {
         eat: hunger_ratio * (0.65 + 0.35 * food_confidence),
-        explore: (1.0 - hunger_ratio) * 0.55 + (1.0 - food_confidence) * 0.2,
-        rest: health_deficit * 0.8 + 0.05,
+        explore: ((1.0 - hunger_ratio) * 0.55 + (1.0 - food_confidence) * 0.2)
+            * curiosity_factor
+            * caution_explore_factor,
+        rest: (health_deficit * 0.8 + 0.05) * caution_rest_factor,
     };
 
     let scores = [
