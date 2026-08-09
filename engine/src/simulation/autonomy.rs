@@ -3,7 +3,8 @@ use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::{Entity, EntityActivity};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
-use std::collections::HashSet;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashSet};
 use web_time::Instant;
 
 pub const DEFAULT_PERCEPTION_RADIUS: u32 = 6;
@@ -16,6 +17,7 @@ const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
 pub(super) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
 const REST_HEALTH_PER_TICK: f32 = 0.25;
 const PROFILE_SAMPLE_RATE: usize = 4;
+type RememberedFoodTargets = BinaryHeap<Reverse<(u32, u64, (u32, u32))>>;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AutonomyProfile {
@@ -224,7 +226,8 @@ fn plan_goal(
     let origin = (entity.x, entity.y);
     match goal {
         Goal::Eat => {
-            for target in entity.mind.remembered_food_targets(origin, tick) {
+            let mut targets = entity.mind.remembered_food_targets(origin, tick);
+            while let Some(Reverse((_, _, target))) = targets.pop() {
                 if let Some(path) = pathfinding::find_path_with_workspace(
                     pathfinding_workspace,
                     world,
@@ -574,8 +577,8 @@ impl Mind {
         self.goal_since_tick = tick;
     }
 
-    pub fn remembered_food_targets(&self, origin: (u32, u32), tick: u64) -> Vec<(u32, u32)> {
-        let mut targets: Vec<_> = self
+    pub fn remembered_food_targets(&self, origin: (u32, u32), tick: u64) -> RememberedFoodTargets {
+        let targets: Vec<_> = self
             .memory
             .known_resources
             .iter()
@@ -587,14 +590,11 @@ impl Mind {
             .map(|known| {
                 let distance = manhattan(origin, (known.x, known.y));
                 let age = tick.saturating_sub(known.last_seen_tick);
-                (distance, age, (known.x, known.y))
+                Reverse((distance, age, (known.x, known.y)))
             })
             .collect();
-        targets.sort_unstable();
-        targets
-            .into_iter()
-            .map(|(_, _, position)| position)
-            .collect()
+
+        BinaryHeap::from(targets)
     }
 }
 
@@ -1191,5 +1191,39 @@ mod tests {
 
         assert_eq!(known.estimated_amount, 99);
         assert_eq!(known.last_seen_tick, 42);
+    }
+
+    #[test]
+    fn remembered_food_targets_are_ordered_by_distance_then_age() {
+        let mut mind = Mind::default();
+
+        remember_resource(&mut mind, 10, 0, ResourceKind::Food, 50, 100);
+        remember_resource(&mut mind, 2, 0, ResourceKind::Food, 50, 100);
+        remember_resource(&mut mind, 5, 0, ResourceKind::Food, 50, 200);
+
+        let mut heap = mind.remembered_food_targets((0, 0), 300);
+        let mut targets = Vec::new();
+        while let Some(Reverse((distance, age, position))) = heap.pop() {
+            targets.push((distance, age, position));
+        }
+
+        assert_eq!(targets.len(), 3);
+        assert_eq!(targets[0].0, 2);
+        assert_eq!(targets[1].0, 5);
+        assert_eq!(targets[2].0, 10);
+
+        remember_resource(&mut mind, 8, 0, ResourceKind::Food, 50, 50);
+        remember_resource(&mut mind, 0, 8, ResourceKind::Food, 50, 250);
+
+        let mut heap = mind.remembered_food_targets((0, 0), 300);
+        let mut targets = Vec::new();
+        while let Some(Reverse((distance, age, position))) = heap.pop() {
+            targets.push((distance, age, position));
+        }
+
+        let distance_eight: Vec<_> = targets.iter().filter(|target| target.0 == 8).collect();
+        assert_eq!(distance_eight.len(), 2);
+        assert_eq!(distance_eight[0].1, 50);
+        assert_eq!(distance_eight[1].1, 250);
     }
 }
