@@ -796,27 +796,39 @@ fn ring_perimeter(
     chunks
 }
 
+fn resource_key(x: u32, y: u32, kind: ResourceKind) -> (u32, u32, u8) {
+    (y, x, kind as u8)
+}
+
 fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount: u16, tick: u64) {
-    if let Some(known) = mind
+    let key = resource_key(x, y, kind);
+
+    match mind
         .memory
         .known_resources
-        .iter_mut()
-        .find(|known| (known.x, known.y, known.kind) == (x, y, kind))
+        .binary_search_by_key(&key, |known| resource_key(known.x, known.y, known.kind))
     {
-        known.last_seen_tick = tick;
-        known.estimated_amount = amount;
-        known.failed_attempts = 0;
-        known.avoid_until_tick = 0;
-    } else {
-        mind.memory.known_resources.push(KnownResource {
-            x,
-            y,
-            kind,
-            last_seen_tick: tick,
-            estimated_amount: amount,
-            failed_attempts: 0,
-            avoid_until_tick: 0,
-        });
+        Ok(index) => {
+            let known = &mut mind.memory.known_resources[index];
+            known.last_seen_tick = tick;
+            known.estimated_amount = amount;
+            known.failed_attempts = 0;
+            known.avoid_until_tick = 0;
+        }
+        Err(index) => {
+            mind.memory.known_resources.insert(
+                index,
+                KnownResource {
+                    x,
+                    y,
+                    kind,
+                    last_seen_tick: tick,
+                    estimated_amount: amount,
+                    failed_attempts: 0,
+                    avoid_until_tick: 0,
+                },
+            );
+        }
     }
 }
 
@@ -1090,5 +1102,37 @@ mod tests {
 
         assert_eq!(known.estimated_amount, 40);
         assert_eq!(known.last_seen_tick, 25);
+    }
+
+    #[test]
+    fn remember_resource_keeps_memory_sorted_and_updates_existing() {
+        let mut mind = Mind::default();
+
+        remember_resource(&mut mind, 20, 10, ResourceKind::Food, 50, 1);
+        remember_resource(&mut mind, 2, 3, ResourceKind::Stone, 30, 1);
+        remember_resource(&mut mind, 8, 3, ResourceKind::Timber, 40, 1);
+
+        let keys: Vec<_> = mind
+            .memory
+            .known_resources
+            .iter()
+            .map(|known| resource_key(known.x, known.y, known.kind))
+            .collect();
+
+        assert!(keys.windows(2).all(|pair| pair[0] < pair[1]));
+
+        remember_resource(&mut mind, 2, 3, ResourceKind::Stone, 99, 42);
+
+        assert_eq!(mind.memory.known_resources.len(), 3);
+
+        let known = mind
+            .memory
+            .known_resources
+            .iter()
+            .find(|known| known.x == 2 && known.y == 3 && known.kind == ResourceKind::Stone)
+            .unwrap();
+
+        assert_eq!(known.estimated_amount, 99);
+        assert_eq!(known.last_seen_tick, 42);
     }
 }
