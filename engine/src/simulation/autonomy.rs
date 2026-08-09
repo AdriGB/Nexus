@@ -463,6 +463,39 @@ impl Mind {
     }
 }
 
+fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) {
+    let radius = mind.perception_radius;
+
+    let min_x = position.0.saturating_sub(radius);
+    let max_x = position.0.saturating_add(radius).min(world.width - 1);
+    let min_y = position.1.saturating_sub(radius);
+    let max_y = position.1.saturating_add(radius).min(world.height - 1);
+
+    let min_chunk_x = min_x / KNOWLEDGE_CHUNK_SIZE;
+    let max_chunk_x = max_x / KNOWLEDGE_CHUNK_SIZE;
+    let min_chunk_y = min_y / KNOWLEDGE_CHUNK_SIZE;
+    let max_chunk_y = max_y / KNOWLEDGE_CHUNK_SIZE;
+
+    let chunks_wide = world.width.div_ceil(KNOWLEDGE_CHUNK_SIZE);
+
+    for chunk_y in min_chunk_y..=max_chunk_y {
+        for chunk_x in min_chunk_x..=max_chunk_x {
+            let chunk_min_x = chunk_x * KNOWLEDGE_CHUNK_SIZE;
+            let chunk_min_y = chunk_y * KNOWLEDGE_CHUNK_SIZE;
+            let chunk_max_x = (chunk_min_x + KNOWLEDGE_CHUNK_SIZE - 1).min(world.width - 1);
+            let chunk_max_y = (chunk_min_y + KNOWLEDGE_CHUNK_SIZE - 1).min(world.height - 1);
+
+            let nearest_x = position.0.clamp(chunk_min_x, chunk_max_x);
+            let nearest_y = position.1.clamp(chunk_min_y, chunk_max_y);
+
+            if manhattan(position, (nearest_x, nearest_y)) <= radius {
+                let index = chunk_y * chunks_wide + chunk_x;
+                mind.memory.known_chunks.insert(index);
+            }
+        }
+    }
+}
+
 pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
     mind.memory
         .known_resources
@@ -484,12 +517,13 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
         world.resources.get(index).is_some_and(Option::is_some)
     });
 
+    remember_visible_chunks(mind, world, position);
+
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             if manhattan(position, (x, y)) > mind.perception_radius {
                 continue;
             }
-            mind.memory.known_chunks.insert(chunk_index(world, x, y));
             let deposit = world.resources[(y * world.width + x) as usize];
             if let Some(deposit) = deposit {
                 remember_resource(mind, x, y, deposit.kind, deposit.amount, tick);
@@ -782,6 +816,33 @@ mod tests {
         assert_eq!(ring.len(), 24);
         let unique: HashSet<_> = ring.iter().copied().collect();
         assert_eq!(unique.len(), ring.len());
+    }
+
+    #[test]
+    fn batched_visible_chunks_match_tile_by_tile_reference() {
+        let world = plain_grid(32, 32);
+
+        for position in [(1, 1), (7, 7), (8, 8), (15, 15), (30, 30)] {
+            let mut mind = Mind::default();
+            let radius = mind.perception_radius;
+            let mut expected = HashSet::new();
+
+            for y in 0..world.height {
+                for x in 0..world.width {
+                    if manhattan(position, (x, y)) <= radius {
+                        expected.insert(chunk_index(&world, x, y));
+                    }
+                }
+            }
+
+            remember_visible_chunks(&mut mind, &world, position);
+
+            assert_eq!(
+                mind.memory.known_chunks, expected,
+                "mismatch at position {:?}",
+                position,
+            );
+        }
     }
 
     #[test]
