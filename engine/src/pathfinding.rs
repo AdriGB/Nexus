@@ -40,6 +40,8 @@ pub(crate) struct PathfindingWorkspace {
     open: BinaryHeap<OpenNode>,
     came_from: Vec<Option<usize>>,
     costs: Vec<f32>,
+    generation: Vec<u32>,
+    current_gen: u32,
 }
 
 impl PathfindingWorkspace {
@@ -49,10 +51,19 @@ impl PathfindingWorkspace {
 
     fn prepare(&mut self, tile_count: usize) {
         self.open.clear();
-        self.came_from.resize(tile_count, None);
-        self.costs.resize(tile_count, f32::INFINITY);
-        self.came_from.fill(None);
-        self.costs.fill(f32::INFINITY);
+
+        self.current_gen = self.current_gen.wrapping_add(1);
+
+        if self.current_gen == 0 {
+            self.current_gen = 1;
+            self.generation.fill(0);
+        }
+
+        if self.came_from.len() < tile_count {
+            self.came_from.resize(tile_count, None);
+            self.costs.resize(tile_count, f32::INFINITY);
+            self.generation.resize(tile_count, 0);
+        }
     }
 }
 
@@ -111,6 +122,7 @@ fn find_path_with_workspace_and_limit(
 
     workspace.prepare(grid.tiles.len());
 
+    workspace.generation[start_index] = workspace.current_gen;
     workspace.costs[start_index] = 0.0;
     workspace.open.push(OpenNode {
         position: start_index,
@@ -151,9 +163,12 @@ fn find_path_with_workspace_and_limit(
             let step_cost = base_move_cost * terrain_cost;
             let candidate_cost = current_cost + step_cost;
 
-            if candidate_cost < workspace.costs[neighbor_index] {
-                workspace.came_from[neighbor_index] = Some(current.position);
+            if workspace.generation[neighbor_index] != workspace.current_gen
+                || candidate_cost < workspace.costs[neighbor_index]
+            {
+                workspace.generation[neighbor_index] = workspace.current_gen;
                 workspace.costs[neighbor_index] = candidate_cost;
+                workspace.came_from[neighbor_index] = Some(current.position);
                 workspace.open.push(OpenNode {
                     position: neighbor_index,
                     estimated_total: candidate_cost + octile(neighbor, goal),
@@ -498,5 +513,18 @@ mod tests {
 
         let recovered = find_path_with_workspace(&mut workspace, &grid, (0, 0), (31, 31));
         assert_eq!(recovered, find_path(&grid, (0, 0), (31, 31)));
+    }
+
+    #[test]
+    fn workspace_survives_generation_overflow() {
+        let grid = grid_from_rows(&["PPPPPP", "PPPPPP", "PPPPPP", "PPPPPP"]);
+        let mut workspace = PathfindingWorkspace::new();
+        workspace.current_gen = u32::MAX;
+
+        let path = find_path_with_workspace(&mut workspace, &grid, (0, 0), (5, 3));
+        assert_eq!(path, find_path(&grid, (0, 0), (5, 3)));
+
+        let path2 = find_path_with_workspace(&mut workspace, &grid, (5, 3), (0, 0));
+        assert_eq!(path2, find_path(&grid, (5, 3), (0, 0)));
     }
 }
