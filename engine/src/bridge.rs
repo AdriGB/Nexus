@@ -44,6 +44,11 @@ struct AutonomyProfileDto {
     sampled_entities: u32,
     planned_entities: u32,
     urgent_interrupts: u32,
+    memory_reconciliation_us: u64,
+    visible_scan_us: u64,
+    known_resources_total: u32,
+    known_resources_max: u32,
+    visible_resources_seen: u32,
 }
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
@@ -56,6 +61,11 @@ pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
         sampled_entities: profile.sampled_entities,
         planned_entities: profile.planned_entities,
         urgent_interrupts: profile.urgent_interrupts,
+        memory_reconciliation_us: profile.memory_reconciliation_us,
+        visible_scan_us: profile.visible_scan_us,
+        known_resources_total: profile.known_resources_total,
+        known_resources_max: profile.known_resources_max,
+        visible_resources_seen: profile.visible_resources_seen,
     })
 }
 
@@ -399,6 +409,11 @@ mod tests {
             sampled_entities: 500,
             planned_entities: 87,
             urgent_interrupts: 3,
+            memory_reconciliation_us: 800,
+            visible_scan_us: 200,
+            known_resources_total: 15_000,
+            known_resources_max: 50,
+            visible_resources_seen: 100,
         };
 
         let payload = autonomy_profile_json(&profile);
@@ -406,5 +421,6 @@ mod tests {
 
         assert_eq!(json["sampled_entities"], 500);
         assert_eq!(json["planned_entities"], 87);
+        assert_eq!(json["known_resources_max"], 50);
     }
 }

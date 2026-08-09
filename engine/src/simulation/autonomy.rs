@@ -27,6 +27,11 @@ pub(crate) struct AutonomyProfile {
     pub sampled_entities: u32,
     pub planned_entities: u32,
     pub urgent_interrupts: u32,
+    pub memory_reconciliation_us: u64,
+    pub visible_scan_us: u64,
+    pub known_resources_total: u32,
+    pub known_resources_max: u32,
+    pub visible_resources_seen: u32,
 }
 
 pub(super) fn update_entity(
@@ -84,8 +89,20 @@ fn profiled_update_entity(
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
-    perceive(&mut entity.mind, world, position, tick);
-    profile.resource_perception_us += start.elapsed().as_micros() as u64;
+    reconcile_resource_memory(&mut entity.mind, world, position, tick);
+    let reconciliation_us = start.elapsed().as_micros() as u64;
+    profile.memory_reconciliation_us += reconciliation_us;
+
+    let start = Instant::now();
+    let visible_count = scan_visible_resources(&mut entity.mind, world, position, tick);
+    let visible_scan_us = start.elapsed().as_micros() as u64;
+    profile.visible_scan_us += visible_scan_us;
+    profile.visible_resources_seen += visible_count;
+    profile.resource_perception_us += reconciliation_us + visible_scan_us;
+
+    let known_resources_count = entity.mind.memory.known_resources.len() as u32;
+    profile.known_resources_total += known_resources_count;
+    profile.known_resources_max = profile.known_resources_max.max(known_resources_count);
 
     let start = Instant::now();
     perceive_entities(
@@ -615,12 +632,11 @@ fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) 
 }
 
 pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
-    let radius = mind.perception_radius as i64;
-    let min_x = (i64::from(position.0) - radius).max(0) as u32;
-    let max_x = (i64::from(position.0) + radius).min(i64::from(world.width) - 1) as u32;
-    let min_y = (i64::from(position.1) - radius).max(0) as u32;
-    let max_y = (i64::from(position.1) + radius).min(i64::from(world.height) - 1) as u32;
+    reconcile_resource_memory(mind, world, position, tick);
+    scan_visible_resources(mind, world, position, tick);
+}
 
+fn reconcile_resource_memory(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
     let radius = mind.perception_radius;
     mind.memory.known_resources.retain(|known| {
         if tick.saturating_sub(known.last_seen_tick) > RESOURCE_MEMORY_TTL {
@@ -634,9 +650,18 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
         let index = (known.y * world.width + known.x) as usize;
         world.resources.get(index).is_some_and(Option::is_some)
     });
+}
+
+fn scan_visible_resources(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) -> u32 {
+    let radius = mind.perception_radius as i64;
+    let min_x = (i64::from(position.0) - radius).max(0) as u32;
+    let max_x = (i64::from(position.0) + radius).min(i64::from(world.width) - 1) as u32;
+    let min_y = (i64::from(position.1) - radius).max(0) as u32;
+    let max_y = (i64::from(position.1) + radius).min(i64::from(world.height) - 1) as u32;
 
     remember_visible_chunks(mind, world, position);
 
+    let mut visible_count = 0u32;
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             if manhattan(position, (x, y)) > mind.perception_radius {
@@ -645,9 +670,11 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
             let deposit = world.resources[(y * world.width + x) as usize];
             if let Some(deposit) = deposit {
                 remember_resource(mind, x, y, deposit.kind, deposit.amount, tick);
+                visible_count += 1;
             }
         }
     }
+    visible_count
 }
 
 pub fn perceive_entities(

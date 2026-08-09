@@ -39,6 +39,11 @@ interface SimulationAutonomyProfile {
   sampled_entities: number;
   planned_entities: number;
   urgent_interrupts: number;
+  memory_reconciliation_us: number;
+  visible_scan_us: number;
+  known_resources_total: number;
+  known_resources_max: number;
+  visible_resources_seen: number;
 }
 
 let speed = 1;
@@ -370,7 +375,17 @@ function installPerformanceDebug(): void {
 
     const rows = [
       {
-        phase: "resource_perception",
+        phase: "memory_reconciliation",
+        ms: (profile.memory_reconciliation_us / 1000).toFixed(3),
+        percent: `${((profile.memory_reconciliation_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "visible_scan",
+        ms: (profile.visible_scan_us / 1000).toFixed(3),
+        percent: `${((profile.visible_scan_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "resource_perception (sum)",
         ms: (profile.resource_perception_us / 1000).toFixed(3),
         percent: `${((profile.resource_perception_us / totalSafe) * 100).toFixed(1)}%`,
       },
@@ -408,6 +423,24 @@ function installPerformanceDebug(): void {
       {
         phase: "urgent_interrupts",
         ms: String(profile.urgent_interrupts),
+        percent: "",
+      },
+      {
+        phase: "avg_known_resources",
+        ms: (
+          profile.known_resources_total /
+          Math.max(profile.sampled_entities, 1)
+        ).toFixed(1),
+        percent: "",
+      },
+      {
+        phase: "max_known_resources",
+        ms: String(profile.known_resources_max),
+        percent: "",
+      },
+      {
+        phase: "visible_resources_seen",
+        ms: String(profile.visible_resources_seen),
         percent: "",
       },
     ];
