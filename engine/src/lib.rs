@@ -122,6 +122,11 @@ impl WorldBridge {
         self.simulation.step(&mut self.grid)
     }
 
+    pub fn simulation_profile_step(&mut self) -> String {
+        let profile = self.simulation.profile_step(&mut self.grid);
+        bridge::phase_profile_json(&profile)
+    }
+
     pub fn simulation_pause(&mut self) {
         self.simulation.pause();
     }

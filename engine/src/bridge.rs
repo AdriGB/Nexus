@@ -1,10 +1,37 @@
 use serde::Serialize;
 
-use crate::simulation::{self, Entity, PopulationStats};
+use crate::simulation::{self, Entity, PhaseProfile, PopulationStats};
 use crate::world::{Grid, RegionKind};
 
 fn to_json<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).expect("bridge DTO serialization should not fail")
+}
+
+#[derive(Serialize)]
+struct PhaseProfileDto {
+    physiology_us: u64,
+    population_index_us: u64,
+    autonomy_us: u64,
+    starvation_us: u64,
+    resource_changes_us: u64,
+    remove_dead_us: u64,
+    pregnancies_us: u64,
+    conceptions_us: u64,
+    total_us: u64,
+}
+
+pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
+    to_json(&PhaseProfileDto {
+        physiology_us: profile.physiology_us,
+        population_index_us: profile.population_index_us,
+        autonomy_us: profile.autonomy_us,
+        starvation_us: profile.starvation_us,
+        resource_changes_us: profile.resource_changes_us,
+        remove_dead_us: profile.remove_dead_us,
+        pregnancies_us: profile.pregnancies_us,
+        conceptions_us: profile.conceptions_us,
+        total_us: profile.total_us,
+    })
 }
 
 #[derive(Serialize)]
@@ -313,5 +340,26 @@ mod tests {
                 "missing population field {key}"
             );
         }
+    }
+
+    #[test]
+    fn phase_profile_payload_is_valid_json() {
+        let profile = PhaseProfile {
+            physiology_us: 1,
+            population_index_us: 2,
+            autonomy_us: 3,
+            starvation_us: 4,
+            resource_changes_us: 5,
+            remove_dead_us: 6,
+            pregnancies_us: 7,
+            conceptions_us: 8,
+            total_us: 36,
+        };
+
+        let payload = phase_profile_json(&profile);
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+
+        assert_eq!(json["autonomy_us"], 3);
+        assert_eq!(json["total_us"], 36);
     }
 }

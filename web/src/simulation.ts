@@ -18,6 +18,18 @@ export interface SimulationBenchmark {
   ticksPerSecond: number;
 }
 
+interface SimulationPhaseProfile {
+  physiology_us: number;
+  population_index_us: number;
+  autonomy_us: number;
+  starvation_us: number;
+  resource_changes_us: number;
+  remove_dead_us: number;
+  pregnancies_us: number;
+  conceptions_us: number;
+  total_us: number;
+}
+
 let speed = 1;
 let accumulator = 0;
 let previousTimestamp: number | null = null;
@@ -251,6 +263,7 @@ function syncEntityInspector(): void {
 declare global {
   interface Window {
     nexusBenchmark?: (ticks?: number) => SimulationBenchmark | null;
+    nexusProfile?: () => SimulationPhaseProfile | null;
   }
 }
 
@@ -269,6 +282,53 @@ function installPerformanceDebug(): void {
     }
 
     return result;
+  };
+
+  window.nexusProfile = () => {
+    const world = state.world;
+
+    if (!world) {
+      console.warn("No world loaded");
+      return null;
+    }
+
+    const profiledWorld = world as typeof world & {
+      simulation_profile_step(): string;
+    };
+    const profile = JSON.parse(
+      profiledWorld.simulation_profile_step(),
+    ) as SimulationPhaseProfile;
+
+    handleSimulationChange();
+
+    const totalUs = Math.max(profile.total_us, 1);
+    const measuredUs =
+      profile.physiology_us +
+      profile.population_index_us +
+      profile.autonomy_us +
+      profile.starvation_us +
+      profile.resource_changes_us +
+      profile.remove_dead_us +
+      profile.pregnancies_us +
+      profile.conceptions_us;
+    const unaccountedUs = Math.max(0, profile.total_us - measuredUs);
+
+    const rows = Object.entries(profile).map(([phase, value]) => ({
+      phase,
+      ms: (value / 1000).toFixed(3),
+      percent: phase === "total_us"
+        ? "100.0%"
+        : `${((value / totalUs) * 100).toFixed(1)}%`,
+    }));
+
+    rows.splice(rows.length - 1, 0, {
+      phase: "unaccounted_us",
+      ms: (unaccountedUs / 1000).toFixed(3),
+      percent: `${((unaccountedUs / totalUs) * 100).toFixed(1)}%`,
+    });
+
+    console.table(rows);
+    return profile;
   };
 
   console.info("Performance benchmark enabled. Use: nexusBenchmark(ticks)");

@@ -22,6 +22,7 @@ use self::time::TICKS_PER_DAY;
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use std::collections::HashSet;
+use web_time::Instant;
 
 pub const INITIAL_POPULATION: u32 = 10;
 
@@ -37,6 +38,19 @@ pub struct PopulationStats {
     pub females: u32,
     pub males: u32,
     pub pregnant: u32,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PhaseProfile {
+    pub physiology_us: u64,
+    pub population_index_us: u64,
+    pub autonomy_us: u64,
+    pub starvation_us: u64,
+    pub resource_changes_us: u64,
+    pub remove_dead_us: u64,
+    pub pregnancies_us: u64,
+    pub conceptions_us: u64,
+    pub total_us: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +174,56 @@ impl Simulation {
         self.tick
     }
 
+    pub(crate) fn profile_step(&mut self, world: &mut Grid) -> PhaseProfile {
+        let total_start = Instant::now();
+
+        self.tick = self.tick.saturating_add(1);
+
+        let start = Instant::now();
+        self.update_physiology();
+        let physiology_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.rebuild_population_index(world);
+        let population_index_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        let consumed_this_tick = self.run_autonomy(world);
+        let autonomy_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.resolve_starvation();
+        let starvation_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.record_resource_changes(consumed_this_tick);
+        let resource_changes_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.remove_dead_entities();
+        let remove_dead_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.update_pregnancies(world);
+        let pregnancies_us = start.elapsed().as_micros() as u64;
+
+        let start = Instant::now();
+        self.try_daily_conceptions();
+        let conceptions_us = start.elapsed().as_micros() as u64;
+
+        PhaseProfile {
+            physiology_us,
+            population_index_us,
+            autonomy_us,
+            starvation_us,
+            resource_changes_us,
+            remove_dead_us,
+            pregnancies_us,
+            conceptions_us,
+            total_us: total_start.elapsed().as_micros() as u64,
+        }
+    }
+
     pub fn pause(&mut self) {
         self.paused = true;
     }
@@ -258,7 +322,10 @@ impl Simulation {
 
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
         self.rebuild_population_index(world);
+        self.run_autonomy(world)
+    }
 
+    fn run_autonomy(&mut self, world: &mut Grid) -> u64 {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
