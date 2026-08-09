@@ -615,10 +615,6 @@ fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) 
 }
 
 pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
-    mind.memory
-        .known_resources
-        .retain(|known| tick.saturating_sub(known.last_seen_tick) <= RESOURCE_MEMORY_TTL);
-
     let radius = mind.perception_radius as i64;
     let min_x = (i64::from(position.0) - radius).max(0) as u32;
     let max_x = (i64::from(position.0) + radius).min(i64::from(world.width) - 1) as u32;
@@ -627,6 +623,10 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
 
     let radius = mind.perception_radius;
     mind.memory.known_resources.retain(|known| {
+        if tick.saturating_sub(known.last_seen_tick) > RESOURCE_MEMORY_TTL {
+            return false;
+        }
+
         if manhattan(position, (known.x, known.y)) > radius {
             return true;
         }
