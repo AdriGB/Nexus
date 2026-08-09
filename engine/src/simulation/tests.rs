@@ -4,7 +4,7 @@ use super::config::{
 };
 use super::entity::Pregnancy;
 use super::lifecycle::{
-    conception_roll, female_is_fertile, male_is_fertile, DAILY_CONCEPTION_SCALE,
+    conception_roll, female_is_fertile, male_is_fertile, personality_for, DAILY_CONCEPTION_SCALE,
 };
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::{
@@ -96,6 +96,7 @@ fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         postpartum_until_tick: 0,
         movement_credit: 0.0,
         caregiver_id: None,
+        personality: personality_for(0, id),
     }
 }
 
@@ -303,6 +304,7 @@ fn pregnancy_speed_transitions_at_phase_boundaries() {
             postpartum_until_tick: 0,
             movement_credit: 0.0,
             caregiver_id: None,
+            personality: personality_for(0, 0),
         };
         super::autonomy::effective_movement_speed(&entity, week * TICKS_PER_WEEK)
     };
@@ -981,6 +983,7 @@ fn same_seed_and_steps_are_deterministic() {
         assert_eq!(entity_a.hunger, entity_b.hunger);
         assert_eq!(entity_a.health, entity_b.health);
         assert_eq!(entity_a.pregnancy, entity_b.pregnancy);
+        assert_eq!(entity_a.personality, entity_b.personality);
         assert_eq!(entity_a.mind.current_goal, entity_b.mind.current_goal);
     }
 
@@ -988,6 +991,51 @@ fn same_seed_and_steps_are_deterministic() {
         simulation_a.population_stats().births,
         simulation_b.population_stats().births
     );
+}
+
+#[test]
+fn same_seed_and_id_produce_same_personality() {
+    let seed = 42u64;
+    let id = 7u32;
+    let a = personality_for(seed, id);
+    let b = personality_for(seed, id);
+    assert_eq!(a, b);
+}
+
+#[test]
+fn different_entities_have_personality_variation() {
+    let seed = 42u64;
+    let p0 = personality_for(seed, 0);
+    let p1 = personality_for(seed, 1);
+    let p2 = personality_for(seed, 2);
+
+    assert_ne!(p0, p1);
+    assert_ne!(p1, p2);
+    assert_ne!(p0, p2);
+}
+
+#[test]
+fn personality_traits_stay_in_unit_interval() {
+    let seed = 999u64;
+    for id in 0..500u32 {
+        let personality = personality_for(seed, id);
+        assert!((0.0..=1.0).contains(&personality.curiosity));
+        assert!((0.0..=1.0).contains(&personality.sociability));
+        assert!((0.0..=1.0).contains(&personality.cooperativeness));
+        assert!((0.0..=1.0).contains(&personality.caution));
+        assert!((0.0..=1.0).contains(&personality.persistence));
+    }
+}
+
+#[test]
+fn personality_generation_matches_snapshot() {
+    let personality = personality_for(12_345, 0);
+
+    assert_eq!(personality.curiosity.to_bits(), 0x3e64_74d9);
+    assert_eq!(personality.sociability.to_bits(), 0x3ee5_df26);
+    assert_eq!(personality.cooperativeness.to_bits(), 0x3ea6_f421);
+    assert_eq!(personality.caution.to_bits(), 0x3ef0_49d3);
+    assert_eq!(personality.persistence.to_bits(), 0x3f15_f141);
 }
 
 #[test]

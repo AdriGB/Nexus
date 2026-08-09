@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-use crate::simulation::{self, AutonomyProfile, Entity, LifeStage, PhaseProfile, PopulationStats};
+use crate::simulation::{
+    self, AutonomyProfile, Entity, LifeStage, Personality, PhaseProfile, PopulationStats,
+};
 use crate::world::{Grid, RegionKind};
 
 fn to_json<T: Serialize>(value: &T) -> String {
@@ -106,6 +108,27 @@ struct UtilityScoresDto {
 }
 
 #[derive(Serialize)]
+struct PersonalityDto {
+    curiosity: f32,
+    sociability: f32,
+    cooperativeness: f32,
+    caution: f32,
+    persistence: f32,
+}
+
+impl From<Personality> for PersonalityDto {
+    fn from(personality: Personality) -> Self {
+        Self {
+            curiosity: personality.curiosity,
+            sociability: personality.sociability,
+            cooperativeness: personality.cooperativeness,
+            caution: personality.caution,
+            persistence: personality.persistence,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct EntityInfoDto {
     id: u32,
     x: u32,
@@ -131,6 +154,7 @@ struct EntityInfoDto {
     life_stage: &'static str,
     stage_movement_factor: f32,
     caregiver_id: Option<u32>,
+    personality: PersonalityDto,
 }
 
 pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
@@ -177,6 +201,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         life_stage: life_stage.label(),
         stage_movement_factor: life_stage.movement_factor(),
         caregiver_id: entity.caregiver_id,
+        personality: entity.personality.into(),
     })
 }
 
@@ -372,8 +397,23 @@ mod tests {
             "life_stage",
             "stage_movement_factor",
             "caregiver_id",
+            "personality",
         ] {
             assert!(entity.get(key).is_some(), "missing entity field {key}");
+        }
+
+        let personality = entity.get("personality").expect("missing personality");
+        for key in [
+            "curiosity",
+            "sociability",
+            "cooperativeness",
+            "caution",
+            "persistence",
+        ] {
+            assert!(
+                personality.get(key).is_some(),
+                "missing personality field {key}"
+            );
         }
         for key in [
             "population",

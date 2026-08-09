@@ -11,10 +11,10 @@ use self::config::{
     FOOD_CONSUMED_PER_MEAL, FOOD_SEARCH_THRESHOLD, HUNGER_PER_TICK, HUNGER_REDUCTION_PER_MEAL,
     MAX_HEALTH, MAX_HUNGER, MAX_POPULATION, STARVATION_DAMAGE_PER_TICK,
 };
-pub use self::entity::{Entity, EntityActivity, LifeStage, Sex};
+pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
 use self::lifecycle::{
-    founder_age_for, lifespan_for, process_due_pregnancies, sex_for, spawn_candidates,
-    try_conceptions, DAILY_CONCEPTION_THRESHOLD,
+    founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
+    spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
 };
 use self::spatial::{EntitySnapshot, SpatialGrid};
 pub(crate) use self::time::years_from_ticks;
@@ -335,6 +335,7 @@ impl Simulation {
             postpartum_until_tick: 0,
             movement_credit: 0.0,
             caregiver_id: None,
+            personality: personality_for(self.seed, id),
         });
         Some(id)
     }

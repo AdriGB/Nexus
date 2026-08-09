@@ -1,5 +1,15 @@
 use super::autonomy::Mind;
 
+/// Five deterministic psychological traits, each in [0.0, 1.0].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Personality {
+    pub curiosity: f32,
+    pub sociability: f32,
+    pub cooperativeness: f32,
+    pub caution: f32,
+    pub persistence: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Sex {
     Female,
@@ -64,6 +74,7 @@ pub struct Entity {
     pub postpartum_until_tick: u64,
     pub movement_credit: f32,
     pub caregiver_id: Option<u32>,
+    pub personality: Personality,
 }
 
 impl Entity {

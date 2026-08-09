@@ -1,4 +1,4 @@
-use super::entity::{Entity, LifeStage, Pregnancy, Sex};
+use super::entity::{Entity, LifeStage, Personality, Pregnancy, Sex};
 use super::time::{
     BASE_LIFESPAN_TICKS, FEMALE_REPRODUCTIVE_AGE_END, FOUNDER_AGE_MAX, FOUNDER_AGE_MIN,
     GESTATION_TICKS, LIFESPAN_VARIATION_TICKS, MALE_REPRODUCTIVE_AGE_END, POSTPARTUM_TICKS,
@@ -15,6 +15,11 @@ pub(super) const DAILY_CONCEPTION_THRESHOLD: u64 = 100;
 const SEX_SALT: u64 = 0x19d6_7a4e_2f91_b5c3;
 const LIFESPAN_SALT: u64 = 0xa7c5_31e8_42d9_f60b;
 const FOUNDER_AGE_SALT: u64 = 0x62e4_b19f_d03a_875c;
+const CURIOSITY_SALT: u64 = 0xa3f1_7b2e_94c0_d685;
+const SOCIABILITY_SALT: u64 = 0xd74e_c058_31ab_f926;
+const COOPERATION_SALT: u64 = 0x5e83_d6a1_b7f4_2c09;
+const CAUTION_SALT: u64 = 0x2b9c_4f87_e5d1_a364;
+const PERSISTENCE_SALT: u64 = 0xf16a_8d3c_50b7_e942;
 
 pub(super) fn sex_for(seed: u64, id: u32) -> Sex {
     if entity_random(seed, id, SEX_SALT) & 1 == 0 {
@@ -33,6 +38,23 @@ pub(super) fn lifespan_for(seed: u64, id: u32) -> u64 {
 pub(super) fn founder_age_for(seed: u64, id: u32) -> u64 {
     let span = FOUNDER_AGE_MAX - FOUNDER_AGE_MIN + 1;
     FOUNDER_AGE_MIN + entity_random(seed, id, FOUNDER_AGE_SALT) % span
+}
+
+/// Generates the five personality traits for an entity.
+pub(super) fn personality_for(seed: u64, id: u32) -> Personality {
+    Personality {
+        curiosity: trait_value(seed, id, CURIOSITY_SALT),
+        sociability: trait_value(seed, id, SOCIABILITY_SALT),
+        cooperativeness: trait_value(seed, id, COOPERATION_SALT),
+        caution: trait_value(seed, id, CAUTION_SALT),
+        persistence: trait_value(seed, id, PERSISTENCE_SALT),
+    }
+}
+
+/// Converts a deterministic hash to an f32 in [0.0, 1.0].
+fn trait_value(seed: u64, id: u32, salt: u64) -> f32 {
+    let raw = entity_random(seed, id, salt);
+    (raw as f64 / u64::MAX as f64) as f32
 }
 
 pub(super) fn female_is_fertile(entity: &Entity, tick: u64, max_health: f32) -> bool {

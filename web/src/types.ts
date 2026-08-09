@@ -113,6 +113,13 @@ export interface EntityInfo {
   life_stage: string;
   stage_movement_factor: number;
   caregiver_id: number | null;
+  personality: {
+    curiosity: number;
+    sociability: number;
+    cooperativeness: number;
+    caution: number;
+    persistence: number;
+  };
   utilities: {
     eat: number;
     explore: number;

@@ -132,6 +132,12 @@
 ### Future Entity Systems
 
 - [ ] Personality and relationships
+  - [x] Deterministic personality traits
+  - [ ] Personality affects utility scoring
+  - [ ] Persistent relationship memory
+  - [ ] Relationship affinity
+  - [ ] Social interaction
+  - [ ] Relationship-driven behavior
 - [ ] Factions and groups
 
 ## Phase 3 — User Rules & Consequences
