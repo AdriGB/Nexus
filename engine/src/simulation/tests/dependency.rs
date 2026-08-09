@@ -35,6 +35,8 @@ fn child_follows_caregiver() {
     let mut simulation = simulation_with_entity(0, 0, 0.0);
     simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.entities[0].health = 1.0;
+    simulation.entities[0].personality.curiosity = 0.0;
+    simulation.entities[0].personality.caution = 1.0;
     let caregiver_id = simulation.entities[0].id;
 
     simulation.push_entity((9, 9), 5 * TICKS_PER_YEAR);

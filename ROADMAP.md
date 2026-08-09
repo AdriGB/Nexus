@@ -133,9 +133,9 @@
 
 - [ ] Personality and relationships
   - [x] Deterministic personality traits
-  - [ ] Personality affects utility scoring
+  - [x] Personality affects utility scoring
     - [x] Curiosity and caution affect explore and rest utilities
-    - [ ] Persistence affects goal retention
+    - [x] Persistence affects goal retention
   - [ ] Persistent relationship memory
   - [ ] Relationship affinity
   - [ ] Social interaction

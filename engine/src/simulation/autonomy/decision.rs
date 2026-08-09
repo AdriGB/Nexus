@@ -5,12 +5,26 @@ use super::mind::{chunk_index, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
+const MIN_SWITCH_MARGIN: f32 = 0.02;
+const MAX_SWITCH_MARGIN: f32 = 0.15;
+
+/// Maps persistence [0.0, 1.0] to the score margin required to abandon
+/// the current goal for an alternative.
+///
+/// persistence 0.0 → 0.02 (barely any inertia)
+/// persistence 0.5 → 0.0525
+/// persistence 1.0 → 0.15 (requires a substantially better alternative)
+pub(super) fn switch_margin(persistence: f32) -> f32 {
+    MIN_SWITCH_MARGIN + (MAX_SWITCH_MARGIN - MIN_SWITCH_MARGIN) * persistence * persistence
+}
+
 pub fn evaluate_goals(
     mind: &mut Mind,
     hunger: f32,
     health: f32,
     age_ticks: u64,
     personality: &Personality,
+    current_goal: Option<Goal>,
 ) -> Goal {
     let stage = LifeStage::from_age_ticks(age_ticks);
 
@@ -67,10 +81,22 @@ pub fn evaluate_goals(
         (mind.utility_scores.explore, Goal::Explore),
         (mind.utility_scores.rest, Goal::Rest),
     ];
-    scores
+    let (best_score, best_goal) = scores
         .into_iter()
         .max_by(|left, right| left.0.total_cmp(&right.0))
-        .map_or(Goal::Explore, |(_, goal)| goal)
+        .unwrap_or((0.0, Goal::Explore));
+
+    if let Some(current) = current_goal {
+        if current != best_goal {
+            if let Some((current_score, _)) = scores.iter().find(|(_, goal)| *goal == current) {
+                if best_score <= *current_score + switch_margin(personality.persistence) {
+                    return current;
+                }
+            }
+        }
+    }
+
+    best_goal
 }
 
 pub(super) fn invalidate_obsolete_food_plan(entity: &mut Entity) {
@@ -400,6 +426,7 @@ fn deterministic_wander_target(
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::time::TICKS_PER_YEAR;
     use super::super::mind::{chunk_index, Mind, FAILED_EXPLORATION_RETRY_TICKS};
     use super::*;
     use crate::world::{Terrain, Tile};
@@ -420,6 +447,57 @@ mod tests {
             regions: Vec::new(),
             resources: vec![None; (width * height) as usize],
         }
+    }
+
+    #[test]
+    fn switch_margin_scales_with_persistence() {
+        assert!((switch_margin(0.0) - 0.02).abs() < 0.001);
+        assert!((switch_margin(0.5) - 0.0525).abs() < 0.001);
+        assert!((switch_margin(1.0) - 0.15).abs() < 0.001);
+        assert!(switch_margin(0.0) < switch_margin(0.5));
+        assert!(switch_margin(0.5) < switch_margin(1.0));
+    }
+
+    #[test]
+    fn high_persistence_retains_goal_when_alternative_is_slightly_better() {
+        let mut mind = Mind::default();
+        let personality = Personality {
+            curiosity: 0.0,
+            sociability: 0.5,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 1.0,
+        };
+        let goal = evaluate_goals(
+            &mut mind,
+            35.0,
+            100.0,
+            25 * TICKS_PER_YEAR,
+            &personality,
+            Some(Goal::Eat),
+        );
+        assert_eq!(goal, Goal::Eat);
+    }
+
+    #[test]
+    fn low_persistence_switches_goal_when_alternative_is_slightly_better() {
+        let mut mind = Mind::default();
+        let personality = Personality {
+            curiosity: 0.0,
+            sociability: 0.5,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.0,
+        };
+        let goal = evaluate_goals(
+            &mut mind,
+            35.0,
+            100.0,
+            25 * TICKS_PER_YEAR,
+            &personality,
+            Some(Goal::Eat),
+        );
+        assert_eq!(goal, Goal::Explore);
     }
 
     #[test]

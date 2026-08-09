@@ -212,10 +212,15 @@ impl Mind {
     }
 
     pub fn set_plan(&mut self, goal: Goal, actions: Vec<Action>, tick: u64) {
+        let goal_changed = self.current_goal != Some(goal);
+
         self.current_goal = Some(goal);
         self.current_plan = actions;
         self.plan_index = 0;
-        self.goal_since_tick = tick;
+
+        if goal_changed {
+            self.goal_since_tick = tick;
+        }
     }
 
     pub fn remembered_food_targets(&self, origin: (u32, u32), tick: u64) -> RememberedFoodTargets {

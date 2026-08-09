@@ -85,13 +85,14 @@ fn profiled_update_entity(
         profile.planned_entities += 1;
 
         let start = Instant::now();
-        entity.mind.clear_goal();
+        let current_goal = entity.mind.current_goal;
         let goal = evaluate_goals(
             &mut entity.mind,
             entity.hunger,
             entity.health,
             entity.age_ticks,
             &entity.personality,
+            current_goal,
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
         profile.planning_us += start.elapsed().as_micros() as u64;

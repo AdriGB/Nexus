@@ -1,8 +1,10 @@
-use super::super::autonomy::{evaluate_goals, Mind};
+use super::super::autonomy::{evaluate_goals, Goal, Mind};
 use super::super::config::MAX_HEALTH;
 use super::super::entity::Personality;
 use super::super::lifecycle::personality_for;
 use super::super::time::TICKS_PER_YEAR;
+use super::support::*;
+use crate::world::{ResourceDeposit, ResourceKind};
 
 #[test]
 fn same_seed_and_id_produce_same_personality() {
@@ -71,8 +73,8 @@ fn curious_entity_explores_more() {
     let health = MAX_HEALTH;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_base, hunger, health, age, &base);
-    evaluate_goals(&mut mind_curious, hunger, health, age, &curious);
+    evaluate_goals(&mut mind_base, hunger, health, age, &base, None);
+    evaluate_goals(&mut mind_curious, hunger, health, age, &curious, None);
 
     assert!(mind_curious.utility_scores.explore > mind_base.utility_scores.explore);
     assert_eq!(
@@ -107,8 +109,8 @@ fn cautious_entity_rests_more_and_explores_less() {
     let health = 50.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_base, hunger, health, age, &base);
-    evaluate_goals(&mut mind_cautious, hunger, health, age, &cautious);
+    evaluate_goals(&mut mind_base, hunger, health, age, &base, None);
+    evaluate_goals(&mut mind_cautious, hunger, health, age, &cautious, None);
 
     assert!(mind_cautious.utility_scores.rest > mind_base.utility_scores.rest);
     assert!(mind_cautious.utility_scores.explore < mind_base.utility_scores.explore);
@@ -133,7 +135,7 @@ fn neutral_personality_preserves_base_utilities() {
     let health = 70.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind, hunger, health, age, &neutral);
+    evaluate_goals(&mut mind, hunger, health, age, &neutral, None);
 
     let hunger_ratio = 0.4;
     let food_confidence = 0.25;
@@ -171,11 +173,54 @@ fn personality_does_not_affect_eat_utility() {
     let health = 80.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_extreme, hunger, health, age, &extreme);
-    evaluate_goals(&mut mind_neutral, hunger, health, age, &neutral);
+    evaluate_goals(&mut mind_extreme, hunger, health, age, &extreme, None);
+    evaluate_goals(&mut mind_neutral, hunger, health, age, &neutral, None);
 
     assert_eq!(
         mind_extreme.utility_scores.eat,
         mind_neutral.utility_scores.eat
+    );
+}
+
+#[test]
+fn persistence_changes_goal_switch_after_plan_completion() {
+    let mut world_low = plain_grid(64, 64);
+    let mut world_high = plain_grid(64, 64);
+
+    let food_index = (32 * 64 + 34) as usize;
+
+    world_low.resources[food_index] = Some(ResourceDeposit {
+        kind: ResourceKind::Food,
+        amount: 20,
+    });
+    world_high.resources[food_index] = Some(ResourceDeposit {
+        kind: ResourceKind::Food,
+        amount: 20,
+    });
+
+    let mut sim_low = simulation_with_entity(32, 32, 33.0);
+    let mut sim_high = simulation_with_entity(32, 32, 33.0);
+
+    for simulation in [&mut sim_low, &mut sim_high] {
+        simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+        simulation.entities[0].personality.curiosity = 0.0;
+        simulation.entities[0].personality.caution = 0.0;
+
+        // Completed Explore plan, but goal remains active.
+        simulation.entities[0]
+            .mind
+            .set_plan(Goal::Explore, vec![], 0);
+    }
+
+    sim_low.entities[0].personality.persistence = 0.0;
+    sim_high.entities[0].personality.persistence = 1.0;
+
+    sim_low.step(&mut world_low);
+    sim_high.step(&mut world_high);
+
+    assert_eq!(sim_low.entities()[0].mind.current_goal, Some(Goal::Eat));
+    assert_eq!(
+        sim_high.entities()[0].mind.current_goal,
+        Some(Goal::Explore)
     );
 }

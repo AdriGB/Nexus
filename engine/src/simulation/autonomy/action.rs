@@ -75,7 +75,6 @@ pub(super) fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick
                 entity.mind.advance_action();
                 if action.destination().is_some() && entity.mind.current_goal == Some(Goal::Explore)
                 {
-                    entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }
             }
@@ -93,7 +92,6 @@ pub(super) fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick
                 .memory
                 .update_known_amount(position, kind, amount, tick);
             entity.mind.advance_action();
-            entity.mind.clear_goal();
             entity.activity = EntityActivity::Idle;
             consumed
         }
@@ -103,7 +101,6 @@ pub(super) fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick
                 entity.health = (entity.health + REST_HEALTH_PER_TICK).min(MAX_HEALTH);
             }
             entity.mind.advance_action();
-            entity.mind.clear_goal();
             entity.activity = EntityActivity::Resting;
             0
         }

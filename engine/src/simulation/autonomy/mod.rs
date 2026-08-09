@@ -54,13 +54,15 @@ pub(super) fn update_entity(
     }
 
     if entity.mind.current_action().is_none() {
-        entity.mind.clear_goal();
+        let current_goal = entity.mind.current_goal;
+
         let goal = evaluate_goals(
             &mut entity.mind,
             entity.hunger,
             entity.health,
             entity.age_ticks,
             &entity.personality,
+            current_goal,
         );
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
