@@ -62,6 +62,7 @@ pub struct Entity {
     pub mind: Mind,
     pub pregnancy: Option<Pregnancy>,
     pub postpartum_until_tick: u64,
+    pub movement_credit: f32,
 }
 
 impl Entity {

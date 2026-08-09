@@ -312,6 +312,7 @@ impl Simulation {
             mind: Mind::default(),
             pregnancy: None,
             postpartum_until_tick: 0,
+            movement_credit: 0.0,
         });
         Some(id)
     }

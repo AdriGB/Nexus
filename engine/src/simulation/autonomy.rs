@@ -1,4 +1,4 @@
-use super::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
+use super::config::{BASE_MOVEMENT_SPEED, FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::{Entity, EntityActivity};
 use crate::pathfinding::{self, PathfindingWorkspace};
@@ -305,18 +305,34 @@ fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u
     };
     match action {
         Action::MoveTo(_, _) | Action::ExploreArea(_, _) => {
+            entity.movement_credit += BASE_MOVEMENT_SPEED;
+
             if entity.path_index < entity.path.len() {
                 let next = entity.path[entity.path_index];
-                entity.x = next.0;
-                entity.y = next.1;
-                entity.path_index += 1;
-                entity.activity = if entity.mind.current_goal == Some(Goal::Explore) {
-                    EntityActivity::Exploring
-                } else {
-                    EntityActivity::Moving
+
+                let Some(step_cost) = pathfinding::step_cost(world, (entity.x, entity.y), next)
+                else {
+                    entity.movement_credit = 0.0;
+                    entity.mind.clear_goal();
+                    entity.path.clear();
+                    entity.path_index = 0;
+                    return 0;
                 };
+
+                if entity.movement_credit >= step_cost {
+                    entity.movement_credit -= step_cost;
+                    entity.x = next.0;
+                    entity.y = next.1;
+                    entity.path_index += 1;
+                    entity.activity = if entity.mind.current_goal == Some(Goal::Explore) {
+                        EntityActivity::Exploring
+                    } else {
+                        EntityActivity::Moving
+                    };
+                }
             }
             if entity.path_index >= entity.path.len() {
+                entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
                 entity.mind.advance_action();
@@ -329,6 +345,7 @@ fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u
             0
         }
         Action::Consume(kind) => {
+            entity.movement_credit = 0.0;
             let consumed = consume_food(entity, world);
             let position = (entity.x, entity.y);
             let amount = world.resources[(entity.y * world.width + entity.x) as usize]
@@ -344,6 +361,7 @@ fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u
             consumed
         }
         Action::Wait => {
+            entity.movement_credit = 0.0;
             if entity.hunger < FOOD_SEARCH_THRESHOLD {
                 entity.health = (entity.health + REST_HEALTH_PER_TICK).min(MAX_HEALTH);
             }

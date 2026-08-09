@@ -90,6 +90,7 @@ fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         mind: Mind::default(),
         pregnancy: None,
         postpartum_until_tick: 0,
+        movement_credit: 0.0,
     }
 }
 
@@ -153,6 +154,71 @@ fn entity_stores_and_follows_unsmoothed_path() {
     simulation.step(&mut world);
     assert_eq!(simulation.entities()[0].path, original_path);
     assert_eq!(simulation.entities()[0].path_index, 2);
+}
+
+#[test]
+fn mountain_movement_requires_four_ticks() {
+    let mut world = grid_from_rows(&["PMF"]);
+    let mut simulation = simulation_with_entity(0, 0, 90.0);
+
+    for _ in 0..3 {
+        simulation.step(&mut world);
+        assert_eq!(simulation.entities()[0].x, 0, "should not move yet");
+    }
+
+    simulation.step(&mut world);
+    assert_eq!(
+        simulation.entities()[0].x,
+        1,
+        "should cross Mountain on tick 4"
+    );
+
+    simulation.step(&mut world);
+    assert_eq!(
+        simulation.entities()[0].x,
+        2,
+        "should cross Plains on tick 5"
+    );
+}
+
+#[test]
+fn resting_clears_movement_credit() {
+    let mut world = grid_from_rows(&["P"]);
+    let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].movement_credit = 0.75;
+
+    simulation.step(&mut world);
+
+    assert_eq!(simulation.entities()[0].movement_credit, 0.0);
+}
+
+#[test]
+fn diagonal_movement_requires_sqrt2_credit() {
+    let mut world = plain_grid(2, 2);
+    let mut mover = entity(1, 0, 0, 0.0);
+    mover.path = vec![(1, 1)];
+    mover
+        .mind
+        .set_plan(Goal::Explore, vec![Action::ExploreArea(1, 1)], 0);
+    mover.activity = EntityActivity::Exploring;
+
+    let mut simulation = Simulation {
+        entities: vec![mover],
+        next_entity_id: 2,
+        ..Simulation::default()
+    };
+
+    simulation.step(&mut world);
+    assert_eq!(
+        (simulation.entities()[0].x, simulation.entities()[0].y),
+        (0, 0)
+    );
+
+    simulation.step(&mut world);
+    assert_eq!(
+        (simulation.entities()[0].x, simulation.entities()[0].y),
+        (1, 1)
+    );
 }
 
 #[test]

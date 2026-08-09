@@ -109,6 +109,7 @@ export interface EntityInfo {
   known_resources: number;
   known_chunks: number;
   visible_entities: number;
+  movement_credit: number;
   utilities: {
     eat: number;
     explore: number;

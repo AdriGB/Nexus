@@ -127,6 +127,7 @@ struct EntityInfoDto {
     known_chunks: usize,
     visible_entities: usize,
     utilities: UtilityScoresDto,
+    movement_credit: f32,
 }
 
 pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
@@ -168,6 +169,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
             explore: entity.mind.utility_scores.explore,
             rest: entity.mind.utility_scores.rest,
         },
+        movement_credit: entity.movement_credit,
     })
 }
 
@@ -359,6 +361,7 @@ mod tests {
             "goal",
             "action",
             "utilities",
+            "movement_credit",
         ] {
             assert!(entity.get(key).is_some(), "missing entity field {key}");
         }

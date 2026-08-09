@@ -124,7 +124,7 @@
 - [x] Postpartum cooldown
 - [x] Biology population statistics
 - [x] Biology inspector/debug state
-- [ ] Time-based movement
+- [x] Time-based movement
 - [ ] Pregnancy mobility penalty
 - [ ] Life stages
 - [ ] Child dependency

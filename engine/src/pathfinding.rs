@@ -90,6 +90,20 @@ pub(crate) fn find_path_with_workspace(
     find_path_with_workspace_and_limit(workspace, grid, start, goal, None)
 }
 
+pub(crate) fn step_cost(grid: &Grid, from: (u32, u32), to: (u32, u32)) -> Option<f32> {
+    let dx = from.0.abs_diff(to.0);
+    let dy = from.1.abs_diff(to.1);
+
+    if dx > 1 || dy > 1 || (dx == 0 && dy == 0) {
+        return None;
+    }
+
+    let terrain_cost = grid.get(to.0, to.1)?.terrain.movement_cost()?;
+    let base_cost = if dx == 1 && dy == 1 { SQRT2 } else { 1.0 };
+
+    Some(base_cost * terrain_cost)
+}
+
 fn find_path_with_workspace_and_limit(
     workspace: &mut PathfindingWorkspace,
     grid: &Grid,
@@ -153,14 +167,14 @@ fn find_path_with_workspace_and_limit(
             ));
         }
 
-        for (neighbor, base_move_cost) in neighbors_8dir(grid, coordinate(grid, current.position)) {
+        let current_coordinate = coordinate(grid, current.position);
+
+        for (neighbor, _) in neighbors_8dir(grid, current_coordinate) {
             let neighbor_index = index(grid, neighbor);
-            let terrain_cost = grid.get(neighbor.0, neighbor.1)?.terrain.movement_cost();
-            let Some(terrain_cost) = terrain_cost else {
+            let Some(step_cost) = step_cost(grid, current_coordinate, neighbor) else {
                 continue;
             };
 
-            let step_cost = base_move_cost * terrain_cost;
             let candidate_cost = current_cost + step_cost;
 
             if workspace.generation[neighbor_index] != workspace.current_gen
