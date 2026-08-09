@@ -1,7 +1,8 @@
 use super::config::{
-    BASE_MOVEMENT_SPEED, FOOD_SEARCH_THRESHOLD, MAX_HEALTH, PREGNANCY_PHASE_2_START_WEEK,
-    PREGNANCY_PHASE_3_START_WEEK, PREGNANCY_PHASE_4_START_WEEK, PREGNANCY_SPEED_PHASE_1,
-    PREGNANCY_SPEED_PHASE_2, PREGNANCY_SPEED_PHASE_3, PREGNANCY_SPEED_PHASE_4,
+    BASE_MOVEMENT_SPEED, FOOD_CONSUMED_PER_MEAL, FOOD_SEARCH_THRESHOLD, HUNGER_REDUCTION_PER_MEAL,
+    MAX_HEALTH, PREGNANCY_PHASE_2_START_WEEK, PREGNANCY_PHASE_3_START_WEEK,
+    PREGNANCY_PHASE_4_START_WEEK, PREGNANCY_SPEED_PHASE_1, PREGNANCY_SPEED_PHASE_2,
+    PREGNANCY_SPEED_PHASE_3, PREGNANCY_SPEED_PHASE_4,
 };
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use super::time::TICKS_PER_WEEK;
@@ -17,8 +18,6 @@ const KNOWLEDGE_CHUNK_SIZE: u32 = 8;
 const RESOURCE_MEMORY_TTL: u64 = 2_000;
 const FAILED_TARGET_RETRY_TICKS: u64 = 120;
 const FAILED_EXPLORATION_RETRY_TICKS: u64 = 240;
-const FOOD_CONSUMED_PER_MEAL: u16 = 10;
-const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
 pub(super) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
 const REST_HEALTH_PER_TICK: f32 = 0.25;
 const PROFILE_SAMPLE_RATE: usize = 4;
@@ -74,8 +73,13 @@ pub(super) fn update_entity(
 
     if entity.mind.current_action().is_none() {
         entity.mind.clear_goal();
-        let goal = evaluate_goals(&mut entity.mind, entity.hunger, entity.health);
-        plan_goal(entity, world, tick, goal, pathfinding_workspace);
+        let goal = evaluate_goals(
+            &mut entity.mind,
+            entity.hunger,
+            entity.health,
+            entity.age_ticks,
+        );
+        plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
 
     execute_current_action(entity, world, tick)
@@ -143,8 +147,13 @@ fn profiled_update_entity(
 
         let start = Instant::now();
         entity.mind.clear_goal();
-        let goal = evaluate_goals(&mut entity.mind, entity.hunger, entity.health);
-        plan_goal(entity, world, tick, goal, pathfinding_workspace);
+        let goal = evaluate_goals(
+            &mut entity.mind,
+            entity.hunger,
+            entity.health,
+            entity.age_ticks,
+        );
+        plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
         profile.planning_us += start.elapsed().as_micros() as u64;
     }
 
@@ -163,17 +172,20 @@ pub(crate) fn profile_autonomy(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> (u64, AutonomyProfile) {
+) -> (u64, AutonomyProfile, Vec<(u32, u16)>) {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
+    let mut consumer_ids = Vec::new();
 
     for (index, entity) in entities
         .iter_mut()
-        .filter(|entity| entity.health > 0.0)
+        .filter(|entity| {
+            entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
+        })
         .enumerate()
     {
-        if index % PROFILE_SAMPLE_RATE == 0 {
-            consumed += u64::from(profiled_update_entity(
+        let result = if index % PROFILE_SAMPLE_RATE == 0 {
+            profiled_update_entity(
                 entity,
                 world,
                 tick,
@@ -181,20 +193,25 @@ pub(crate) fn profile_autonomy(
                 spatial_grid,
                 pathfinding_workspace,
                 &mut profile,
-            ));
+            )
         } else {
-            consumed += u64::from(update_entity(
+            update_entity(
                 entity,
                 world,
                 tick,
                 population,
                 spatial_grid,
                 pathfinding_workspace,
-            ));
+            )
+        };
+
+        if result > 0 {
+            consumer_ids.push((entity.id, result));
         }
+        consumed += u64::from(result);
     }
 
-    (consumed, profile)
+    (consumed, profile, consumer_ids)
 }
 
 fn invalidate_obsolete_food_plan(entity: &mut Entity) {
@@ -221,12 +238,65 @@ fn invalidate_obsolete_food_plan(entity: &mut Entity) {
     }
 }
 
+fn plan_follow(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    population: &[EntitySnapshot],
+) {
+    let origin = (entity.x, entity.y);
+
+    let Some(caregiver_id) = entity.caregiver_id else {
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+        return;
+    };
+    let Some(target) = population
+        .iter()
+        .find(|snapshot| snapshot.id == caregiver_id)
+        .map(|snapshot| (snapshot.x, snapshot.y))
+    else {
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+        return;
+    };
+
+    if target == origin {
+        entity.mind.set_plan(Goal::Follow, vec![], tick);
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.activity = EntityActivity::Idle;
+        return;
+    }
+
+    if let Some(path) =
+        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target)
+    {
+        entity.path = path.into_iter().skip(1).collect();
+        entity.path_index = 0;
+        if entity.path.is_empty() {
+            entity.mind.set_plan(Goal::Follow, vec![], tick);
+            entity.activity = EntityActivity::Idle;
+        } else {
+            entity
+                .mind
+                .set_plan(Goal::Follow, vec![Action::MoveTo(target.0, target.1)], tick);
+            entity.activity = EntityActivity::Moving;
+        }
+    } else {
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+    }
+}
+
 fn plan_goal(
     entity: &mut Entity,
     world: &Grid,
     tick: u64,
     goal: Goal,
     pathfinding_workspace: &mut PathfindingWorkspace,
+    population: &[EntitySnapshot],
 ) {
     let origin = (entity.x, entity.y);
     match goal {
@@ -252,9 +322,14 @@ fn plan_goal(
                 }
                 entity.mind.memory.mark_unreachable(target, tick);
             }
-            plan_exploration(entity, world, tick, pathfinding_workspace);
+            if LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Child {
+                plan_follow(entity, world, tick, pathfinding_workspace, population);
+            } else {
+                plan_exploration(entity, world, tick, pathfinding_workspace);
+            }
         }
         Goal::Explore => plan_exploration(entity, world, tick, pathfinding_workspace),
+        Goal::Follow => plan_follow(entity, world, tick, pathfinding_workspace, population),
         Goal::Rest => {
             entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
             entity.activity = EntityActivity::Resting;
@@ -427,6 +502,7 @@ fn consume_food(entity: &mut Entity, world: &mut Grid) -> u16 {
 pub enum Goal {
     Eat,
     Explore,
+    Follow,
     Rest,
 }
 
@@ -435,6 +511,7 @@ impl Goal {
         match self {
             Self::Eat => "Eat",
             Self::Explore => "Explore",
+            Self::Follow => "Follow",
             Self::Rest => "Rest",
         }
     }
@@ -782,7 +859,32 @@ pub fn perceive_entities(
     mind.visible_entities.sort_unstable();
 }
 
-pub fn evaluate_goals(mind: &mut Mind, hunger: f32, health: f32) -> Goal {
+pub fn evaluate_goals(mind: &mut Mind, hunger: f32, health: f32, age_ticks: u64) -> Goal {
+    let stage = LifeStage::from_age_ticks(age_ticks);
+
+    if stage == LifeStage::Child {
+        if hunger >= FOOD_SEARCH_THRESHOLD
+            && mind
+                .memory
+                .known_resources
+                .iter()
+                .any(|known| known.kind == ResourceKind::Food && known.estimated_amount > 0)
+        {
+            mind.utility_scores = UtilityScores {
+                eat: 1.0,
+                explore: 0.0,
+                rest: 0.0,
+            };
+            return Goal::Eat;
+        }
+        mind.utility_scores = UtilityScores {
+            eat: 0.0,
+            explore: 0.0,
+            rest: 0.5,
+        };
+        return Goal::Follow;
+    }
+
     let food_confidence = if mind
         .memory
         .known_resources

@@ -125,6 +125,8 @@ Eligible nearby females and males receive one deterministic conception roll per 
 
 Entities derive a life stage from biological age: Infant, Child, Adolescent, Adult, or Elder. Life stage modifies movement speed while sex-specific reproductive age windows remain unchanged.
 
+Infants are carried by their caregiver and cannot act independently. Children follow their caregiver and can eat when near food but never explore on their own. Adolescents and above are fully autonomous.
+
 Entities are rendered by a dedicated wgpu instancing pipeline. Position, hunger, and activity are uploaded as per-instance data, so the renderer is ready to scale beyond the initial entity without adding one draw call per creature. Canvas remains a terrain-only compatibility fallback.
 
 ## Entity cognition

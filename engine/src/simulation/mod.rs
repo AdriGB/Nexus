@@ -8,8 +8,8 @@ mod time;
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{
-    FOOD_SEARCH_THRESHOLD, HUNGER_PER_TICK, MAX_HEALTH, MAX_HUNGER, MAX_POPULATION,
-    STARVATION_DAMAGE_PER_TICK,
+    FOOD_CONSUMED_PER_MEAL, FOOD_SEARCH_THRESHOLD, HUNGER_PER_TICK, HUNGER_REDUCTION_PER_MEAL,
+    MAX_HEALTH, MAX_HUNGER, MAX_POPULATION, STARVATION_DAMAGE_PER_TICK,
 };
 pub use self::entity::{Entity, EntityActivity, LifeStage, Sex};
 use self::lifecycle::{
@@ -21,7 +21,7 @@ pub(crate) use self::time::years_from_ticks;
 use self::time::TICKS_PER_DAY;
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use web_time::Instant;
 
 pub const INITIAL_POPULATION: u32 = 10;
@@ -183,13 +183,21 @@ impl Simulation {
         self.update_physiology();
         let physiology_us = start.elapsed().as_micros() as u64;
 
+        self.clear_graduated_caregivers();
+        self.snap_infants_to_caregivers();
+
         let start = Instant::now();
         self.rebuild_population_index(world);
         let population_index_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
-        let consumed_this_tick = self.run_autonomy(world);
+        let (consumed_this_tick, consumer_ids) = self.run_autonomy(world);
         let autonomy_us = start.elapsed().as_micros() as u64;
+
+        self.snap_infants_to_caregivers();
+        for (id, amount) in consumer_ids {
+            self.feed_infants_of(id, amount);
+        }
 
         let start = Instant::now();
         self.resolve_starvation();
@@ -204,7 +212,9 @@ impl Simulation {
         let remove_dead_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
+        self.reassign_orphaned_dependents(world);
         self.update_pregnancies(world);
+        self.snap_infants_to_caregivers();
         let pregnancies_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
@@ -227,6 +237,8 @@ impl Simulation {
     pub(crate) fn profile_autonomy_step(&mut self, world: &mut Grid) -> AutonomyProfile {
         self.tick = self.tick.saturating_add(1);
         self.update_physiology();
+        self.clear_graduated_caregivers();
+        self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
 
         let tick = self.tick;
@@ -234,7 +246,7 @@ impl Simulation {
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
-        let (consumed_this_tick, profile) = autonomy::profile_autonomy(
+        let (consumed_this_tick, profile, consumer_ids) = autonomy::profile_autonomy(
             &mut self.entities,
             world,
             tick,
@@ -243,10 +255,19 @@ impl Simulation {
             pathfinding_workspace,
         );
 
+        self.snap_infants_to_caregivers();
+        for (id, amount) in consumer_ids {
+            self.feed_infants_of(id, amount);
+        }
+
         self.resolve_starvation();
         self.record_resource_changes(consumed_this_tick);
         self.remove_dead_entities();
+        self.reassign_orphaned_dependents(world);
         self.update_pregnancies(world);
+        // Covers both newly reassigned infants
+        // and newborns assigned to their mother.
+        self.snap_infants_to_caregivers();
         self.try_daily_conceptions();
 
         profile
@@ -313,25 +334,22 @@ impl Simulation {
             pregnancy: None,
             postpartum_until_tick: 0,
             movement_credit: 0.0,
+            caregiver_id: None,
         });
         Some(id)
     }
 
     fn step_world(&mut self, world: &mut Grid) {
-        // Tick order is intentional:
-        // 1. advance time and physiology
-        // 2. perceive, decide, and act
-        // 3. resolve immediate consequences
-        // 4. remove dead entities
-        // 5. resolve births
-        // 6. attempt scheduled conceptions
         self.tick = self.tick.saturating_add(1);
         self.update_physiology();
+        self.clear_graduated_caregivers();
         let consumed_this_tick = self.update_autonomy(world);
         self.resolve_starvation();
         self.record_resource_changes(consumed_this_tick);
         self.remove_dead_entities();
+        self.reassign_orphaned_dependents(world);
         self.update_pregnancies(world);
+        self.snap_infants_to_caregivers();
         self.try_daily_conceptions();
     }
 
@@ -350,34 +368,45 @@ impl Simulation {
     }
 
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
+        self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
-        self.run_autonomy(world)
+        let (consumed, consumer_ids) = self.run_autonomy(world);
+        self.snap_infants_to_caregivers();
+
+        for (id, amount) in consumer_ids {
+            self.feed_infants_of(id, amount);
+        }
+
+        consumed
     }
 
-    fn run_autonomy(&mut self, world: &mut Grid) -> u64 {
+    fn run_autonomy(&mut self, world: &mut Grid) -> (u64, Vec<(u32, u16)>) {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
         let mut consumed = 0u64;
+        let mut consumer_ids = Vec::new();
 
-        for entity in self
-            .entities
-            .iter_mut()
-            .filter(|entity| entity.health > 0.0)
-        {
-            consumed += u64::from(autonomy::update_entity(
+        for entity in self.entities.iter_mut().filter(|entity| {
+            entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
+        }) {
+            let result = autonomy::update_entity(
                 entity,
                 world,
                 tick,
                 population_cache,
                 spatial_grid,
                 pathfinding_workspace,
-            ));
+            );
+            if result > 0 {
+                consumer_ids.push((entity.id, result));
+            }
+            consumed += u64::from(result);
         }
 
-        consumed
+        (consumed, consumer_ids)
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {
@@ -427,12 +456,116 @@ impl Simulation {
 
     fn update_pregnancies(&mut self, world: &Grid) {
         let capacity = MAX_POPULATION.saturating_sub(self.entities.len());
-        let positions = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
-        for position in positions {
+        let births = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
+        for (position, mother_id) in births {
             if self.push_newborn(position).is_some() {
+                if let Some(child) = self.entities.last_mut() {
+                    child.caregiver_id = Some(mother_id);
+                }
                 self.births = self.births.saturating_add(1);
             }
         }
+    }
+
+    fn snap_infants_to_caregivers(&mut self) {
+        let positions: HashMap<u32, (u32, u32)> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.health > 0.0)
+            .map(|entity| (entity.id, (entity.x, entity.y)))
+            .collect();
+
+        for entity in &mut self.entities {
+            if entity.health <= 0.0
+                || LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
+            {
+                continue;
+            }
+            if let Some(position) = entity
+                .caregiver_id
+                .and_then(|caregiver_id| positions.get(&caregiver_id).copied())
+            {
+                entity.x = position.0;
+                entity.y = position.1;
+            }
+        }
+    }
+
+    fn feed_infants_of(&mut self, consumer_id: u32, consumed: u16) {
+        let meal_fraction = f32::from(consumed) / f32::from(FOOD_CONSUMED_PER_MEAL);
+        for entity in &mut self.entities {
+            if entity.health > 0.0
+                && LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Infant
+                && entity.caregiver_id == Some(consumer_id)
+            {
+                entity.hunger =
+                    (entity.hunger - HUNGER_REDUCTION_PER_MEAL * meal_fraction).max(0.0);
+            }
+        }
+    }
+
+    fn clear_graduated_caregivers(&mut self) {
+        for entity in &mut self.entities {
+            if entity.health <= 0.0 {
+                continue;
+            }
+            if !matches!(
+                LifeStage::from_age_ticks(entity.age_ticks),
+                LifeStage::Infant | LifeStage::Child
+            ) {
+                entity.caregiver_id = None;
+            }
+        }
+    }
+
+    fn reassign_orphaned_dependents(&mut self, world: &Grid) {
+        let alive: HashSet<u32> = self.entities.iter().map(|entity| entity.id).collect();
+        let needs_reassignment: Vec<usize> = self
+            .entities
+            .iter()
+            .enumerate()
+            .filter(|(_, entity)| {
+                matches!(
+                    LifeStage::from_age_ticks(entity.age_ticks),
+                    LifeStage::Infant | LifeStage::Child
+                ) && entity
+                    .caregiver_id
+                    .is_none_or(|caregiver_id| !alive.contains(&caregiver_id))
+            })
+            .map(|(index, _)| index)
+            .collect();
+
+        for index in needs_reassignment {
+            let position = (self.entities[index].x, self.entities[index].y);
+            self.entities[index].caregiver_id = self.find_nearest_caregiver(position, world);
+        }
+    }
+
+    fn find_nearest_caregiver(&self, position: (u32, u32), world: &Grid) -> Option<u32> {
+        let dependent_region = world.region_id_at(position.0, position.1);
+
+        self.entities
+            .iter()
+            .filter(|entity| {
+                entity.health > 0.0
+                    && caregiver_priority(LifeStage::from_age_ticks(entity.age_ticks)).is_some()
+            })
+            .filter(|entity| {
+                let caregiver_region = world.region_id_at(entity.x, entity.y);
+                match (dependent_region, caregiver_region) {
+                    (Some(left), Some(right)) => left == right,
+                    (None, None) => true,
+                    _ => false,
+                }
+            })
+            .min_by_key(|entity| {
+                (
+                    caregiver_priority(LifeStage::from_age_ticks(entity.age_ticks)).unwrap(),
+                    entity.x.abs_diff(position.0) + entity.y.abs_diff(position.1),
+                    entity.id,
+                )
+            })
+            .map(|entity| entity.id)
     }
 
     fn try_daily_conceptions(&mut self) {
@@ -446,6 +579,14 @@ impl Simulation {
             MAX_HEALTH,
             DAILY_CONCEPTION_THRESHOLD,
         );
+    }
+}
+
+fn caregiver_priority(stage: LifeStage) -> Option<u8> {
+    match stage {
+        LifeStage::Adult => Some(0),
+        LifeStage::Elder => Some(1),
+        _ => None,
     }
 }
 

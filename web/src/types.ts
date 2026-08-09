@@ -103,7 +103,7 @@ export interface EntityInfo {
     | "Exploring"
     | "Resting";
   remaining_path: number;
-  goal: "None" | "Eat" | "Explore" | "Rest";
+  goal: "None" | "Eat" | "Explore" | "Follow" | "Rest";
   action: string;
   goal_age_ticks: number;
   known_resources: number;
@@ -112,6 +112,7 @@ export interface EntityInfo {
   movement_credit: number;
   life_stage: string;
   stage_movement_factor: number;
+  caregiver_id: number | null;
   utilities: {
     eat: number;
     explore: number;

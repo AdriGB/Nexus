@@ -130,6 +130,7 @@ struct EntityInfoDto {
     movement_credit: f32,
     life_stage: &'static str,
     stage_movement_factor: f32,
+    caregiver_id: Option<u32>,
 }
 
 pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
@@ -175,6 +176,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         movement_credit: entity.movement_credit,
         life_stage: life_stage.label(),
         stage_movement_factor: life_stage.movement_factor(),
+        caregiver_id: entity.caregiver_id,
     })
 }
 
@@ -369,6 +371,7 @@ mod tests {
             "movement_credit",
             "life_stage",
             "stage_movement_factor",
+            "caregiver_id",
         ] {
             assert!(entity.get(key).is_some(), "missing entity field {key}");
         }

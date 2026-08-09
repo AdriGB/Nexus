@@ -127,7 +127,7 @@
 - [x] Time-based movement
 - [x] Pregnancy mobility penalty
 - [x] Life stages
-- [ ] Child dependency
+- [x] Child dependency
 
 ### Future Entity Systems
 

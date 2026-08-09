@@ -63,6 +63,7 @@ pub struct Entity {
     pub pregnancy: Option<Pregnancy>,
     pub postpartum_until_tick: u64,
     pub movement_credit: f32,
+    pub caregiver_id: Option<u32>,
 }
 
 impl Entity {

@@ -106,7 +106,7 @@ pub(super) fn process_due_pregnancies(
     world: &Grid,
     tick: u64,
     max_births: usize,
-) -> Vec<(u32, u32)> {
+) -> Vec<((u32, u32), u32)> {
     let mut occupied: HashSet<_> = entities.iter().map(|entity| (entity.x, entity.y)).collect();
     let mut births = Vec::new();
     for mother in entities.iter_mut() {
@@ -123,9 +123,10 @@ pub(super) fn process_due_pregnancies(
             continue;
         };
         occupied.insert(position);
+        let mother_id = mother.id;
         mother.pregnancy = None;
         mother.postpartum_until_tick = tick.saturating_add(POSTPARTUM_TICKS);
-        births.push(position);
+        births.push((position, mother_id));
     }
     births
 }

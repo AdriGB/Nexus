@@ -1,5 +1,7 @@
 use super::autonomy::URGENT_HUNGER_THRESHOLD;
-use super::config::BASE_MOVEMENT_SPEED;
+use super::config::{
+    BASE_MOVEMENT_SPEED, FOOD_CONSUMED_PER_MEAL, HUNGER_PER_TICK, HUNGER_REDUCTION_PER_MEAL,
+};
 use super::entity::Pregnancy;
 use super::lifecycle::{
     conception_roll, female_is_fertile, male_is_fertile, DAILY_CONCEPTION_SCALE,
@@ -93,6 +95,7 @@ fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         pregnancy: None,
         postpartum_until_tick: 0,
         movement_credit: 0.0,
+        caregiver_id: None,
     }
 }
 
@@ -189,6 +192,7 @@ fn mountain_movement_requires_four_ticks() {
 fn resting_clears_movement_credit() {
     let mut world = grid_from_rows(&["P"]);
     let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.entities[0].movement_credit = 0.75;
 
     simulation.step(&mut world);
@@ -298,6 +302,7 @@ fn pregnancy_speed_transitions_at_phase_boundaries() {
             }),
             postpartum_until_tick: 0,
             movement_credit: 0.0,
+            caregiver_id: None,
         };
         super::autonomy::effective_movement_speed(&entity, week * TICKS_PER_WEEK)
     };
@@ -321,6 +326,9 @@ fn competing_entities_consume_a_finite_deposit_once() {
         next_entity_id: 3,
         ..Simulation::default()
     };
+    for entity in &mut simulation.entities {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+    }
     simulation.step(&mut world);
 
     assert!(world.resources[0].is_none());
@@ -720,6 +728,7 @@ fn entity_dies_when_reaching_individual_lifespan() {
 fn population_stats_report_pressure_and_consumption() {
     let mut world = grid_from_rows(&["F"]);
     let mut simulation = simulation_with_entity(0, 0, 60.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
     let stats = simulation.population_stats();
     assert_eq!(stats.population, 1);
@@ -735,6 +744,7 @@ fn population_stats_report_pressure_and_consumption() {
 fn distant_food_is_not_known_without_perception() {
     let mut world = grid_from_rows(&["PPPPPPPPPPPPPPPPPPPF"]);
     let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
 
     let entity = &simulation.entities()[0];
@@ -746,6 +756,7 @@ fn distant_food_is_not_known_without_perception() {
 fn entity_remembers_seen_food_and_interrupts_exploration_when_hungry() {
     let mut world = grid_from_rows(&["PPPPPFPPPPPPPPPP"]);
     let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
     assert_eq!(
         simulation.entities()[0].mind.memory.known_resources.len(),
@@ -770,6 +781,7 @@ fn entity_remembers_seen_food_and_interrupts_exploration_when_hungry() {
 fn exploration_goal_is_retained_while_its_plan_is_viable() {
     let mut world = plain_grid(32, 8);
     let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
     let goal_since = simulation.entities()[0].mind.goal_since_tick;
     assert_eq!(
@@ -801,6 +813,7 @@ fn stale_resource_memory_is_forgotten() {
 fn unreachable_food_is_temporarily_avoided() {
     let mut world = grid_from_rows(&["P#F"]);
     let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
     simulation.step(&mut world);
 
     let remembered = &simulation.entities()[0].mind.memory.known_resources[0];
@@ -858,6 +871,9 @@ fn local_perception_reports_only_nearby_entities() {
         next_entity_id: 4,
         ..Simulation::default()
     };
+    for entity in &mut simulation.entities {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+    }
     simulation.step(&mut world);
     assert_eq!(simulation.entities()[0].mind.visible_entities, vec![2]);
 }
@@ -972,4 +988,229 @@ fn same_seed_and_steps_are_deterministic() {
         simulation_a.population_stats().births,
         simulation_b.population_stats().births
     );
+}
+
+#[test]
+fn infant_is_carried_by_caregiver() {
+    let mut world = plain_grid(10, 10);
+    let mut simulation = Simulation::with_population(42, &world, 1);
+    let caregiver_id = simulation.entities()[0].id;
+
+    simulation.push_entity((5, 5), 0);
+    let infant_id = simulation.entities().last().unwrap().id;
+    simulation.entities.last_mut().unwrap().caregiver_id = Some(caregiver_id);
+    simulation.step(&mut world);
+
+    let caregiver = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == caregiver_id)
+        .unwrap();
+    let infant = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == infant_id)
+        .unwrap();
+    assert_eq!((infant.x, infant.y), (caregiver.x, caregiver.y));
+}
+
+#[test]
+fn child_follows_caregiver() {
+    let mut world = plain_grid(10, 10);
+    let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+    simulation.entities[0].health = 1.0;
+    let caregiver_id = simulation.entities[0].id;
+
+    simulation.push_entity((9, 9), 5 * TICKS_PER_YEAR);
+    let child_id = simulation.entities().last().unwrap().id;
+    simulation.entities.last_mut().unwrap().caregiver_id = Some(caregiver_id);
+    simulation.resume();
+    simulation.advance(40, &mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    let caregiver = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == caregiver_id)
+        .unwrap();
+    let distance = child.x.abs_diff(caregiver.x) + child.y.abs_diff(caregiver.y);
+    assert!(distance <= 2, "child distance from caregiver is {distance}");
+}
+
+#[test]
+fn child_never_explores() {
+    let mut world = plain_grid(32, 32);
+    let mut simulation = Simulation::with_population(42, &world, 1);
+    let caregiver_id = simulation.entities()[0].id;
+
+    simulation.push_entity((0, 0), 5 * TICKS_PER_YEAR);
+    let child_id = simulation.entities().last().unwrap().id;
+    simulation.entities.last_mut().unwrap().caregiver_id = Some(caregiver_id);
+    simulation.step(&mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    assert_ne!(child.mind.current_goal, Some(Goal::Explore));
+}
+
+#[test]
+fn hungry_child_with_unreachable_food_never_explores() {
+    let mut world = grid_from_rows(&["P#F"]);
+    let mut simulation = simulation_with_entity(0, 0, 0.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+    let caregiver_id = simulation.entities[0].id;
+
+    simulation.push_entity((0, 0), 5 * TICKS_PER_YEAR);
+    let child_id = simulation.entities().last().unwrap().id;
+    let child = simulation.entities.last_mut().unwrap();
+    child.caregiver_id = Some(caregiver_id);
+    child.hunger = 90.0;
+
+    simulation.step(&mut world);
+    simulation.step(&mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    assert_ne!(child.mind.current_goal, Some(Goal::Explore));
+}
+
+#[test]
+fn caregiver_feeds_infant() {
+    let mut world = grid_from_rows(&["F"]);
+    let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+    let caregiver_id = simulation.entities[0].id;
+
+    simulation.push_entity((0, 0), 0);
+    let infant_id = simulation.entities().last().unwrap().id;
+    let infant = simulation.entities.last_mut().unwrap();
+    infant.caregiver_id = Some(caregiver_id);
+    infant.hunger = 80.0;
+    simulation.step(&mut world);
+
+    let infant = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == infant_id)
+        .unwrap();
+    assert!(infant.hunger < 80.0);
+}
+
+#[test]
+fn caregiver_feeds_infant_proportionally() {
+    let mut world = grid_from_rows(&["F"]);
+    world.resources[0].as_mut().unwrap().amount = 3;
+    let mut simulation = simulation_with_entity(0, 0, 90.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+    let caregiver_id = simulation.entities[0].id;
+
+    simulation.push_entity((0, 0), 0);
+    let infant_id = simulation.entities().last().unwrap().id;
+    let infant = simulation.entities.last_mut().unwrap();
+    infant.caregiver_id = Some(caregiver_id);
+    infant.hunger = 80.0;
+    simulation.step(&mut world);
+
+    let infant = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == infant_id)
+        .unwrap();
+    let expected = 80.0 + HUNGER_PER_TICK
+        - HUNGER_REDUCTION_PER_MEAL * (3.0 / f32::from(FOOD_CONSUMED_PER_MEAL));
+    assert!((infant.hunger - expected).abs() < 0.001);
+}
+
+#[test]
+fn orphaned_dependent_gets_new_caregiver() {
+    let mut world = plain_grid(10, 10);
+    let mut simulation = Simulation::with_population(42, &world, 5);
+    let previous_caregiver = simulation.entities()[0].id;
+
+    simulation.push_entity((0, 0), 5 * TICKS_PER_YEAR);
+    let child_id = simulation.entities().last().unwrap().id;
+    simulation.entities.last_mut().unwrap().caregiver_id = Some(previous_caregiver);
+    simulation.entities[0].health = 0.0;
+    simulation.step(&mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    assert!(child.caregiver_id.is_some());
+    assert_ne!(child.caregiver_id, Some(previous_caregiver));
+}
+
+#[test]
+fn dependent_without_caregiver_gets_assigned_one() {
+    let mut world = plain_grid(10, 10);
+    let mut simulation = Simulation::with_population(42, &world, 1);
+    simulation.push_entity((0, 0), 5 * TICKS_PER_YEAR);
+    let child_id = simulation.entities().last().unwrap().id;
+    simulation.step(&mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    assert!(child.caregiver_id.is_some());
+}
+
+#[test]
+fn newborn_gets_mother_as_caregiver() {
+    let mut world = plain_grid(4, 4);
+    let mut mother = fertile_entity(1, Sex::Female, 1, 1);
+    let father = fertile_entity(2, Sex::Male, 2, 1);
+    mother.pregnancy = Some(Pregnancy {
+        father_id: 2,
+        conceived_tick: 0,
+        due_tick: GESTATION_TICKS,
+    });
+    let mut simulation = Simulation {
+        tick: GESTATION_TICKS - 1,
+        entities: vec![mother, father],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    simulation.step(&mut world);
+    assert_eq!(simulation.entities().len(), 3);
+    assert_eq!(simulation.entities()[2].caregiver_id, Some(1));
+}
+
+#[test]
+fn adolescent_releases_caregiver() {
+    let mut world = plain_grid(10, 10);
+    let mut simulation = Simulation::with_population(42, &world, 1);
+    let caregiver_id = simulation.entities()[0].id;
+
+    simulation.push_entity((0, 0), CHILD_AGE_END - 1);
+    let child_id = simulation.entities().last().unwrap().id;
+    simulation.entities.last_mut().unwrap().caregiver_id = Some(caregiver_id);
+    simulation.step(&mut world);
+
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == child_id)
+        .unwrap();
+    assert_eq!(
+        LifeStage::from_age_ticks(child.age_ticks),
+        LifeStage::Adolescent
+    );
+    assert_eq!(child.caregiver_id, None);
 }

@@ -15,3 +15,6 @@ pub(super) const PREGNANCY_SPEED_PHASE_1: f32 = 1.0;
 pub(super) const PREGNANCY_SPEED_PHASE_2: f32 = 0.9;
 pub(super) const PREGNANCY_SPEED_PHASE_3: f32 = 0.75;
 pub(super) const PREGNANCY_SPEED_PHASE_4: f32 = 0.6;
+
+pub(super) const FOOD_CONSUMED_PER_MEAL: u16 = 10;
+pub(super) const HUNGER_REDUCTION_PER_MEAL: f32 = 50.0;
