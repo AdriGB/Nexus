@@ -1140,7 +1140,14 @@ fn orphaned_dependent_gets_new_caregiver() {
 
     simulation.push_entity((0, 0), 5 * TICKS_PER_YEAR);
     let child_id = simulation.entities().last().unwrap().id;
-    simulation.entities.last_mut().unwrap().caregiver_id = Some(previous_caregiver);
+    let child = simulation.entities.last_mut().unwrap();
+    child.caregiver_id = Some(previous_caregiver);
+    child
+        .mind
+        .set_plan(Goal::Follow, vec![Action::MoveTo(9, 9)], 0);
+    child.path = vec![(1, 1), (2, 2), (9, 9)];
+    child.path_index = 1;
+    child.movement_credit = 0.75;
     simulation.entities[0].health = 0.0;
     simulation.step(&mut world);
 
@@ -1151,6 +1158,10 @@ fn orphaned_dependent_gets_new_caregiver() {
         .unwrap();
     assert!(child.caregiver_id.is_some());
     assert_ne!(child.caregiver_id, Some(previous_caregiver));
+    assert_ne!(child.mind.current_goal, Some(Goal::Follow));
+    assert!(child.path.is_empty());
+    assert_eq!(child.path_index, 0);
+    assert_eq!(child.movement_credit, 0.0);
 }
 
 #[test]
@@ -1200,7 +1211,14 @@ fn adolescent_releases_caregiver() {
 
     simulation.push_entity((0, 0), CHILD_AGE_END - 1);
     let child_id = simulation.entities().last().unwrap().id;
-    simulation.entities.last_mut().unwrap().caregiver_id = Some(caregiver_id);
+    let child = simulation.entities.last_mut().unwrap();
+    child.caregiver_id = Some(caregiver_id);
+    child
+        .mind
+        .set_plan(Goal::Follow, vec![Action::MoveTo(9, 9)], 0);
+    child.path = vec![(1, 1), (9, 9)];
+    child.path_index = 1;
+    child.movement_credit = 0.75;
     simulation.step(&mut world);
 
     let child = simulation
@@ -1213,4 +1231,6 @@ fn adolescent_releases_caregiver() {
         LifeStage::Adolescent
     );
     assert_eq!(child.caregiver_id, None);
+    assert_ne!(child.mind.current_goal, Some(Goal::Follow));
+    assert_ne!(child.path, vec![(1, 1), (9, 9)]);
 }

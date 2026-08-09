@@ -509,11 +509,21 @@ impl Simulation {
             if entity.health <= 0.0 {
                 continue;
             }
-            if !matches!(
+
+            if matches!(
                 LifeStage::from_age_ticks(entity.age_ticks),
                 LifeStage::Infant | LifeStage::Child
             ) {
-                entity.caregiver_id = None;
+                continue;
+            }
+
+            if entity.caregiver_id.take().is_some()
+                && entity.mind.current_goal == Some(Goal::Follow)
+            {
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.movement_credit = 0.0;
             }
         }
     }
@@ -537,7 +547,16 @@ impl Simulation {
 
         for index in needs_reassignment {
             let position = (self.entities[index].x, self.entities[index].y);
-            self.entities[index].caregiver_id = self.find_nearest_caregiver(position, world);
+            let new_caregiver = self.find_nearest_caregiver(position, world);
+
+            if self.entities[index].caregiver_id != new_caregiver {
+                let entity = &mut self.entities[index];
+                entity.caregiver_id = new_caregiver;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.movement_credit = 0.0;
+            }
         }
     }
 
