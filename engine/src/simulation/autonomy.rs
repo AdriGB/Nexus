@@ -637,19 +637,49 @@ pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) 
 }
 
 fn reconcile_resource_memory(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
+    // 1. TTL expiration — cheap O(K), no world access.
+    mind.memory
+        .known_resources
+        .retain(|known| tick.saturating_sub(known.last_seen_tick) <= RESOURCE_MEMORY_TTL);
+
+    // 2. Depletion reconciliation — only within the visible y-band.
+    //    known_resources is sorted by (y, x, kind), so partition_point
+    //    gives us the local subset without scanning all K entries.
     let radius = mind.perception_radius;
-    mind.memory.known_resources.retain(|known| {
-        if tick.saturating_sub(known.last_seen_tick) > RESOURCE_MEMORY_TTL {
-            return false;
-        }
+    let min_y = position.1.saturating_sub(radius);
+    let max_y = position
+        .1
+        .saturating_add(radius)
+        .min(world.height.saturating_sub(1));
+
+    let start = mind
+        .memory
+        .known_resources
+        .partition_point(|known| known.y < min_y);
+    let end = mind
+        .memory
+        .known_resources
+        .partition_point(|known| known.y <= max_y);
+
+    let mut depleted = Vec::new();
+
+    for index in start..end {
+        let known = mind.memory.known_resources[index];
 
         if manhattan(position, (known.x, known.y)) > radius {
-            return true;
+            continue;
         }
 
-        let index = (known.y * world.width + known.x) as usize;
-        world.resources.get(index).is_some_and(Option::is_some)
-    });
+        let world_index = (known.y * world.width + known.x) as usize;
+
+        if world.resources.get(world_index).is_none_or(Option::is_none) {
+            depleted.push(index);
+        }
+    }
+
+    for index in depleted.into_iter().rev() {
+        mind.memory.known_resources.remove(index);
+    }
 }
 
 fn scan_visible_resources(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) -> u32 {
