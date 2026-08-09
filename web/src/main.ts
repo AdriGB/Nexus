@@ -38,6 +38,7 @@ import {
   bindSimulationControls,
   resetSimulationView,
 } from "./simulation";
+import { installPerformanceDebug } from "./simulation-debug";
 
 /* ── World generation ─────────────────────── */
 
@@ -116,6 +117,7 @@ async function boot(): Promise<void> {
   bindControls(generateWorld);
   bindSaveControls(generateWorld);
   bindSimulationControls();
+  installPerformanceDebug();
 
   inputLayer.addEventListener("mousemove", (e) => {
     const rect = inputLayer.getBoundingClientRect();
