@@ -258,6 +258,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn replanning_same_goal_preserves_goal_since_tick() {
+        let mut mind = Mind::default();
+
+        mind.set_plan(Goal::Explore, vec![], 10);
+        assert_eq!(mind.goal_since_tick, 10);
+
+        mind.set_plan(Goal::Explore, vec![], 50);
+        assert_eq!(mind.goal_since_tick, 10);
+
+        mind.set_plan(Goal::Rest, vec![], 80);
+        assert_eq!(mind.goal_since_tick, 80);
+    }
+
+    #[test]
     fn remembered_food_targets_are_ordered_by_distance_then_age() {
         let mut mind = Mind::default();
 
