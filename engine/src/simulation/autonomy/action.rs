@@ -154,8 +154,15 @@ pub(super) fn execute_current_action(
                 entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
-                entity.mind.advance_action();
-                entity.activity = EntityActivity::Socializing;
+                if currently_visible {
+                    entity.mind.advance_action();
+                    entity.activity = EntityActivity::Socializing;
+                } else {
+                    // Arrived at last known position but target is not visible
+                    // — abandon Socialize
+                    entity.mind.clear_goal();
+                    entity.activity = EntityActivity::Idle;
+                }
                 return 0;
             }
 
@@ -202,8 +209,15 @@ pub(super) fn execute_current_action(
                 entity.path.clear();
                 entity.path_index = 0;
                 if super::mind::manhattan((entity.x, entity.y), target_pos) <= SOCIAL_RADIUS {
-                    entity.mind.advance_action();
-                    entity.activity = EntityActivity::Socializing;
+                    if currently_visible {
+                        entity.mind.advance_action();
+                        entity.activity = EntityActivity::Socializing;
+                    } else {
+                        // Arrived at last known position but target is not visible
+                        // — abandon Socialize
+                        entity.mind.clear_goal();
+                        entity.activity = EntityActivity::Idle;
+                    }
                 } else if !currently_visible {
                     // Arrived at last known position but target is not here
                     // and not visible — abandon Socialize

@@ -607,7 +607,7 @@ fn approach_does_not_track_hidden_target() {
 fn approach_abandons_search_at_stale_last_seen_position() {
     // A approaches B's last known position.
     // A arrives but B is not there and not visible.
-    // A should abandon Socialize, not stand forever.
+    // A should abandon Socialize immediately, not stand forever.
     let mut world = plain_grid(32, 32);
     let mut sim = Simulation {
         entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
@@ -629,20 +629,37 @@ fn approach_abandons_search_at_stale_last_seen_position() {
     sim.entities[1].x = 30;
     sim.entities[1].y = 30;
 
-    // Run many ticks — A should eventually give up
-    let mut abandoned = false;
+    // Run until A arrives at last known position (7, 5)
+    let mut arrived = false;
     for _ in 0..200 {
         sim.step(&mut world);
-        let goal = sim.entities()[0].mind.current_goal;
-        // If A no longer has Socialize goal, it abandoned the search
-        if goal != Some(Goal::Socialize) {
-            abandoned = true;
+        if sim.entities()[0].x == 7 && sim.entities()[0].y == 5 {
+            arrived = true;
             break;
         }
     }
-    assert!(
-        abandoned,
-        "entity should abandon Socialize after reaching stale position with target absent"
+    assert!(arrived, "entity should arrive at last known position");
+
+    // Immediately after arriving, A should NOT be Socializing
+    // and should NOT have Interact(2) as current action
+    let activity = sim.entities()[0].activity;
+    let current_action = sim.entities()[0].mind.current_action();
+    let current_goal = sim.entities()[0].mind.current_goal;
+
+    assert_ne!(
+        activity,
+        super::super::entity::EntityActivity::Socializing,
+        "entity should NOT be Socializing when target is not visible at last_seen"
+    );
+    assert_ne!(
+        current_action,
+        Some(Action::Interact(2)),
+        "entity should NOT have Interact(2) as current action"
+    );
+    assert_ne!(
+        current_goal,
+        Some(Goal::Socialize),
+        "entity should abandon Socialize goal immediately"
     );
 }
 
