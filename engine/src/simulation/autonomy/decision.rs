@@ -70,12 +70,11 @@ pub fn evaluate_goals(
     let caution_explore_factor = 1.15 - personality.caution * 0.30;
     let caution_rest_factor = 0.85 + personality.caution * 0.30;
 
-    // Socialize: only meaningful when there are visible candidates.
-    // Without someone nearby to interact with, the utility is zero.
-    // Positive affinity among known entities boosts the score.
-    let socialize = if mind.visible_entities.is_empty() {
-        0.0
-    } else {
+    // Socialize: meaningful when there are visible candidates OR remembered
+    // entities with high positive affinity that could be sought out.
+    let socialize = {
+        let has_visible = !mind.visible_entities.is_empty();
+        
         let positive_affinity_count = mind
             .memory
             .known_entities
@@ -86,7 +85,19 @@ pub fn evaluate_goals(
         let affinity_ratio = positive_affinity_count / total_known;
         let sociability_factor = 0.3 + personality.sociability * 0.7;
         let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
-        sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor
+        
+        let base_social = sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor;
+        
+        if has_visible {
+            // Visible candidates present — full utility
+            base_social
+        } else if affinity_ratio > 0.3 && personality.sociability > 0.4 {
+            // No visible candidates but good relationships in memory
+            // Utility is reduced since target must be sought first
+            base_social * 0.5
+        } else {
+            0.0
+        }
     };
 
     mind.utility_scores = super::mind::UtilityScores {
@@ -249,6 +260,10 @@ pub(super) fn plan_goal(
 }
 
 /// Select the best entity to socialize with based on affinity, familiarity, and distance.
+/// 
+/// First checks visible entities. If none are suitable but there are known entities
+/// with positive affinity that are not currently visible, may select one from memory
+/// to seek out.
 fn select_social_target(
     mind: &Mind,
     origin: (u32, u32),
@@ -256,7 +271,8 @@ fn select_social_target(
     population: &[EntitySnapshot],
     personality: &Personality,
 ) -> Option<u32> {
-    let mut best: Option<(i32, u32)> = None;
+    let mut best_visible: Option<(i32, u32)> = None;
+    let mut best_memory: Option<(i32, u32)> = None;
 
     for &visible_id in &mind.visible_entities {
         if visible_id == entity_id {
@@ -289,14 +305,67 @@ fn select_social_target(
         let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
         let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
 
-        match best {
-            None => best = Some((score, visible_id)),
-            Some((best_score, _)) if score > best_score => best = Some((score, visible_id)),
+        match best_visible {
+            None => best_visible = Some((score, visible_id)),
+            Some((best_score, _)) if score > best_score => best_visible = Some((score, visible_id)),
             _ => {}
         }
     }
 
-    best.map(|(_, id)| id)
+    // If we have a good visible candidate, use it
+    if let Some((visible_score, _)) = best_visible {
+        // Only consider memory if visible score is low (no great options nearby)
+        if visible_score >= 50 {
+            return best_visible.map(|(_, id)| id);
+        }
+    }
+
+    // No great visible option — check memory for high-affinity entities to seek
+    for known in &mind.memory.known_entities {
+        if known.id == entity_id {
+            continue;
+        }
+
+        // Only seek entities with clearly positive affinity
+        if known.affinity <= 100 {
+            continue;
+        }
+
+        // Skip if currently visible (already handled above)
+        if mind
+            .visible_entities
+            .binary_search(&known.id)
+            .is_ok()
+        {
+            continue;
+        }
+
+        // Calculate score based on affinity and familiarity
+        // Distance uses last_seen position as an estimate
+        let distance = manhattan(origin, (known.last_seen_x, known.last_seen_y)) as i32;
+        let familiarity = known.interaction_count as i32;
+        let affinity = known.affinity as i32;
+
+        // Higher threshold for seeking from memory — must be worth the effort
+        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
+
+        // Require a minimum score to justify seeking from memory
+        if score < 100 {
+            continue;
+        }
+
+        match best_memory {
+            None => best_memory = Some((score, known.id)),
+            Some((best_score, _)) if score > best_score => best_memory = Some((score, known.id)),
+            _ => {}
+        }
+    }
+
+    // Return best from memory if available, otherwise fall back to visible
+    best_memory
+        .or(best_visible)
+        .map(|(_, id)| id)
 }
 
 fn plan_socialize(
@@ -315,26 +384,55 @@ fn plan_socialize(
         population,
         &entity.personality,
     ) else {
-        // No suitable target visible — fall back to exploration
+        // No suitable target visible or in memory — fall back to exploration
         plan_exploration(entity, world, tick, pathfinding_workspace);
         return;
     };
 
-    // Use only information the entity knows:
-    // target was just selected from visible_entities, so it must be in population.
-    let Some(target_snapshot) = population.iter().find(|s| s.id == target_id) else {
-        plan_exploration(entity, world, tick, pathfinding_workspace);
-        return;
-    };
+    // Target may be from memory (not visible) or from visible entities.
+    // If visible, use current position. If not visible, use last_seen.
+    let is_visible = entity
+        .mind
+        .visible_entities
+        .binary_search(&target_id)
+        .is_ok();
 
-    let target_pos = (target_snapshot.x, target_snapshot.y);
-
-    // Already close enough? Just interact.
-    if manhattan(origin, target_pos) <= super::social::SOCIAL_RADIUS {
-        entity
+    let target_pos = if is_visible {
+        // Visible target: use current known position
+        let Some(target_snapshot) = population.iter().find(|s| s.id == target_id) else {
+            plan_exploration(entity, world, tick, pathfinding_workspace);
+            return;
+        };
+        (target_snapshot.x, target_snapshot.y)
+    } else {
+        // Not visible: use last seen position from memory
+        let Some(known) = entity
             .mind
-            .set_plan(Goal::Socialize, vec![Action::Interact(target_id)], tick);
-        entity.activity = super::super::entity::EntityActivity::Socializing;
+            .memory
+            .known_entities
+            .iter()
+            .find(|k| k.id == target_id)
+        else {
+            plan_exploration(entity, world, tick, pathfinding_workspace);
+            return;
+        };
+        (known.last_seen_x, known.last_seen_y)
+    };
+
+    // Already close enough? Just interact (only if visible).
+    if manhattan(origin, target_pos) <= super::social::SOCIAL_RADIUS {
+        if is_visible {
+            entity
+                .mind
+                .set_plan(Goal::Socialize, vec![Action::Interact(target_id)], tick);
+            entity.activity = super::super::entity::EntityActivity::Socializing;
+        } else {
+            // Arrived at last_seen but target not visible — continue searching or abandon
+            entity.mind.clear_goal();
+            entity.path.clear();
+            entity.path_index = 0;
+            entity.activity = super::super::entity::EntityActivity::Idle;
+        }
         return;
     }
 
