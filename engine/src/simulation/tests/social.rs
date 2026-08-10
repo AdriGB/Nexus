@@ -622,8 +622,20 @@ fn approach_abandons_search_at_stale_last_seen_position() {
         entity.health = 100.0;
     }
 
-    // Let A perceive B and start planning
+    // Let A perceive B, then pin the state under test: an active approach
+    // toward B's last observed position.
     sim.step(&mut world);
+    sim.entities[0].x = 5;
+    sim.entities[0].y = 5;
+    sim.entities[0].path.clear();
+    sim.entities[0].path_index = 0;
+    sim.entities[0].movement_credit = 0.0;
+    let tick = sim.tick();
+    sim.entities[0].mind.set_plan(
+        Goal::Socialize,
+        vec![Action::ApproachEntity(2), Action::Interact(2)],
+        tick,
+    );
 
     // B disappears (teleport far away or "die")
     sim.entities[1].x = 30;
@@ -632,14 +644,29 @@ fn approach_abandons_search_at_stale_last_seen_position() {
     // Run until A reaches within SOCIAL_RADIUS of last known position (10, 5)
     let mut arrived = false;
     for _ in 0..200 {
+        for entity in &mut sim.entities {
+            entity.hunger = 0.0;
+            entity.health = 100.0;
+        }
+        sim.entities[1].x = 30;
+        sim.entities[1].y = 30;
+
         sim.step(&mut world);
-        let distance_to_last_seen = sim.entities()[0].x.abs_diff(10) + sim.entities()[0].y.abs_diff(5);
-        if distance_to_last_seen <= super::super::autonomy::social::SOCIAL_RADIUS {
+        let distance_to_last_seen =
+            sim.entities()[0].x.abs_diff(10) + sim.entities()[0].y.abs_diff(5);
+        if distance_to_last_seen <= super::super::autonomy::SOCIAL_RADIUS {
             arrived = true;
+            // Entering the radius can consume the movement portion of this
+            // tick. The next action update must notice the absent target and
+            // invalidate the stale social plan.
+            sim.step(&mut world);
             break;
         }
     }
-    assert!(arrived, "entity should reach vicinity of last known position");
+    assert!(
+        arrived,
+        "entity should reach vicinity of last known position"
+    );
 
     // Immediately after arriving, A should NOT be Socializing
     // and should NOT have Interact(2) as current action

@@ -14,6 +14,8 @@ pub use self::mind::KnownEntity;
 pub use self::mind::KnownResource;
 pub use self::mind::{Action, Goal, Mind};
 pub use self::perception::perceive;
+#[cfg(test)]
+pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;

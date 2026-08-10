@@ -3,7 +3,7 @@ use super::super::spatial::EntitySnapshot;
 use super::mind::manhattan;
 use std::collections::HashMap;
 
-pub(super) const SOCIAL_RADIUS: u32 = 2;
+pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
 pub(super) const MIN_INTERACTION_INTERVAL: u64 = 12;
 pub(super) const MAX_INTERACTION_INTERVAL: u64 = 72;
 
