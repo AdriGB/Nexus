@@ -9,7 +9,7 @@ use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_WEEK;
 use super::mind::{Action, Goal};
 use super::social::SOCIAL_RADIUS;
-use crate::pathfinding;
+use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
 const REST_HEALTH_PER_TICK: f32 = 0.25;
@@ -42,6 +42,7 @@ pub(super) fn execute_current_action(
     world: &mut Grid,
     tick: u64,
     population: &[EntitySnapshot],
+    pathfinding_workspace: &mut PathfindingWorkspace,
 ) -> u16 {
     let Some(action) = entity.mind.current_action() else {
         entity.activity = EntityActivity::Idle;
@@ -112,22 +113,37 @@ pub(super) fn execute_current_action(
             0
         }
         Action::ApproachEntity(target_id) => {
-            // Find the target's current position
-            let target_pos = population
-                .iter()
-                .find(|s| s.id == target_id)
-                .map(|s| (s.x, s.y));
+            let origin = (entity.x, entity.y);
+
+            // Use only information the entity actually knows:
+            // - If target is currently visible, use perceived position.
+            // - Otherwise, use last remembered position from memory.
+            // - If no memory exists, the target is unknown — abandon.
+            let currently_visible = entity.mind.visible_entities.contains(&target_id);
+
+            let target_pos = if currently_visible {
+                population
+                    .iter()
+                    .find(|s| s.id == target_id)
+                    .map(|s| (s.x, s.y))
+            } else {
+                entity
+                    .mind
+                    .memory
+                    .known_entities
+                    .iter()
+                    .find(|k| k.id == target_id)
+                    .map(|k| (k.last_seen_x, k.last_seen_y))
+            };
 
             let Some(target_pos) = target_pos else {
-                // Target no longer exists — clear goal
+                // No information about target — clear goal
                 entity.movement_credit = 0.0;
                 entity.mind.clear_goal();
                 entity.path.clear();
                 entity.path_index = 0;
                 return 0;
             };
-
-            let origin = (entity.x, entity.y);
 
             // Already close enough?
             if super::mind::manhattan(origin, target_pos) <= SOCIAL_RADIUS {
@@ -139,9 +155,14 @@ pub(super) fn execute_current_action(
                 return 0;
             }
 
-            // Replan path to target's current position
+            // Replan path to target position
             if target_pos != entity.path.last().copied().unwrap_or(origin) {
-                if let Some(path) = pathfinding::find_path(world, origin, target_pos) {
+                if let Some(path) = pathfinding::find_path_with_workspace(
+                    pathfinding_workspace,
+                    world,
+                    origin,
+                    target_pos,
+                ) {
                     entity.path = path.into_iter().skip(1).collect();
                     entity.path_index = 0;
                 }
@@ -153,8 +174,7 @@ pub(super) fn execute_current_action(
             if entity.path_index < entity.path.len() {
                 let next = entity.path[entity.path_index];
 
-                let Some(step_cost) =
-                    pathfinding::step_cost(world, (entity.x, entity.y), next)
+                let Some(step_cost) = pathfinding::step_cost(world, (entity.x, entity.y), next)
                 else {
                     entity.movement_credit = 0.0;
                     entity.mind.clear_goal();
@@ -177,15 +197,48 @@ pub(super) fn execute_current_action(
                 entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
-                // Check if close enough now
                 if super::mind::manhattan((entity.x, entity.y), target_pos) <= SOCIAL_RADIUS {
                     entity.mind.advance_action();
                     entity.activity = EntityActivity::Socializing;
+                } else if !currently_visible {
+                    // Arrived at last known position but target is not here
+                    // and not visible — abandon Socialize
+                    entity.mind.clear_goal();
+                    entity.activity = EntityActivity::Idle;
                 }
             }
             0
         }
-        Action::Interact => {
+        Action::Interact(target_id) => {
+            // Verify the target still exists and is within social radius
+            let Some(snapshot) = population.iter().find(|s| s.id == target_id) else {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                return 0;
+            };
+
+            let origin = (entity.x, entity.y);
+            let target_pos = (snapshot.x, snapshot.y);
+
+            if super::mind::manhattan(origin, target_pos) > SOCIAL_RADIUS {
+                // Target moved out of range — replan
+                entity.movement_credit = 0.0;
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.mind.set_plan(
+                    Goal::Socialize,
+                    vec![
+                        Action::ApproachEntity(target_id),
+                        Action::Interact(target_id),
+                    ],
+                    tick,
+                );
+                entity.activity = EntityActivity::Moving;
+                return 0;
+            }
+
             entity.movement_credit = 0.0;
             entity.mind.advance_action();
             entity.activity = EntityActivity::Socializing;

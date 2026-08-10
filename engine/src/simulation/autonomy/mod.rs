@@ -9,10 +9,10 @@ pub use self::decision::evaluate_goals;
 #[cfg(test)]
 pub use self::decision::exploration_target;
 #[cfg(test)]
-pub use self::mind::KnownResource;
-#[cfg(test)]
 pub use self::mind::KnownEntity;
-pub use self::mind::{Action, Goal, Mind, UtilityScores};
+#[cfg(test)]
+pub use self::mind::KnownResource;
+pub use self::mind::{Action, Goal, Mind};
 pub use self::perception::perceive;
 
 #[cfg(test)]
@@ -79,5 +79,5 @@ pub(super) fn update_entity(
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
 
-    action::execute_current_action(entity, world, tick, population)
+    action::execute_current_action(entity, world, tick, population, pathfinding_workspace)
 }

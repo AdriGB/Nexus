@@ -1,7 +1,7 @@
 use super::super::config::FOOD_SEARCH_THRESHOLD;
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
-use super::mind::{chunk_index, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
+use super::mind::{chunk_index, manhattan, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
@@ -70,19 +70,24 @@ pub fn evaluate_goals(
     let caution_explore_factor = 1.15 - personality.caution * 0.30;
     let caution_rest_factor = 0.85 + personality.caution * 0.30;
 
-    // Socialize: more attractive when sated, healthy, and sociable.
-    // Positive affinity nearby boosts the score.
-    let positive_affinity_count = mind
-        .memory
-        .known_entities
-        .iter()
-        .filter(|known| known.affinity > 0)
-        .count() as f32;
-    let total_known = mind.memory.known_entities.len().max(1) as f32;
-    let affinity_ratio = positive_affinity_count / total_known;
-    let sociability_factor = 0.3 + personality.sociability * 0.7;
-    let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
-    let socialize = sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor;
+    // Socialize: only meaningful when there are visible candidates.
+    // Without someone nearby to interact with, the utility is zero.
+    // Positive affinity among known entities boosts the score.
+    let socialize = if mind.visible_entities.is_empty() {
+        0.0
+    } else {
+        let positive_affinity_count = mind
+            .memory
+            .known_entities
+            .iter()
+            .filter(|known| known.affinity > 0)
+            .count() as f32;
+        let total_known = mind.memory.known_entities.len().max(1) as f32;
+        let affinity_ratio = positive_affinity_count / total_known;
+        let sociability_factor = 0.3 + personality.sociability * 0.7;
+        let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
+        sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor
+    };
 
     mind.utility_scores = super::mind::UtilityScores {
         eat: hunger_ratio * (0.65 + 0.35 * food_confidence),
@@ -303,14 +308,20 @@ fn plan_socialize(
 ) {
     let origin = (entity.x, entity.y);
 
-    let Some(target_id) =
-        select_social_target(&entity.mind, origin, entity.id, population, &entity.personality)
-    else {
+    let Some(target_id) = select_social_target(
+        &entity.mind,
+        origin,
+        entity.id,
+        population,
+        &entity.personality,
+    ) else {
         // No suitable target visible — fall back to exploration
         plan_exploration(entity, world, tick, pathfinding_workspace);
         return;
     };
 
+    // Use only information the entity knows:
+    // target was just selected from visible_entities, so it must be in population.
     let Some(target_snapshot) = population.iter().find(|s| s.id == target_id) else {
         plan_exploration(entity, world, tick, pathfinding_workspace);
         return;
@@ -320,11 +331,9 @@ fn plan_socialize(
 
     // Already close enough? Just interact.
     if manhattan(origin, target_pos) <= super::social::SOCIAL_RADIUS {
-        entity.mind.set_plan(
-            Goal::Socialize,
-            vec![Action::Interact],
-            tick,
-        );
+        entity
+            .mind
+            .set_plan(Goal::Socialize, vec![Action::Interact(target_id)], tick);
         entity.activity = super::super::entity::EntityActivity::Socializing;
         return;
     }
@@ -337,7 +346,10 @@ fn plan_socialize(
         entity.path_index = 0;
         entity.mind.set_plan(
             Goal::Socialize,
-            vec![Action::ApproachEntity(target_id), Action::Interact],
+            vec![
+                Action::ApproachEntity(target_id),
+                Action::Interact(target_id),
+            ],
             tick,
         );
         entity.activity = super::super::entity::EntityActivity::Moving;

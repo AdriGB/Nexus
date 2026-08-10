@@ -217,10 +217,7 @@ fn relationships_can_be_asymmetric() {
 use super::super::autonomy::Goal;
 
 fn has_socialize_goal(sim: &Simulation, entity_index: usize) -> bool {
-    sim.entities()[entity_index]
-        .mind
-        .current_goal
-        == Some(Goal::Socialize)
+    sim.entities()[entity_index].mind.current_goal == Some(Goal::Socialize)
 }
 
 #[test]
@@ -250,12 +247,27 @@ fn highly_sociable_entity_chooses_socialize_goal() {
             break;
         }
     }
-    assert!(socialized, "highly sociable entity should choose Socialize goal");
+    assert!(
+        socialized,
+        "highly sociable entity should choose Socialize goal"
+    );
 }
 
 #[test]
 fn unsociable_entity_rarely_socializes() {
     let mut world = plain_grid(20, 20);
+    // Scatter food so entities don't starve to death
+    for x in 0..20u32 {
+        for y in 0..20u32 {
+            if (x + y) % 3 == 0 {
+                let idx = (y * world.width + x) as usize;
+                world.resources[idx] = Some(super::super::super::world::ResourceDeposit {
+                    kind: super::super::super::world::ResourceKind::Food,
+                    amount: 500,
+                });
+            }
+        }
+    }
     let mut sim = Simulation {
         entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
         next_entity_id: 3,
@@ -313,7 +325,10 @@ fn socialize_goal_moves_entity_toward_target() {
             break;
         }
     }
-    assert!(moved_closer, "entity should move toward socialization target");
+    assert!(
+        moved_closer,
+        "entity should move toward socialization target"
+    );
 }
 
 #[test]
@@ -332,8 +347,11 @@ fn entity_avoids_negative_affinity_target() {
     sim.entities[0].health = 100.0;
 
     // Give entity 1 a negative memory of entity 2
-    sim.entities[0].mind.memory.known_entities.push(
-        super::super::autonomy::KnownEntity {
+    sim.entities[0]
+        .mind
+        .memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
             id: 2,
             first_seen_tick: 0,
             last_seen_tick: 0,
@@ -343,8 +361,7 @@ fn entity_avoids_negative_affinity_target() {
             affinity: -500,
             last_interaction_tick: 0,
             interaction_count: 0,
-        },
-    );
+        });
 
     // Run — entity should NOT socialize with entity 2
     let mut targeted_bad_entity = false;
@@ -382,7 +399,7 @@ fn socialize_utility_increases_with_positive_affinity() {
     };
 
     // No known entities — baseline socialize
-    let goal_no_affinity = super::super::autonomy::evaluate_goals(
+    let _ = super::super::autonomy::evaluate_goals(
         &mut mind,
         10.0,
         100.0,
@@ -393,8 +410,9 @@ fn socialize_utility_increases_with_positive_affinity() {
     let score_no_affinity = mind.utility_scores.socialize;
 
     // Add positive affinity entities
-    mind.memory.known_entities.push(
-        super::super::autonomy::KnownEntity {
+    mind.memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
             id: 10,
             first_seen_tick: 0,
             last_seen_tick: 0,
@@ -404,10 +422,10 @@ fn socialize_utility_increases_with_positive_affinity() {
             affinity: 500,
             last_interaction_tick: 0,
             interaction_count: 3,
-        },
-    );
-    mind.memory.known_entities.push(
-        super::super::autonomy::KnownEntity {
+        });
+    mind.memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
             id: 11,
             first_seen_tick: 0,
             last_seen_tick: 0,
@@ -417,8 +435,9 @@ fn socialize_utility_increases_with_positive_affinity() {
             affinity: 300,
             last_interaction_tick: 0,
             interaction_count: 2,
-        },
-    );
+        });
+    // Socialize utility requires visible candidates
+    mind.visible_entities = vec![10, 11];
 
     let _ = super::super::autonomy::evaluate_goals(
         &mut mind,
@@ -433,5 +452,263 @@ fn socialize_utility_increases_with_positive_affinity() {
     assert!(
         score_with_affinity > score_no_affinity,
         "socialize utility should increase with positive affinity: no_affinity={score_no_affinity}, with_affinity={score_with_affinity}"
+    );
+}
+
+// ── Knowledge-bounded social pursuit tests ───────────────────────────────
+
+use super::super::autonomy::Action;
+
+#[test]
+fn approach_uses_visible_target_position() {
+    let mut world = plain_grid(20, 20);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 8, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    // Suppress all goals except socialize
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Run until entity 1 plans to approach entity 2
+    let mut found_approach = false;
+    for _ in 0..50 {
+        sim.step(&mut world);
+        if let Some(Action::ApproachEntity(2)) = sim.entities()[0].mind.current_action() {
+            found_approach = true;
+            break;
+        }
+    }
+    assert!(
+        found_approach,
+        "entity should plan to approach visible target"
+    );
+
+    // Entity 2 should be in visible_entities (it's nearby)
+    assert!(
+        sim.entities()[0].mind.visible_entities.contains(&2),
+        "target should be visible during approach"
+    );
+}
+
+#[test]
+fn approach_uses_last_seen_position_when_target_not_visible() {
+    let mut world = plain_grid(64, 64);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 8, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    // Suppress all goals except socialize
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Step once so entity 1 perceives entity 2 and remembers it
+    sim.step(&mut world);
+    assert!(
+        sim.entities()[0]
+            .mind
+            .memory
+            .known_entities
+            .iter()
+            .any(|k| k.id == 2),
+        "entity 1 should remember entity 2"
+    );
+
+    // Teleport entity 2 far away (beyond perception radius)
+    sim.entities[1].x = 50;
+    sim.entities[1].y = 50;
+
+    // Step again — entity 1 should plan approach using last_seen position
+    sim.step(&mut world);
+
+    if let Some(Action::ApproachEntity(target_id)) = sim.entities()[0].mind.current_action() {
+        assert_eq!(target_id, 2);
+        // Entity 1 should be heading toward (8, 5), the last known position
+        // NOT toward (50, 50), the real position
+        let path_target = sim.entities()[0].path.last().copied();
+        if let Some(dest) = path_target {
+            let dist_to_last_seen = dest.0.abs_diff(8) + dest.1.abs_diff(5);
+            let dist_to_real = dest.0.abs_diff(50) + dest.1.abs_diff(50);
+            assert!(
+                dist_to_last_seen < dist_to_real,
+                "should head toward last_seen (8,5) not real (50,50): dest={:?}",
+                dest
+            );
+        }
+    }
+}
+
+#[test]
+fn approach_does_not_track_hidden_target() {
+    // The key anti-omniscience test:
+    // A sees B at (5,5) on tick 1.
+    // B teleports to (15,15) on tick 2 (beyond perception).
+    // A must follow (5,5), NOT (15,15).
+    let mut world = plain_grid(64, 64);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 3, 5), default_adult(2, 5, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Tick 1: A sees B at (5,5)
+    sim.step(&mut world);
+    let known = sim.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|k| k.id == 2)
+        .expect("should remember entity 2");
+    assert_eq!((known.last_seen_x, known.last_seen_y), (5, 5));
+
+    // B moves far away (beyond perception radius of 6)
+    sim.entities[1].x = 15;
+    sim.entities[1].y = 15;
+
+    // Tick 2: A should still head toward (5,5)
+    sim.step(&mut world);
+
+    // Verify A's memory still says (5,5) — not (15,15)
+    let known = sim.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|k| k.id == 2)
+        .expect("should still remember entity 2");
+    assert_eq!(
+        (known.last_seen_x, known.last_seen_y),
+        (5, 5),
+        "memory should retain last seen position, not track real position"
+    );
+}
+
+#[test]
+fn approach_abandons_search_at_stale_last_seen_position() {
+    // A approaches B's last known position.
+    // A arrives but B is not there and not visible.
+    // A should abandon Socialize, not stand forever.
+    let mut world = plain_grid(32, 32);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Let A perceive B and start planning
+    sim.step(&mut world);
+
+    // B disappears (teleport far away or "die")
+    sim.entities[1].x = 30;
+    sim.entities[1].y = 30;
+
+    // Run many ticks — A should eventually give up
+    let mut abandoned = false;
+    for _ in 0..200 {
+        sim.step(&mut world);
+        let goal = sim.entities()[0].mind.current_goal;
+        // If A no longer has Socialize goal, it abandoned the search
+        if goal != Some(Goal::Socialize) {
+            abandoned = true;
+            break;
+        }
+    }
+    assert!(
+        abandoned,
+        "entity should abandon Socialize after reaching stale position with target absent"
+    );
+}
+
+#[test]
+fn interact_requires_target_in_social_radius() {
+    let mut world = plain_grid(20, 20);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Force a plan with Interact(2) while target is far away
+    sim.entities[0]
+        .mind
+        .set_plan(Goal::Socialize, vec![Action::Interact(2)], 0);
+    // Move target beyond SOCIAL_RADIUS (2)
+    sim.entities[1].x = 15;
+    sim.entities[1].y = 15;
+
+    sim.step(&mut world);
+
+    // After executing Interact with target out of range,
+    // entity should NOT be Socializing — it should replan or clear
+    let activity = sim.entities()[0].activity;
+    assert_ne!(
+        activity,
+        super::super::entity::EntityActivity::Socializing,
+        "should not Socialize when target is outside SOCIAL_RADIUS"
+    );
+}
+
+#[test]
+fn socialize_utility_is_zero_without_candidates() {
+    use super::super::entity::Personality;
+
+    let mut mind = super::super::autonomy::Mind::default();
+    let personality = Personality {
+        curiosity: 0.0,
+        sociability: 1.0,
+        cooperativeness: 0.5,
+        caution: 0.0,
+        persistence: 0.0,
+    };
+
+    // No visible entities at all — socialize should be 0
+    mind.visible_entities.clear();
+
+    let _ = super::super::autonomy::evaluate_goals(
+        &mut mind,
+        0.0,   // no hunger
+        100.0, // full health
+        25 * super::super::time::TICKS_PER_YEAR,
+        &personality,
+        None,
+    );
+
+    assert_eq!(
+        mind.utility_scores.socialize, 0.0,
+        "socialize utility should be 0 with no visible candidates"
     );
 }
