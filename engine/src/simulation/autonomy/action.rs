@@ -5,8 +5,10 @@ use super::super::config::{
     PREGNANCY_SPEED_PHASE_3, PREGNANCY_SPEED_PHASE_4,
 };
 use super::super::entity::{Entity, EntityActivity, LifeStage};
+use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_WEEK;
 use super::mind::{Action, Goal};
+use super::social::SOCIAL_RADIUS;
 use crate::pathfinding;
 use crate::world::{Grid, ResourceKind};
 
@@ -35,7 +37,12 @@ pub(in crate::simulation) fn effective_movement_speed(entity: &Entity, tick: u64
     BASE_MOVEMENT_SPEED * stage_factor * pregnancy_factor
 }
 
-pub(super) fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick: u64) -> u16 {
+pub(super) fn execute_current_action(
+    entity: &mut Entity,
+    world: &mut Grid,
+    tick: u64,
+    population: &[EntitySnapshot],
+) -> u16 {
     let Some(action) = entity.mind.current_action() else {
         entity.activity = EntityActivity::Idle;
         return 0;
@@ -102,6 +109,86 @@ pub(super) fn execute_current_action(entity: &mut Entity, world: &mut Grid, tick
             }
             entity.mind.advance_action();
             entity.activity = EntityActivity::Resting;
+            0
+        }
+        Action::ApproachEntity(target_id) => {
+            // Find the target's current position
+            let target_pos = population
+                .iter()
+                .find(|s| s.id == target_id)
+                .map(|s| (s.x, s.y));
+
+            let Some(target_pos) = target_pos else {
+                // Target no longer exists — clear goal
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                return 0;
+            };
+
+            let origin = (entity.x, entity.y);
+
+            // Already close enough?
+            if super::mind::manhattan(origin, target_pos) <= SOCIAL_RADIUS {
+                entity.movement_credit = 0.0;
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.mind.advance_action();
+                entity.activity = EntityActivity::Socializing;
+                return 0;
+            }
+
+            // Replan path to target's current position
+            if target_pos != entity.path.last().copied().unwrap_or(origin) {
+                if let Some(path) = pathfinding::find_path(world, origin, target_pos) {
+                    entity.path = path.into_iter().skip(1).collect();
+                    entity.path_index = 0;
+                }
+            }
+
+            // Move along path
+            entity.movement_credit += effective_movement_speed(entity, tick);
+
+            if entity.path_index < entity.path.len() {
+                let next = entity.path[entity.path_index];
+
+                let Some(step_cost) =
+                    pathfinding::step_cost(world, (entity.x, entity.y), next)
+                else {
+                    entity.movement_credit = 0.0;
+                    entity.mind.clear_goal();
+                    entity.path.clear();
+                    entity.path_index = 0;
+                    return 0;
+                };
+
+                if entity.movement_credit >= step_cost {
+                    entity.movement_credit -= step_cost;
+                    entity.x = next.0;
+                    entity.y = next.1;
+                    entity.path_index += 1;
+                    entity.activity = EntityActivity::Moving;
+                }
+            }
+
+            // Check if we arrived after moving
+            if entity.path_index >= entity.path.len() {
+                entity.movement_credit = 0.0;
+                entity.path.clear();
+                entity.path_index = 0;
+                // Check if close enough now
+                if super::mind::manhattan((entity.x, entity.y), target_pos) <= SOCIAL_RADIUS {
+                    entity.mind.advance_action();
+                    entity.activity = EntityActivity::Socializing;
+                }
+            }
+            0
+        }
+        Action::Interact => {
+            entity.movement_credit = 0.0;
+            entity.mind.advance_action();
+            entity.activity = EntityActivity::Socializing;
             0
         }
     }

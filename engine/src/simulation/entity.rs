@@ -41,6 +41,7 @@ pub enum EntityActivity {
     Starving = 3,
     Exploring = 4,
     Resting = 5,
+    Socializing = 6,
 }
 
 impl EntityActivity {
@@ -52,6 +53,7 @@ impl EntityActivity {
             Self::Starving => "Starving",
             Self::Exploring => "Exploring",
             Self::Resting => "Resting",
+            Self::Socializing => "Socializing",
         }
     }
 }
