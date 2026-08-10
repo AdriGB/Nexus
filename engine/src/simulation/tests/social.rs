@@ -712,3 +712,81 @@ fn socialize_utility_is_zero_without_candidates() {
         "socialize utility should be 0 with no visible candidates"
     );
 }
+
+#[test]
+fn interact_does_not_reacquire_hidden_target() {
+    use super::super::entity::EntityActivity;
+
+    let mut world = plain_grid(64, 64);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 8, 5)],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    for entity in &mut sim.entities {
+        entity.personality.sociability = 1.0;
+        entity.personality.curiosity = 0.0;
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+
+    // Step once so A perceives B at (8, 5) and remembers it
+    sim.step(&mut world);
+    assert!(
+        sim.entities()[0].mind.visible_entities.contains(&2),
+        "A should see B initially"
+    );
+
+    // Force a plan: Socialize -> [ApproachEntity(2), Interact(2)]
+    sim.entities[0].mind.set_plan(
+        Goal::Socialize,
+        vec![Action::ApproachEntity(2), Action::Interact(2)],
+        0,
+    );
+
+    // B moves to (15, 15) and becomes invisible to A
+    sim.entities[1].x = 15;
+    sim.entities[1].y = 15;
+
+    // Clear A's visibility so B is not visible
+    sim.entities[0].mind.visible_entities.clear();
+
+    // Manually move A to B's last known position (8, 5)
+    sim.entities[0].x = 8;
+    sim.entities[0].y = 5;
+
+    // Advance to Interact action
+    sim.entities[0].mind.advance_action();
+    assert_eq!(
+        sim.entities()[0].mind.current_action(),
+        Some(Action::Interact(2)),
+        "should be on Interact(2)"
+    );
+
+    // Execute one step — Interact should NOT reacquire B at (15, 15)
+    sim.step(&mut world);
+
+    // Verify A did NOT create a path toward the real position (15, 15)
+    let path_target = sim.entities()[0].path.last().copied();
+    if let Some(dest) = path_target {
+        let dist_to_real = dest.0.abs_diff(15) + dest.1.abs_diff(15);
+        assert!(
+            dist_to_real > 5,
+            "A should NOT path toward B's real position (15, 15)"
+        );
+    }
+
+    // Verify A abandoned the Socialize goal (no longer pursuing B)
+    let activity = sim.entities()[0].activity;
+    assert_ne!(
+        activity,
+        EntityActivity::Moving,
+        "A should not be Moving toward hidden B"
+    );
+    assert_ne!(
+        activity,
+        EntityActivity::Socializing,
+        "A should not be Socializing with hidden B"
+    );
+}

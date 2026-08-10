@@ -119,7 +119,11 @@ pub(super) fn execute_current_action(
             // - If target is currently visible, use perceived position.
             // - Otherwise, use last remembered position from memory.
             // - If no memory exists, the target is unknown — abandon.
-            let currently_visible = entity.mind.visible_entities.contains(&target_id);
+            let currently_visible = entity
+                .mind
+                .visible_entities
+                .binary_search(&target_id)
+                .is_ok();
 
             let target_pos = if currently_visible {
                 population
@@ -210,12 +214,27 @@ pub(super) fn execute_current_action(
             0
         }
         Action::Interact(target_id) => {
-            // Verify the target still exists and is within social radius
+            // Require the target to be currently visible — no omniscience
+            if entity
+                .mind
+                .visible_entities
+                .binary_search(&target_id)
+                .is_err()
+            {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.activity = EntityActivity::Idle;
+                return 0;
+            }
+
             let Some(snapshot) = population.iter().find(|s| s.id == target_id) else {
                 entity.movement_credit = 0.0;
                 entity.mind.clear_goal();
                 entity.path.clear();
                 entity.path_index = 0;
+                entity.activity = EntityActivity::Idle;
                 return 0;
             };
 
