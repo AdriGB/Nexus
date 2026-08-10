@@ -101,9 +101,10 @@ export interface EntityInfo {
     | "Moving"
     | "Starving"
     | "Exploring"
-    | "Resting";
+    | "Resting"
+    | "Socializing";
   remaining_path: number;
-  goal: "None" | "Eat" | "Explore" | "Follow" | "Rest";
+  goal: "None" | "Eat" | "Explore" | "Follow" | "Rest" | "Socialize";
   action: string;
   goal_age_ticks: number;
   known_resources: number;

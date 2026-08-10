@@ -3,11 +3,11 @@ use super::super::spatial::EntitySnapshot;
 use super::mind::manhattan;
 use std::collections::HashMap;
 
-const SOCIAL_RADIUS: u32 = 2;
-const MIN_INTERACTION_INTERVAL: u64 = 12;
-const MAX_INTERACTION_INTERVAL: u64 = 72;
+pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
+pub(super) const MIN_INTERACTION_INTERVAL: u64 = 12;
+pub(super) const MAX_INTERACTION_INTERVAL: u64 = 72;
 
-fn interaction_interval(a: &Personality, b: &Personality) -> u64 {
+pub(super) fn interaction_interval(a: &Personality, b: &Personality) -> u64 {
     let sociability = (a.sociability + b.sociability) * 0.5;
     let span = (MAX_INTERACTION_INTERVAL - MIN_INTERACTION_INTERVAL) as f32;
 

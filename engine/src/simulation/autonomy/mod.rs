@@ -9,9 +9,13 @@ pub use self::decision::evaluate_goals;
 #[cfg(test)]
 pub use self::decision::exploration_target;
 #[cfg(test)]
+pub use self::mind::KnownEntity;
+#[cfg(test)]
 pub use self::mind::KnownResource;
 pub use self::mind::{Action, Goal, Mind};
 pub use self::perception::perceive;
+#[cfg(test)]
+pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;
@@ -77,5 +81,5 @@ pub(super) fn update_entity(
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
 
-    action::execute_current_action(entity, world, tick)
+    action::execute_current_action(entity, world, tick, population, pathfinding_workspace)
 }

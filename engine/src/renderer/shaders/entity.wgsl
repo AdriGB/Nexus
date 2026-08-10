@@ -68,6 +68,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, vec3<f32>(0.72, 0.42, 1.0), 0.55);
     } else if (input.activity == 5u) {
         color = mix(color, vec3<f32>(0.45, 0.55, 0.72), 0.65);
+    } else if (input.activity == 6u) {
+        color = mix(color, vec3<f32>(1.0, 0.55, 0.85), 0.55);
     }
     let edge = smoothstep(1.0, 0.72, radius);
     return vec4<f32>(color * (0.72 + edge * 0.28), 0.98);

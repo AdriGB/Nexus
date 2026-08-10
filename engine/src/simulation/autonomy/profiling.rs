@@ -101,7 +101,7 @@ fn profiled_update_entity(
     }
 
     let start = Instant::now();
-    let consumed = execute_current_action(entity, world, tick);
+    let consumed = execute_current_action(entity, world, tick, population, pathfinding_workspace);
     profile.action_us += start.elapsed().as_micros() as u64;
     profile.sampled_entities += 1;
 

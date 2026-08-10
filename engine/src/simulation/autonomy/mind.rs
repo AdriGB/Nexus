@@ -17,6 +17,7 @@ pub enum Goal {
     Explore,
     Follow,
     Rest,
+    Socialize,
 }
 
 impl Goal {
@@ -26,6 +27,7 @@ impl Goal {
             Self::Explore => "Explore",
             Self::Follow => "Follow",
             Self::Rest => "Rest",
+            Self::Socialize => "Socialize",
         }
     }
 }
@@ -36,6 +38,8 @@ pub enum Action {
     Consume(ResourceKind),
     ExploreArea(u32, u32),
     Wait,
+    ApproachEntity(u32),
+    Interact(u32),
 }
 
 impl Action {
@@ -45,13 +49,23 @@ impl Action {
             Self::Consume(_) => "Consume resource",
             Self::ExploreArea(_, _) => "Explore area",
             Self::Wait => "Wait",
+            Self::ApproachEntity(_) => "Approach entity",
+            Self::Interact(_) => "Interact",
         }
     }
 
     pub fn destination(self) -> Option<(u32, u32)> {
         match self {
             Self::MoveTo(x, y) | Self::ExploreArea(x, y) => Some((x, y)),
-            Self::Consume(_) | Self::Wait => None,
+            Self::Consume(_) | Self::Wait | Self::ApproachEntity(_) | Self::Interact(_) => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn target_entity_id(self) -> Option<u32> {
+        match self {
+            Self::ApproachEntity(id) | Self::Interact(id) => Some(id),
+            _ => None,
         }
     }
 }
@@ -237,6 +251,7 @@ pub struct UtilityScores {
     pub eat: f32,
     pub explore: f32,
     pub rest: f32,
+    pub socialize: f32,
 }
 
 #[derive(Clone, Debug)]

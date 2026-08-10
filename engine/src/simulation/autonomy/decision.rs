@@ -1,7 +1,7 @@
 use super::super::config::FOOD_SEARCH_THRESHOLD;
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
-use super::mind::{chunk_index, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
+use super::mind::{chunk_index, manhattan, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
@@ -40,6 +40,7 @@ pub fn evaluate_goals(
                 eat: 1.0,
                 explore: 0.0,
                 rest: 0.0,
+                socialize: 0.0,
             };
             return Goal::Eat;
         }
@@ -47,6 +48,7 @@ pub fn evaluate_goals(
             eat: 0.0,
             explore: 0.0,
             rest: 0.5,
+            socialize: 0.0,
         };
         return Goal::Follow;
     }
@@ -68,18 +70,39 @@ pub fn evaluate_goals(
     let caution_explore_factor = 1.15 - personality.caution * 0.30;
     let caution_rest_factor = 0.85 + personality.caution * 0.30;
 
+    // Socialize: only meaningful when there are visible candidates.
+    // Without someone nearby to interact with, the utility is zero.
+    // Positive affinity among known entities boosts the score.
+    let socialize = if mind.visible_entities.is_empty() {
+        0.0
+    } else {
+        let positive_affinity_count = mind
+            .memory
+            .known_entities
+            .iter()
+            .filter(|known| known.affinity > 0)
+            .count() as f32;
+        let total_known = mind.memory.known_entities.len().max(1) as f32;
+        let affinity_ratio = positive_affinity_count / total_known;
+        let sociability_factor = 0.3 + personality.sociability * 0.7;
+        let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
+        sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor
+    };
+
     mind.utility_scores = super::mind::UtilityScores {
         eat: hunger_ratio * (0.65 + 0.35 * food_confidence),
         explore: ((1.0 - hunger_ratio) * 0.55 + (1.0 - food_confidence) * 0.2)
             * curiosity_factor
             * caution_explore_factor,
         rest: (health_deficit * 0.8 + 0.05) * caution_rest_factor,
+        socialize,
     };
 
     let scores = [
         (mind.utility_scores.eat, Goal::Eat),
         (mind.utility_scores.explore, Goal::Explore),
         (mind.utility_scores.rest, Goal::Rest),
+        (mind.utility_scores.socialize, Goal::Socialize),
     ];
     let (best_score, best_goal) = scores
         .into_iter()
@@ -219,6 +242,121 @@ pub(super) fn plan_goal(
             entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
             entity.activity = super::super::entity::EntityActivity::Resting;
         }
+        Goal::Socialize => {
+            plan_socialize(entity, world, tick, pathfinding_workspace, population);
+        }
+    }
+}
+
+/// Select the best entity to socialize with based on affinity, familiarity, and distance.
+fn select_social_target(
+    mind: &Mind,
+    origin: (u32, u32),
+    entity_id: u32,
+    population: &[EntitySnapshot],
+    personality: &Personality,
+) -> Option<u32> {
+    let mut best: Option<(i32, u32)> = None;
+
+    for &visible_id in &mind.visible_entities {
+        if visible_id == entity_id {
+            continue;
+        }
+
+        let Some(snapshot) = population.iter().find(|s| s.id == visible_id) else {
+            continue;
+        };
+
+        let distance = manhattan(origin, (snapshot.x, snapshot.y)) as i32;
+
+        // Look up relationship
+        let known = mind
+            .memory
+            .known_entities
+            .iter()
+            .find(|k| k.id == visible_id);
+
+        let affinity = known.map_or(0, |k| k.affinity as i32);
+        let familiarity = known.map_or(0u32, |k| k.interaction_count) as i32;
+
+        // Skip entities with strong negative affinity
+        if affinity < -200 {
+            continue;
+        }
+
+        // Score: higher affinity and familiarity are better, closer is better
+        // Sociability of the observer makes distance less important
+        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
+
+        match best {
+            None => best = Some((score, visible_id)),
+            Some((best_score, _)) if score > best_score => best = Some((score, visible_id)),
+            _ => {}
+        }
+    }
+
+    best.map(|(_, id)| id)
+}
+
+fn plan_socialize(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    population: &[EntitySnapshot],
+) {
+    let origin = (entity.x, entity.y);
+
+    let Some(target_id) = select_social_target(
+        &entity.mind,
+        origin,
+        entity.id,
+        population,
+        &entity.personality,
+    ) else {
+        // No suitable target visible — fall back to exploration
+        plan_exploration(entity, world, tick, pathfinding_workspace);
+        return;
+    };
+
+    // Use only information the entity knows:
+    // target was just selected from visible_entities, so it must be in population.
+    let Some(target_snapshot) = population.iter().find(|s| s.id == target_id) else {
+        plan_exploration(entity, world, tick, pathfinding_workspace);
+        return;
+    };
+
+    let target_pos = (target_snapshot.x, target_snapshot.y);
+
+    // Already close enough? Just interact.
+    if manhattan(origin, target_pos) <= super::social::SOCIAL_RADIUS {
+        entity
+            .mind
+            .set_plan(Goal::Socialize, vec![Action::Interact(target_id)], tick);
+        entity.activity = super::super::entity::EntityActivity::Socializing;
+        return;
+    }
+
+    // Need to approach
+    if let Some(path) =
+        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target_pos)
+    {
+        entity.path = path.into_iter().skip(1).collect();
+        entity.path_index = 0;
+        entity.mind.set_plan(
+            Goal::Socialize,
+            vec![
+                Action::ApproachEntity(target_id),
+                Action::Interact(target_id),
+            ],
+            tick,
+        );
+        entity.activity = super::super::entity::EntityActivity::Moving;
+    } else {
+        // Can't reach target, fall back
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = super::super::entity::EntityActivity::Resting;
     }
 }
 
