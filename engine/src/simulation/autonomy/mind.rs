@@ -56,10 +56,8 @@ impl Action {
     }
 }
 
-#[allow(dead_code, reason = "used by the upcoming social interaction system")]
 const MIN_AFFINITY: i16 = -1_000;
 pub(super) const NEUTRAL_AFFINITY: i16 = 0;
-#[allow(dead_code, reason = "used by the upcoming social interaction system")]
 const MAX_AFFINITY: i16 = 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +80,8 @@ pub struct KnownEntity {
     pub last_seen_y: u32,
     pub observed_ticks: u32,
     pub affinity: i16,
+    pub last_interaction_tick: u64,
+    pub interaction_count: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,6 +162,32 @@ impl Memory {
             .affinity
             .saturating_add(delta)
             .clamp(MIN_AFFINITY, MAX_AFFINITY);
+
+        true
+    }
+
+    pub(super) fn record_interaction(
+        &mut self,
+        entity_id: u32,
+        tick: u64,
+        affinity_delta: i16,
+    ) -> bool {
+        let Ok(index) = self
+            .known_entities
+            .binary_search_by_key(&entity_id, |known| known.id)
+        else {
+            return false;
+        };
+
+        let known = &mut self.known_entities[index];
+
+        known.affinity = known
+            .affinity
+            .saturating_add(affinity_delta)
+            .clamp(MIN_AFFINITY, MAX_AFFINITY);
+
+        known.last_interaction_tick = tick;
+        known.interaction_count = known.interaction_count.saturating_add(1);
 
         true
     }
@@ -310,6 +336,8 @@ mod tests {
             last_seen_y: 0,
             observed_ticks: 1,
             affinity: NEUTRAL_AFFINITY,
+            last_interaction_tick: 0,
+            interaction_count: 0,
         }
     }
 

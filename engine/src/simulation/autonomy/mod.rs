@@ -3,6 +3,7 @@ mod decision;
 mod mind;
 mod perception;
 mod profiling;
+mod social;
 
 pub use self::decision::evaluate_goals;
 #[cfg(test)]
@@ -21,6 +22,14 @@ use super::entity::Entity;
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
+
+pub(super) fn process_social_interactions(
+    entities: &mut [Entity],
+    population: &[EntitySnapshot],
+    tick: u64,
+) {
+    social::process_social_interactions(entities, population, tick);
+}
 
 pub(super) fn update_entity(
     entity: &mut Entity,

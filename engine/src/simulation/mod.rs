@@ -407,6 +407,12 @@ impl Simulation {
             consumed += u64::from(result);
         }
 
+        autonomy::process_social_interactions(
+            &mut self.entities,
+            &self.population_cache,
+            self.tick,
+        );
+
         (consumed, consumer_ids)
     }
 

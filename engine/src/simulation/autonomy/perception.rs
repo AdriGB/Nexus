@@ -97,6 +97,8 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
                     last_seen_y: other.y,
                     observed_ticks: 1,
                     affinity: super::mind::NEUTRAL_AFFINITY,
+                    last_interaction_tick: 0,
+                    interaction_count: 0,
                 },
             );
         }
@@ -259,6 +261,8 @@ mod tests {
         assert_eq!(known.last_seen_y, 20);
         assert_eq!(known.observed_ticks, 1);
         assert_eq!(known.affinity, NEUTRAL_AFFINITY);
+        assert_eq!(known.last_interaction_tick, 0);
+        assert_eq!(known.interaction_count, 0);
     }
 
     #[test]

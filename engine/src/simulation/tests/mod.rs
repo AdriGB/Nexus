@@ -6,4 +6,5 @@ mod movement;
 mod parity;
 mod personality;
 mod resources;
+mod social;
 mod support;

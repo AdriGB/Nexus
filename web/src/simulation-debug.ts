@@ -40,6 +40,7 @@ interface SimulationAutonomyProfile {
   known_resources_total: number;
   known_resources_max: number;
   visible_resources_seen: number;
+  social_us: number;
 }
 
 export function benchmarkSimulation(
@@ -191,7 +192,8 @@ export function installPerformanceDebug(): void {
       profile.entity_perception_us +
       profile.plan_validation_us +
       profile.planning_us +
-      profile.action_us;
+      profile.action_us +
+      profile.social_us;
     const totalSafe = Math.max(totalUs, 1);
 
     const rows = [
@@ -229,6 +231,11 @@ export function installPerformanceDebug(): void {
         phase: "action",
         ms: (profile.action_us / 1000).toFixed(3),
         percent: `${((profile.action_us / totalSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "social",
+        ms: (profile.social_us / 1000).toFixed(3),
+        percent: `${((profile.social_us / totalSafe) * 100).toFixed(1)}%`,
       },
       { phase: "---", ms: "---", percent: "---" },
       {

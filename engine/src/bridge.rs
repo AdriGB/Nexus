@@ -51,6 +51,7 @@ struct AutonomyProfileDto {
     known_resources_total: u32,
     known_resources_max: u32,
     visible_resources_seen: u32,
+    social_us: u64,
 }
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
@@ -68,6 +69,7 @@ pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
         known_resources_total: profile.known_resources_total,
         known_resources_max: profile.known_resources_max,
         visible_resources_seen: profile.visible_resources_seen,
+        social_us: profile.social_us,
     })
 }
 
@@ -473,6 +475,7 @@ mod tests {
             known_resources_total: 15_000,
             known_resources_max: 50,
             visible_resources_seen: 100,
+            social_us: 250,
         };
 
         let payload = autonomy_profile_json(&profile);
@@ -481,5 +484,6 @@ mod tests {
         assert_eq!(json["sampled_entities"], 500);
         assert_eq!(json["planned_entities"], 87);
         assert_eq!(json["known_resources_max"], 50);
+        assert_eq!(json["social_us"], 250);
     }
 }

@@ -144,10 +144,10 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
   * [ ] familiaridad
   * [ ] distancia
   * [ ] necesidades actuales
-* [ ] Resultado determinista de una interacción
-* [ ] Compatibilidad entre personalidades
-* [ ] Cambios positivos y negativos de afinidad
-* [ ] Cooldown social
+* [x] Resultado determinista de una interacción
+* [x] Compatibilidad entre personalidades
+* [x] Cambios positivos y negativos de afinidad
+* [x] Cooldown social
 * [ ] Evitar individuos con afinidad negativa
 * [ ] Buscar individuos con afinidad positiva
 * [ ] Decaimiento lento de relaciones abandonadas

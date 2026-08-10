@@ -25,6 +25,7 @@ pub(crate) struct AutonomyProfile {
     pub known_resources_total: u32,
     pub known_resources_max: u32,
     pub visible_resources_seen: u32,
+    pub social_us: u64,
 }
 
 fn profiled_update_entity(
@@ -152,6 +153,10 @@ pub(crate) fn profile_autonomy(
         }
         consumed += u64::from(result);
     }
+
+    let social_start = Instant::now();
+    super::social::process_social_interactions(entities, population, tick);
+    profile.social_us += social_start.elapsed().as_micros() as u64;
 
     (consumed, profile, consumer_ids)
 }
