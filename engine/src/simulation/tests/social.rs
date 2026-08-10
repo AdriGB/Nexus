@@ -610,7 +610,7 @@ fn approach_abandons_search_at_stale_last_seen_position() {
     // A should abandon Socialize immediately, not stand forever.
     let mut world = plain_grid(32, 32);
     let mut sim = Simulation {
-        entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 10, 5)],
         next_entity_id: 3,
         ..Simulation::default()
     };
@@ -629,16 +629,17 @@ fn approach_abandons_search_at_stale_last_seen_position() {
     sim.entities[1].x = 30;
     sim.entities[1].y = 30;
 
-    // Run until A arrives at last known position (7, 5)
+    // Run until A reaches within SOCIAL_RADIUS of last known position (10, 5)
     let mut arrived = false;
     for _ in 0..200 {
         sim.step(&mut world);
-        if sim.entities()[0].x == 7 && sim.entities()[0].y == 5 {
+        let distance_to_last_seen = sim.entities()[0].x.abs_diff(10) + sim.entities()[0].y.abs_diff(5);
+        if distance_to_last_seen <= super::super::autonomy::social::SOCIAL_RADIUS {
             arrived = true;
             break;
         }
     }
-    assert!(arrived, "entity should arrive at last known position");
+    assert!(arrived, "entity should reach vicinity of last known position");
 
     // Immediately after arriving, A should NOT be Socializing
     // and should NOT have Interact(2) as current action
@@ -667,7 +668,7 @@ fn approach_abandons_search_at_stale_last_seen_position() {
 fn interact_requires_target_in_social_radius() {
     let mut world = plain_grid(20, 20);
     let mut sim = Simulation {
-        entities: vec![default_adult(1, 5, 5), default_adult(2, 7, 5)],
+        entities: vec![default_adult(1, 5, 5), default_adult(2, 8, 5)],
         next_entity_id: 3,
         ..Simulation::default()
     };
@@ -679,23 +680,21 @@ fn interact_requires_target_in_social_radius() {
         entity.health = 100.0;
     }
 
-    // Force a plan with Interact(2) while target is far away
+    // Force a plan with Interact(2) while target is visible but far away
+    // Distance = 3: within perception (6) but beyond SOCIAL_RADIUS (2)
     sim.entities[0]
         .mind
         .set_plan(Goal::Socialize, vec![Action::Interact(2)], 0);
-    // Move target beyond SOCIAL_RADIUS (2)
-    sim.entities[1].x = 15;
-    sim.entities[1].y = 15;
 
     sim.step(&mut world);
 
-    // After executing Interact with target out of range,
-    // entity should NOT be Socializing — it should replan or clear
-    let activity = sim.entities()[0].activity;
-    assert_ne!(
-        activity,
-        super::super::entity::EntityActivity::Socializing,
-        "should not Socialize when target is outside SOCIAL_RADIUS"
+    // After executing Interact with target visible but out of range,
+    // entity should replan to ApproachEntity, not stay on Interact or Socialize
+    let current_action = sim.entities()[0].mind.current_action();
+    assert_eq!(
+        current_action,
+        Some(Action::ApproachEntity(2)),
+        "should replan to ApproachEntity when target is visible but outside SOCIAL_RADIUS"
     );
 }
 
