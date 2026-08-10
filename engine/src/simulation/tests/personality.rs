@@ -73,8 +73,24 @@ fn curious_entity_explores_more() {
     let health = MAX_HEALTH;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_base, hunger, health, age, &base, None);
-    evaluate_goals(&mut mind_curious, hunger, health, age, &curious, None);
+    evaluate_goals(
+        &mut mind_base,
+        hunger,
+        health,
+        age,
+        &base,
+        None,
+        (0, (0, 0)),
+    );
+    evaluate_goals(
+        &mut mind_curious,
+        hunger,
+        health,
+        age,
+        &curious,
+        None,
+        (0, (0, 0)),
+    );
 
     assert!(mind_curious.utility_scores.explore > mind_base.utility_scores.explore);
     assert_eq!(
@@ -109,8 +125,24 @@ fn cautious_entity_rests_more_and_explores_less() {
     let health = 50.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_base, hunger, health, age, &base, None);
-    evaluate_goals(&mut mind_cautious, hunger, health, age, &cautious, None);
+    evaluate_goals(
+        &mut mind_base,
+        hunger,
+        health,
+        age,
+        &base,
+        None,
+        (0, (0, 0)),
+    );
+    evaluate_goals(
+        &mut mind_cautious,
+        hunger,
+        health,
+        age,
+        &cautious,
+        None,
+        (0, (0, 0)),
+    );
 
     assert!(mind_cautious.utility_scores.rest > mind_base.utility_scores.rest);
     assert!(mind_cautious.utility_scores.explore < mind_base.utility_scores.explore);
@@ -135,7 +167,7 @@ fn neutral_personality_preserves_base_utilities() {
     let health = 70.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind, hunger, health, age, &neutral, None);
+    evaluate_goals(&mut mind, hunger, health, age, &neutral, None, (0, (0, 0)));
 
     let hunger_ratio = 0.4;
     let food_confidence = 0.25;
@@ -173,8 +205,24 @@ fn personality_does_not_affect_eat_utility() {
     let health = 80.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind_extreme, hunger, health, age, &extreme, None);
-    evaluate_goals(&mut mind_neutral, hunger, health, age, &neutral, None);
+    evaluate_goals(
+        &mut mind_extreme,
+        hunger,
+        health,
+        age,
+        &extreme,
+        None,
+        (0, (0, 0)),
+    );
+    evaluate_goals(
+        &mut mind_neutral,
+        hunger,
+        health,
+        age,
+        &neutral,
+        None,
+        (0, (0, 0)),
+    );
 
     assert_eq!(
         mind_extreme.utility_scores.eat,

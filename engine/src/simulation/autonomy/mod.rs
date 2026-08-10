@@ -77,6 +77,7 @@ pub(super) fn update_entity(
             entity.age_ticks,
             &entity.personality,
             current_goal,
+            (tick, position),
         );
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }

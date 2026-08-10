@@ -85,6 +85,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
             known.last_seen_x = other.x;
             known.last_seen_y = other.y;
             known.observed_ticks = known.observed_ticks.saturating_add(1);
+            known.clear_seek_cooldown();
         }
         Err(index) => {
             mind.memory.known_entities.insert(
@@ -99,6 +100,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
                     affinity: super::mind::NEUTRAL_AFFINITY,
                     last_interaction_tick: 0,
                     interaction_count: 0,
+                    seek_retry_after_tick: None,
                 },
             );
         }

@@ -2,6 +2,7 @@ use super::super::config::FOOD_SEARCH_THRESHOLD;
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::mind::{chunk_index, manhattan, Action, Goal, Mind, KNOWLEDGE_CHUNK_SIZE};
+use super::social::remembered_social_score;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
@@ -25,7 +26,9 @@ pub fn evaluate_goals(
     age_ticks: u64,
     personality: &Personality,
     current_goal: Option<Goal>,
+    context: (u64, (u32, u32)),
 ) -> Goal {
+    let (tick, origin) = context;
     let stage = LifeStage::from_age_ticks(age_ticks);
 
     if stage == LifeStage::Child {
@@ -75,34 +78,26 @@ pub fn evaluate_goals(
     let socialize = {
         let has_visible = !mind.visible_entities.is_empty();
 
-        let positive_affinity_count = mind
+        let best_remembered_score = mind
             .memory
             .known_entities
             .iter()
-            .filter(|known| known.affinity > 0)
-            .count() as f32;
-        let total_known = mind.memory.known_entities.len().max(1) as f32;
-        let affinity_ratio = positive_affinity_count / total_known;
-        let strongest_positive_affinity = mind
-            .memory
-            .known_entities
-            .iter()
-            .map(|known| known.affinity.max(0))
-            .max()
-            .unwrap_or(0) as f32
-            / 1_000.0;
+            .filter(|known| mind.visible_entities.binary_search(&known.id).is_err())
+            .filter_map(|known| remembered_social_score(known, tick, origin, personality))
+            .max();
         let sociability_factor = 0.3 + personality.sociability * 0.7;
         let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
 
-        let base_social = sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor;
+        let relationship_strength =
+            best_remembered_score.map(|score| (score as f32 / 1_000.0).clamp(0.1, 1.0));
 
         if has_visible {
             // Visible candidates present — full utility
-            base_social
-        } else if strongest_positive_affinity > 0.0 && personality.sociability > 0.4 {
-            // Seeking someone out should scale with the strongest remembered tie,
-            // while remaining less attractive than an equivalent visible contact.
-            sated_factor * (0.1 + strongest_positive_affinity) * sociability_factor * 0.9
+            sated_factor * 0.6 * sociability_factor
+        } else if let Some(relationship_strength) = relationship_strength {
+            // No visible candidates but good relationships in memory
+            // Utility is reduced since target must be sought first
+            sated_factor * (0.15 + relationship_strength * 0.45) * sociability_factor * 0.9
         } else {
             0.0
         }
@@ -278,6 +273,7 @@ fn select_social_target(
     entity_id: u32,
     population: &[EntitySnapshot],
     personality: &Personality,
+    tick: u64,
 ) -> Option<u32> {
     let mut best_visible: Option<(i32, u32)> = None;
     let mut best_memory: Option<(i32, u32)> = None;
@@ -335,7 +331,7 @@ fn select_social_target(
         }
 
         // Only seek entities with clearly positive affinity
-        if known.affinity <= 100 {
+        if known.seek_on_cooldown(tick) {
             continue;
         }
 
@@ -346,19 +342,12 @@ fn select_social_target(
 
         // Calculate score based on affinity and familiarity
         // Distance uses last_seen position as an estimate
-        let distance = manhattan(origin, (known.last_seen_x, known.last_seen_y)) as i32;
-        let familiarity = known.interaction_count as i32;
-        let affinity = known.affinity as i32;
+        let Some(score) = remembered_social_score(known, tick, origin, personality) else {
+            continue;
+        };
 
         // Higher threshold for seeking from memory — must be worth the effort
-        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
-        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
-
         // Require a minimum score to justify seeking from memory
-        if score < 100 {
-            continue;
-        }
-
         match best_memory {
             None => best_memory = Some((score, known.id)),
             Some((best_score, _)) if score > best_score => best_memory = Some((score, known.id)),
@@ -385,6 +374,7 @@ fn plan_socialize(
         entity.id,
         population,
         &entity.personality,
+        tick,
     ) else {
         // No suitable target visible or in memory — fall back to exploration
         plan_exploration(entity, world, tick, pathfinding_workspace);
@@ -430,6 +420,7 @@ fn plan_socialize(
             entity.activity = super::super::entity::EntityActivity::Socializing;
         } else {
             // Arrived at last_seen but target not visible — continue searching or abandon
+            entity.mind.memory.mark_failed_social_seek(target_id, tick);
             entity.mind.clear_goal();
             entity.path.clear();
             entity.path_index = 0;
@@ -455,6 +446,9 @@ fn plan_socialize(
         entity.activity = super::super::entity::EntityActivity::Moving;
     } else {
         // Can't reach target, fall back
+        if !is_visible {
+            entity.mind.memory.mark_failed_social_seek(target_id, tick);
+        }
         entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
         entity.activity = super::super::entity::EntityActivity::Resting;
     }
@@ -687,6 +681,88 @@ mod tests {
         }
     }
 
+    fn social_personality() -> Personality {
+        Personality {
+            curiosity: 0.0,
+            sociability: 1.0,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.5,
+        }
+    }
+
+    fn remembered_entity(id: u32, affinity: i16) -> super::super::mind::KnownEntity {
+        super::super::mind::KnownEntity {
+            id,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 10,
+            last_seen_y: 0,
+            observed_ticks: 1,
+            affinity,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        }
+    }
+
+    #[test]
+    fn failed_social_seek_does_not_immediately_retry() {
+        let personality = social_personality();
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(remembered_entity(2, 800));
+
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 10),
+            Some(2)
+        );
+
+        assert!(mind.memory.mark_failed_social_seek(2, 10));
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 11),
+            None
+        );
+        assert_eq!(
+            select_social_target(
+                &mind,
+                (0, 0),
+                1,
+                &[],
+                &personality,
+                10 + super::super::mind::FAILED_SOCIAL_SEEK_RETRY_TICKS,
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn single_strong_relationship_can_trigger_memory_seek() {
+        let personality = social_personality();
+        let mut mind = Mind::default();
+        mind.memory.known_entities = vec![
+            remembered_entity(2, 0),
+            remembered_entity(3, 800),
+            remembered_entity(4, 0),
+        ];
+
+        let goal = evaluate_goals(
+            &mut mind,
+            0.0,
+            100.0,
+            25 * TICKS_PER_YEAR,
+            &personality,
+            None,
+            (0, (0, 0)),
+        );
+
+        assert!(mind.utility_scores.socialize > 0.0);
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 0),
+            Some(3)
+        );
+        assert_eq!(goal, Goal::Socialize);
+    }
+
     #[test]
     fn switch_margin_scales_with_persistence() {
         assert!((switch_margin(0.0) - 0.02).abs() < 0.001);
@@ -713,6 +789,7 @@ mod tests {
             25 * TICKS_PER_YEAR,
             &personality,
             Some(Goal::Eat),
+            (0, (0, 0)),
         );
         assert_eq!(goal, Goal::Eat);
     }
@@ -734,6 +811,7 @@ mod tests {
             25 * TICKS_PER_YEAR,
             &personality,
             Some(Goal::Eat),
+            (0, (0, 0)),
         );
         assert_eq!(goal, Goal::Explore);
     }
@@ -751,6 +829,7 @@ mod tests {
             affinity: 500,
             last_interaction_tick: 0,
             interaction_count: 5,
+            seek_retry_after_tick: None,
         });
         let personality = Personality {
             curiosity: 0.0,
@@ -767,6 +846,7 @@ mod tests {
             25 * TICKS_PER_YEAR,
             &personality,
             None,
+            (0, (0, 0)),
         );
 
         assert_eq!(goal, Goal::Socialize);
