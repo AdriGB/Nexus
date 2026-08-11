@@ -217,6 +217,8 @@ impl Simulation {
         self.snap_infants_to_caregivers();
         let pregnancies_us = start.elapsed().as_micros() as u64;
 
+        self.run_daily_relationship_decay();
+
         let start = Instant::now();
         self.try_daily_conceptions();
         let conceptions_us = start.elapsed().as_micros() as u64;
@@ -268,6 +270,7 @@ impl Simulation {
         // Covers both newly reassigned infants
         // and newborns assigned to their mother.
         self.snap_infants_to_caregivers();
+        self.run_daily_relationship_decay();
         self.try_daily_conceptions();
 
         profile
@@ -351,6 +354,7 @@ impl Simulation {
         self.reassign_orphaned_dependents(world);
         self.update_pregnancies(world);
         self.snap_infants_to_caregivers();
+        self.run_daily_relationship_decay();
         self.try_daily_conceptions();
     }
 
@@ -592,6 +596,22 @@ impl Simulation {
                 )
             })
             .map(|entity| entity.id)
+    }
+
+    /// Daily maintenance: cools relationship affinity toward neutral for
+    /// relationships without recent interaction.
+    ///
+    /// One daily O(N + R) maintenance pass, where N is the population size
+    /// and R is the total number of known relationships across all entities.
+    /// No population-pair scan, no pathfinding, and no per-tick relationship
+    /// work. Runs on the same daily cadence as conceptions.
+    fn run_daily_relationship_decay(&mut self) {
+        if !self.tick.is_multiple_of(TICKS_PER_DAY) {
+            return;
+        }
+        for entity in &mut self.entities {
+            entity.mind.memory.decay_relationships(self.tick);
+        }
     }
 
     fn try_daily_conceptions(&mut self) {

@@ -14,6 +14,10 @@ pub use self::mind::KnownEntity;
 #[cfg(test)]
 pub use self::mind::KnownResource;
 pub use self::mind::{Action, Goal, Mind};
+#[cfg(test)]
+pub(in crate::simulation) use self::mind::{
+    RELATIONSHIP_DECAY_PER_DAY, RELATIONSHIP_DECAY_START_TICKS,
+};
 pub use self::perception::perceive;
 #[cfg(test)]
 pub(in crate::simulation) use self::social::SOCIAL_RADIUS;

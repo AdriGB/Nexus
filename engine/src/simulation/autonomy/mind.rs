@@ -1,3 +1,4 @@
+use super::super::time::TICKS_PER_DAY;
 use crate::world::{Grid, ResourceKind};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
@@ -75,6 +76,13 @@ pub(super) const NEUTRAL_AFFINITY: i16 = 0;
 const MAX_AFFINITY: i16 = 1_000;
 pub(super) const FAILED_SOCIAL_SEEK_RETRY_TICKS: u64 = 50;
 
+/// A relationship begins cooling toward neutral after this many ticks
+/// without an interaction (30 simulated days).
+pub(in crate::simulation) const RELATIONSHIP_DECAY_START_TICKS: u64 = 30 * TICKS_PER_DAY;
+
+/// Affinity moved toward zero per daily decay pass (1 point per day).
+pub(in crate::simulation) const RELATIONSHIP_DECAY_PER_DAY: i16 = 1;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KnownResource {
     pub x: u32,
@@ -129,7 +137,38 @@ pub struct Memory {
     pub known_entities: Vec<KnownEntity>,
 }
 
+/// Moves an affinity value toward zero by at most `amount`, never
+/// crossing zero: +400 -> +399, -400 -> -399, 0 -> 0.
+fn move_toward_zero(value: i16, amount: i16) -> i16 {
+    if value > 0 {
+        value.saturating_sub(amount).max(0)
+    } else if value < 0 {
+        value.saturating_add(amount).min(0)
+    } else {
+        0
+    }
+}
+
 impl Memory {
+    /// Slowly cools relationship affinity toward neutral for relationships
+    /// with no recent interaction.
+    ///
+    /// Called at a low frequency (daily) by `Simulation`; it never runs
+    /// per tick and touches only this memory's own known relationships.
+    /// Each individual's affinity is mutated only from their own memory;
+    /// neither individual reads the other's memory.
+    pub(in crate::simulation) fn decay_relationships(&mut self, tick: u64) {
+        for known in &mut self.known_entities {
+            if known.affinity == 0 {
+                continue;
+            }
+            let time_since_last_interaction = tick.saturating_sub(known.last_interaction_tick);
+            if time_since_last_interaction >= RELATIONSHIP_DECAY_START_TICKS {
+                known.affinity = move_toward_zero(known.affinity, RELATIONSHIP_DECAY_PER_DAY);
+            }
+        }
+    }
+
     pub fn known_chunk_count(&self) -> usize {
         self.known_chunks.len()
     }
@@ -507,5 +546,140 @@ mod tests {
         assert_eq!(distance_eight.len(), 2);
         assert_eq!(distance_eight[0].1, 50);
         assert_eq!(distance_eight[1].1, 250);
+    }
+
+    // ── Relationship decay ────────────────────────────────────────────────
+
+    #[test]
+    fn recent_relationship_does_not_decay() {
+        let tick = RELATIONSHIP_DECAY_START_TICKS + 10_000;
+        let mut known = known_entity(1);
+        known.affinity = 300;
+        known.last_interaction_tick = tick - (RELATIONSHIP_DECAY_START_TICKS - 1);
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(known);
+
+        mind.memory.decay_relationships(tick);
+
+        assert_eq!(mind.memory.known_entities[0].affinity, 300);
+    }
+
+    #[test]
+    fn old_positive_relationship_decays_toward_neutral() {
+        let tick = RELATIONSHIP_DECAY_START_TICKS + 10_000;
+        let mut known = known_entity(1);
+        known.affinity = 400;
+        known.last_interaction_tick = tick - RELATIONSHIP_DECAY_START_TICKS;
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(known);
+
+        mind.memory.decay_relationships(tick);
+
+        assert_eq!(
+            mind.memory.known_entities[0].affinity,
+            400 - RELATIONSHIP_DECAY_PER_DAY
+        );
+    }
+
+    #[test]
+    fn old_negative_relationship_decays_toward_neutral() {
+        let tick = RELATIONSHIP_DECAY_START_TICKS + 10_000;
+        let mut known = known_entity(1);
+        known.affinity = -400;
+        known.last_interaction_tick = tick - RELATIONSHIP_DECAY_START_TICKS;
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(known);
+
+        mind.memory.decay_relationships(tick);
+
+        assert_eq!(
+            mind.memory.known_entities[0].affinity,
+            -400 + RELATIONSHIP_DECAY_PER_DAY
+        );
+    }
+
+    #[test]
+    fn relationship_decay_never_crosses_zero() {
+        let tick = RELATIONSHIP_DECAY_START_TICKS + 100;
+        let cases = [
+            (1i16, 0i16),
+            (-1, 0),
+            (0, 0),
+            (RELATIONSHIP_DECAY_PER_DAY, 0),
+            (-RELATIONSHIP_DECAY_PER_DAY, 0),
+        ];
+
+        for (affinity, expected) in cases {
+            let mut known = known_entity(1);
+            known.affinity = affinity;
+            known.last_interaction_tick = 0;
+            let mut mind = Mind::default();
+            mind.memory.known_entities.push(known);
+
+            mind.memory.decay_relationships(tick);
+
+            assert_eq!(mind.memory.known_entities[0].affinity, expected);
+        }
+    }
+
+    #[test]
+    fn decay_accumulates_across_daily_passes_until_neutral() {
+        let mut known = known_entity(1);
+        known.affinity = 3;
+        known.last_interaction_tick = 0;
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(known);
+
+        let tick = RELATIONSHIP_DECAY_START_TICKS;
+        mind.memory.decay_relationships(tick);
+        assert_eq!(mind.memory.known_entities[0].affinity, 2);
+        mind.memory.decay_relationships(tick + TICKS_PER_DAY);
+        assert_eq!(mind.memory.known_entities[0].affinity, 1);
+        mind.memory.decay_relationships(tick + 2 * TICKS_PER_DAY);
+        assert_eq!(mind.memory.known_entities[0].affinity, 0);
+        mind.memory.decay_relationships(tick + 3 * TICKS_PER_DAY);
+        assert_eq!(mind.memory.known_entities[0].affinity, 0);
+    }
+
+    #[test]
+    fn interaction_resets_decay_age() {
+        let tick = RELATIONSHIP_DECAY_START_TICKS + 10_000;
+        let mut known = known_entity(1);
+        known.affinity = 300;
+        known.last_interaction_tick = tick - 2 * RELATIONSHIP_DECAY_START_TICKS;
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(known);
+
+        assert!(mind.memory.record_interaction(1, tick, 0));
+
+        mind.memory.decay_relationships(tick);
+
+        assert_eq!(mind.memory.known_entities[0].affinity, 300);
+        assert_eq!(mind.memory.known_entities[0].last_interaction_tick, tick);
+    }
+
+    #[test]
+    fn relationship_decay_is_deterministic() {
+        let scenario = || {
+            let decay_tick = 4 * RELATIONSHIP_DECAY_START_TICKS;
+            let mut a = known_entity(1);
+            a.affinity = 250;
+            a.last_interaction_tick = decay_tick - RELATIONSHIP_DECAY_START_TICKS;
+            let mut b = known_entity(2);
+            b.affinity = -120;
+            b.last_interaction_tick = 5;
+            let mut mind = Mind::default();
+            mind.memory.known_entities.push(a);
+            mind.memory.known_entities.push(b);
+            mind
+        };
+
+        let mut first = scenario();
+        let mut second = scenario();
+        let decay_tick = 5 * RELATIONSHIP_DECAY_START_TICKS;
+        first.memory.decay_relationships(decay_tick);
+        second.memory.decay_relationships(decay_tick);
+
+        assert_eq!(first.memory.known_entities, second.memory.known_entities);
     }
 }

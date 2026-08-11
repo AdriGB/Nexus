@@ -1,6 +1,6 @@
 use super::super::autonomy::DecisionContext;
 use super::super::entity::{Entity, Personality};
-use super::super::time::TICKS_PER_YEAR;
+use super::super::time::{TICKS_PER_DAY, TICKS_PER_YEAR};
 use super::super::Simulation;
 use super::support::*;
 
@@ -1154,5 +1154,57 @@ fn low_affinity_memory_does_not_trigger_seek() {
     assert!(
         !sought_low_affinity,
         "entity should NOT seek low-affinity remembered target (affinity <= 100)"
+    );
+}
+
+#[test]
+fn abandoned_relationship_decays_over_simulated_days() {
+    let mut world = plain_grid(16, 16);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5)],
+        next_entity_id: 2,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    // Memory of someone long gone — no partner present to interact with.
+    sim.entities[0]
+        .mind
+        .memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
+            id: 99,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 5,
+            last_seen_y: 5,
+            observed_ticks: 10,
+            affinity: 300,
+            last_interaction_tick: 0,
+            interaction_count: 5,
+            seek_retry_after_tick: None,
+        });
+
+    // We jump the clock directly instead of running ~700 steps, both to
+    // keep the test fast and to avoid the entity starving to death long
+    // before the decay window opens. One step then lands on day 30.
+    sim.tick = super::super::autonomy::RELATIONSHIP_DECAY_START_TICKS - 1;
+    sim.step(&mut world);
+
+    // Day 30: 300 -> 299.
+    assert_eq!(
+        sim.entities()[0].mind.memory.known_entities[0].affinity,
+        300 - i16::from(super::super::autonomy::RELATIONSHIP_DECAY_PER_DAY),
+        "first daily pass should cool the abandoned relationship"
+    );
+
+    // Day 31: one more day, one more daily pass: 299 -> 298.
+    sim.tick = super::super::autonomy::RELATIONSHIP_DECAY_START_TICKS + TICKS_PER_DAY - 1;
+    sim.step(&mut world);
+
+    assert_eq!(
+        sim.entities()[0].mind.memory.known_entities[0].affinity,
+        300 - 2 * i16::from(super::super::autonomy::RELATIONSHIP_DECAY_PER_DAY),
+        "decay should continue slowly day by day"
     );
 }
