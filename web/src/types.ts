@@ -12,6 +12,7 @@ export interface IWorldBridge {
   spawn_entities(count: number): number;
   population_stats(): string;
   first_entity_info(): string;
+  first_entity_relationships(): string;
   entity_info(id: number): string;
   get_tile_data(
     vx: number,
@@ -127,6 +128,19 @@ export interface EntityInfo {
     explore: number;
     rest: number;
   };
+}
+
+export interface KnownRelationshipInfo {
+  id: number;
+  affinity: number;
+  interaction_count: number;
+  first_seen_tick: number;
+  last_seen_tick: number;
+  last_interaction_tick: number;
+  last_seen_x: number;
+  last_seen_y: number;
+  observed_ticks: number;
+  seek_retry_after_tick: number | null;
 }
 
 export interface PopulationStats {

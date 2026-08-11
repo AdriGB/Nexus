@@ -1467,3 +1467,73 @@ fn urgent_hunger_still_prioritizes_eating() {
         "urgent hunger must keep the survival priority unchanged"
     );
 }
+
+#[test]
+fn relationships_json_reflects_memory_and_sorts_by_strength() {
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 5, 5)],
+        next_entity_id: 2,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    let known = |id: u32, affinity: i16, interactions: u32, cooldown: Option<u64>| {
+        super::super::autonomy::KnownEntity {
+            id,
+            first_seen_tick: 100,
+            last_seen_tick: 900,
+            last_seen_x: 7,
+            last_seen_y: 5,
+            observed_ticks: 50,
+            affinity,
+            last_interaction_tick: 800,
+            interaction_count: interactions,
+            seek_retry_after_tick: cooldown,
+        }
+    };
+
+    sim.entities[0].mind.memory.known_entities = vec![
+        known(4, 300, 2, None),
+        known(2, 500, 1, Some(1_000)),
+        known(6, -241, 5, None),
+        known(3, 300, 9, None),
+        known(5, -500, 1, None),
+    ];
+
+    let payload = crate::bridge::entity_relationships_json(&sim.entities()[0]);
+    let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+    let list = json.as_array().expect("payload should be a JSON array");
+
+    assert_eq!(list.len(), 5);
+
+    let ids: Vec<u32> = list
+        .iter()
+        .map(|row| row["id"].as_u64().unwrap() as u32)
+        .collect();
+    assert_eq!(ids, vec![2, 5, 3, 4, 6]);
+
+    for row in list {
+        for key in [
+            "id",
+            "affinity",
+            "interaction_count",
+            "first_seen_tick",
+            "last_seen_tick",
+            "last_interaction_tick",
+            "last_seen_x",
+            "last_seen_y",
+            "observed_ticks",
+            "seek_retry_after_tick",
+        ] {
+            assert!(row.get(key).is_some(), "missing field {key}");
+        }
+    }
+
+    assert_eq!(list[0]["seek_retry_after_tick"], 1_000);
+    assert_eq!(list[1]["seek_retry_after_tick"], serde_json::Value::Null);
+    assert_eq!(list[0]["last_seen_x"], 7);
+    assert_eq!(list[0]["last_seen_y"], 5);
+
+    let second = crate::bridge::entity_relationships_json(&sim.entities()[0]);
+    assert_eq!(payload, second);
+}

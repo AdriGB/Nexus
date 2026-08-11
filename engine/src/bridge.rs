@@ -210,6 +210,56 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
 }
 
 #[derive(Serialize)]
+struct KnownRelationshipInfoDto {
+    id: u32,
+    affinity: i16,
+    interaction_count: u32,
+    first_seen_tick: u64,
+    last_seen_tick: u64,
+    last_interaction_tick: u64,
+    last_seen_x: u32,
+    last_seen_y: u32,
+    observed_ticks: u32,
+    seek_retry_after_tick: Option<u64>,
+}
+
+/// Serializes known relationships ordered by emotional intensity:
+/// absolute affinity descending, interaction count descending, then id.
+/// Raw ticks let the frontend derive human-readable relative times.
+pub(crate) fn entity_relationships_json(entity: &Entity) -> String {
+    let mut relationships: Vec<KnownRelationshipInfoDto> = entity
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .map(|known| KnownRelationshipInfoDto {
+            id: known.id,
+            affinity: known.affinity,
+            interaction_count: known.interaction_count,
+            first_seen_tick: known.first_seen_tick,
+            last_seen_tick: known.last_seen_tick,
+            last_interaction_tick: known.last_interaction_tick,
+            last_seen_x: known.last_seen_x,
+            last_seen_y: known.last_seen_y,
+            observed_ticks: known.observed_ticks,
+            seek_retry_after_tick: known.seek_retry_after_tick,
+        })
+        .collect();
+
+    relationships.sort_unstable_by_key(|relationship| {
+        use std::cmp::Reverse;
+
+        (
+            Reverse(relationship.affinity.unsigned_abs()),
+            Reverse(relationship.interaction_count),
+            relationship.id,
+        )
+    });
+
+    to_json(&relationships)
+}
+
+#[derive(Serialize)]
 struct ResourceInfoDto {
     kind: &'static str,
     amount: u16,
@@ -379,6 +429,17 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&entity).unwrap();
 
         assert_eq!(json["pregnancy_due_tick"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn relationships_json_of_empty_memory_serializes_as_empty_array() {
+        let grid = test_grid();
+        let simulation = Simulation::with_population(42, &grid, 1);
+
+        assert_eq!(
+            super::entity_relationships_json(&simulation.entities()[0]),
+            "[]"
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { state } from "../state";
-import type { EntityInfo } from "../types";
+import type { EntityInfo, KnownRelationshipInfo } from "../types";
 
 function infoRow(key: string, value: string, valueClass?: string): string {
   const cls = valueClass ? `info-val ${valueClass}` : "info-val";
@@ -8,6 +8,82 @@ function infoRow(key: string, value: string, valueClass?: string): string {
 
 function infoSectionTitle(title: string): string {
   return `<span class="info-key info-section-title">${title}</span>`;
+}
+
+const RELATIONSHIP_LIMIT = 20;
+
+function formatTicksAgo(ticks: number): string {
+  if (ticks <= 0) return "just now";
+  if (ticks < 24) return `${ticks}h ago`;
+  const days = Math.floor(ticks / 24);
+  if (days < 365) return `${days}d ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+function formatTickDuration(ticks: number): string {
+  if (ticks < 24) return `${ticks}h`;
+  const days = Math.floor(ticks / 24);
+  if (days < 365) return `${days}d`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+function relationshipLabel(affinity: number): string {
+  if (affinity >= 200) return "Friendly";
+  if (affinity > 0) return "Positive";
+  if (affinity === 0) return "Neutral";
+  if (affinity < -200) return "Hostile";
+  return "Negative";
+}
+
+function relationshipColor(affinity: number): string {
+  if (affinity > 0) return "#65c983";
+  if (affinity < 0) return "#ef4444";
+  return "#8e8da2";
+}
+
+function relationshipsSection(
+  relationships: KnownRelationshipInfo[],
+  tick: number,
+): string {
+  if (relationships.length === 0) return "";
+
+  const shown = relationships.slice(0, RELATIONSHIP_LIMIT);
+  const truncated =
+    relationships.length > shown.length
+      ? `<span class="info-key"></span><span class="info-val">Showing ${shown.length} of ${relationships.length} relationships</span>`
+      : "";
+
+  const blocks = shown.map((relationship) => {
+    const label = relationshipLabel(relationship.affinity);
+    const color = relationshipColor(relationship.affinity);
+    const affinityText = `${relationship.affinity > 0 ? "+" : ""}${relationship.affinity}`;
+    const cooldown =
+      relationship.seek_retry_after_tick != null &&
+      relationship.seek_retry_after_tick > tick
+        ? ` · seek cooldown ${formatTickDuration(relationship.seek_retry_after_tick - tick)} remaining`
+        : "";
+    const lastInteraction =
+      relationship.last_interaction_tick === 0
+        ? "Never interacted"
+        : `Last interaction ${formatTicksAgo(tick - relationship.last_interaction_tick)}`;
+    const lastSeen = `Last seen (${relationship.last_seen_x}, ${relationship.last_seen_y}) ${formatTicksAgo(tick - relationship.last_seen_tick)}`;
+
+    return `
+      <span class="info-key" style="margin-top:6px;">#${relationship.id}</span>
+      <span class="info-val" style="color:${color};">${affinityText} ${label}${cooldown}</span>
+      <span class="info-key"></span>
+      <span class="info-val">${relationship.interaction_count} interactions · observed ${relationship.observed_ticks} ticks</span>
+      <span class="info-key"></span>
+      <span class="info-val">${lastInteraction}</span>
+      <span class="info-key"></span>
+      <span class="info-val">${lastSeen}</span>`;
+  });
+
+  return (
+    infoSectionTitle(`Relationships (${relationships.length})`) +
+    truncated +
+    blocks.join("")
+  );
 }
 
 export function syncEntityInspector(): void {
@@ -20,12 +96,17 @@ export function syncEntityInspector(): void {
   }
 
   const entity: EntityInfo = JSON.parse(state.world.first_entity_info());
+  const relationships = JSON.parse(
+    state.world.first_entity_relationships(),
+  ) as KnownRelationshipInfo[];
+  const simulationTick = Number(state.world.simulation_tick());
+  const relationshipsHtml = relationshipsSection(relationships, simulationTick);
   const dueInHours =
     entity.pregnancy_due_tick === null
       ? null
       : Math.max(
           0,
-          entity.pregnancy_due_tick - Number(state.world.simulation_tick()),
+          entity.pregnancy_due_tick - simulationTick,
         );
   panel.hidden = false;
   grid.innerHTML = [
@@ -78,5 +159,5 @@ export function syncEntityInspector(): void {
     infoRow("Utility: eat", entity.utilities.eat.toFixed(2)),
     infoRow("Utility: explore", entity.utilities.explore.toFixed(2)),
     infoRow("Utility: rest", entity.utilities.rest.toFixed(2)),
-  ].join("");
+  ].join("") + relationshipsHtml;
 }

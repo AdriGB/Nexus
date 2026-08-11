@@ -130,7 +130,7 @@ Las funciones pendientes de geografía quedan pospuestas hasta que influyan dire
 
 ---
 
-# Phase 2.7 — Social Interaction
+# Phase 2.7 — Social Interaction ✅
 
 Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 
@@ -151,7 +151,7 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 * [x] Evitar individuos con afinidad negativa
 * [X] Buscar individuos con afinidad positiva (desde memoria)
 * [x] Decaimiento lento de relaciones abandonadas
-* [ ] Inspector de relaciones conocidas
+* [x] Inspector de relaciones conocidas
 * [x] Tests de formación y deterioro de afinidad
 * [x] Reproducción influida por relaciones existentes
 
