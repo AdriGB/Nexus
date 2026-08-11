@@ -153,7 +153,7 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 * [ ] Decaimiento lento de relaciones abandonadas
 * [ ] Inspector de relaciones conocidas
 * [ ] Tests de formación y deterioro de afinidad
-* [ ] Reproducción influida por relaciones existentes
+* [x] Reproducción influida por relaciones existentes
 
 ### Vertical de validación
 

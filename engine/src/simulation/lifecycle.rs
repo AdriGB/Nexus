@@ -9,6 +9,7 @@ use std::collections::HashSet;
 
 const REPRODUCTION_MAX_HUNGER: f32 = 35.0;
 const REPRODUCTION_MAX_DISTANCE: u32 = 2;
+const REPRODUCTION_MIN_AFFINITY: i16 = -200;
 pub(super) const DAILY_CONCEPTION_SCALE: u64 = 10_000;
 pub(super) const DAILY_CONCEPTION_THRESHOLD: u64 = 100;
 
@@ -81,6 +82,60 @@ pub(super) fn male_is_fertile(entity: &Entity, max_health: f32) -> bool {
         && entity.health >= max_health * 0.8
 }
 
+fn relationship_score(female: &Entity, male: &Entity) -> (i16, i32) {
+    // Bilateral willingness: each individual contributes only the
+    // affinity stored in their own memory. Neither individual gains
+    // access to the other's memory.
+    let mother = female.mind.memory.affinity_to(male.id).unwrap_or(0);
+    let father = male.mind.memory.affinity_to(female.id).unwrap_or(0);
+
+    // Reciprocity first: the weaker side sets the floor.
+    // Joint affinity breaks ties between equally reciprocal pairs.
+    (mother.min(father), i32::from(mother) + i32::from(father))
+}
+
+/// Selects the reproduction partner by, in order:
+/// 1. strongest reciprocity (higher minimum of the two affinities),
+/// 2. highest total affinity,
+/// 3. smallest distance,
+/// 4. lowest entity id.
+///
+/// Both individuals must meet [`REPRODUCTION_MIN_AFFINITY`] in their own
+/// memories. Unknown relationships contribute a neutral zero, so the
+/// previous closest-male-by-id behavior remains the fallback.
+pub(super) fn select_reproduction_partner(
+    female: &Entity,
+    entities: &[Entity],
+    max_health: f32,
+) -> Option<u32> {
+    let female_position = (female.x, female.y);
+
+    entities
+        .iter()
+        .filter(|candidate| male_is_fertile(candidate, max_health))
+        .filter(|candidate| {
+            manhattan(female_position, (candidate.x, candidate.y)) <= REPRODUCTION_MAX_DISTANCE
+        })
+        .filter(|candidate| {
+            let mother = female.mind.memory.affinity_to(candidate.id).unwrap_or(0);
+            let father = candidate.mind.memory.affinity_to(female.id).unwrap_or(0);
+            mother >= REPRODUCTION_MIN_AFFINITY && father >= REPRODUCTION_MIN_AFFINITY
+        })
+        .max_by_key(|candidate| {
+            use std::cmp::Reverse;
+
+            let (mutual_affinity, total_affinity) = relationship_score(female, candidate);
+
+            (
+                mutual_affinity,
+                total_affinity,
+                Reverse(manhattan(female_position, (candidate.x, candidate.y))),
+                Reverse(candidate.id),
+            )
+        })
+        .map(|candidate| candidate.id)
+}
+
 pub(super) fn try_conceptions(
     entities: &mut [Entity],
     tick: u64,
@@ -93,24 +148,13 @@ pub(super) fn try_conceptions(
         if !female_is_fertile(&entities[female_index], tick, max_health) {
             continue;
         }
-        let female_position = (entities[female_index].x, entities[female_index].y);
-        let male = entities
-            .iter()
-            .filter(|candidate| male_is_fertile(candidate, max_health))
-            .filter(|candidate| {
-                manhattan(female_position, (candidate.x, candidate.y)) <= REPRODUCTION_MAX_DISTANCE
-            })
-            .min_by_key(|candidate| {
-                (
-                    manhattan(female_position, (candidate.x, candidate.y)),
-                    candidate.id,
-                )
-            })
-            .map(|candidate| candidate.id);
-        let Some(father_id) = male else {
+        let female_id = entities[female_index].id;
+        let Some(father_id) =
+            select_reproduction_partner(&entities[female_index], entities, max_health)
+        else {
             continue;
         };
-        if conception_roll(seed, entities[female_index].id, father_id, tick) >= threshold {
+        if conception_roll(seed, female_id, father_id, tick) >= threshold {
             continue;
         }
         entities[female_index].pregnancy = Some(Pregnancy {

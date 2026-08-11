@@ -171,7 +171,6 @@ impl Memory {
         self.failed_exploration.len()
     }
 
-    #[allow(dead_code, reason = "used by the upcoming social interaction system")]
     pub fn affinity_to(&self, entity_id: u32) -> Option<i16> {
         self.known_entities
             .binary_search_by_key(&entity_id, |known| known.id)

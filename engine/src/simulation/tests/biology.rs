@@ -1,5 +1,6 @@
+use super::super::autonomy::KnownEntity;
 use super::super::config::MAX_HEALTH;
-use super::super::entity::{LifeStage, Pregnancy, Sex};
+use super::super::entity::{Entity, LifeStage, Pregnancy, Sex};
 use super::super::lifecycle::{
     self, conception_roll, female_is_fertile, male_is_fertile, DAILY_CONCEPTION_SCALE,
 };
@@ -337,4 +338,219 @@ fn life_stages_gate_reproduction() {
     let mut elder_female = fertile_entity(7, Sex::Female, 0, 0);
     elder_female.age_ticks = 66 * TICKS_PER_YEAR;
     assert!(!female_is_fertile(&elder_female, 0, MAX_HEALTH));
+}
+
+// ── Relationship-influenced partner selection ───────────────────────────
+
+fn known_entity(id: u32, affinity: i16) -> KnownEntity {
+    KnownEntity {
+        id,
+        first_seen_tick: 0,
+        last_seen_tick: 0,
+        last_seen_x: 0,
+        last_seen_y: 0,
+        observed_ticks: 1,
+        affinity,
+        last_interaction_tick: 0,
+        interaction_count: 0,
+        seek_retry_after_tick: None,
+    }
+}
+
+#[test]
+fn positive_relationship_beats_closer_unknown_partner() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let close_unknown = fertile_entity(2, Sex::Male, 1, 0);
+    let mut distant_known = fertile_entity(3, Sex::Male, 2, 0);
+
+    female.mind.memory.known_entities.push(known_entity(3, 400));
+    distant_known
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, 300));
+
+    let entities = vec![female, close_unknown, distant_known];
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(3),
+        "mutual positive affinity should beat a smaller distance"
+    );
+}
+
+#[test]
+fn strong_negative_relationship_prevents_pairing() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let negative_close = fertile_entity(2, Sex::Male, 1, 0);
+    let neutral_far = fertile_entity(3, Sex::Male, 2, 0);
+
+    female
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(2, -500));
+
+    let entities = vec![female, negative_close, neutral_far];
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(3)
+    );
+
+    let female = fertile_entity(1, Sex::Female, 0, 0);
+    let mut negative_male = fertile_entity(2, Sex::Male, 1, 0);
+    negative_male
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, -500));
+
+    let entities = vec![female, negative_male];
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        None,
+        "strong negative affinity from either individual rejects the pairing"
+    );
+}
+
+#[test]
+fn all_rejected_candidates_return_none() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let negative_close = fertile_entity(2, Sex::Male, 1, 0);
+    female
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(2, -700));
+
+    let entities = vec![female, negative_close];
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        None
+    );
+}
+
+#[test]
+fn unknown_relationships_fall_back_to_distance_then_id() {
+    let female = fertile_entity(1, Sex::Female, 0, 0);
+    let closer = fertile_entity(2, Sex::Male, 1, 0);
+    let same_distance = fertile_entity(4, Sex::Male, 1, 0);
+    let farther = fertile_entity(3, Sex::Male, 2, 0);
+
+    let entities = vec![female, closer, same_distance, farther];
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(2),
+        "with no relationships, closest wins; ties resolve by lowest id"
+    );
+}
+
+#[test]
+fn relationship_partner_selection_is_deterministic() {
+    fn scenario() -> Vec<Entity> {
+        let mut female = fertile_entity(1, Sex::Female, 0, 0);
+        let mut male_a = fertile_entity(2, Sex::Male, 1, 0);
+        let mut male_b = fertile_entity(3, Sex::Male, 2, 0);
+        female.mind.memory.known_entities.push(known_entity(2, 200));
+        female.mind.memory.known_entities.push(known_entity(3, 250));
+        male_a.mind.memory.known_entities.push(known_entity(1, 100));
+        male_b.mind.memory.known_entities.push(known_entity(1, 150));
+        vec![female, male_a, male_b]
+    }
+
+    let first = scenario();
+    let second = scenario();
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&first[0], &first, MAX_HEALTH),
+        lifecycle::select_reproduction_partner(&second[0], &second, MAX_HEALTH),
+    );
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&first[0], &first, MAX_HEALTH),
+        Some(3),
+        "the higher mutual score (min 150 > min 100) wins over the closer distance"
+    );
+}
+
+#[test]
+fn mutual_positive_relationship_beats_one_sided_affinity() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let mut one_sided = fertile_entity(2, Sex::Male, 1, 0);
+    let mut mutual = fertile_entity(3, Sex::Male, 2, 0);
+
+    female.mind.memory.known_entities.push(known_entity(2, 800));
+    female.mind.memory.known_entities.push(known_entity(3, 250));
+    one_sided
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, -100));
+    mutual.mind.memory.known_entities.push(known_entity(1, 250));
+
+    let entities = vec![female, one_sided, mutual];
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(3),
+        "mutual positive affinity should beat one-sided affinity"
+    );
+}
+
+#[test]
+fn reproduction_affinity_boundary_is_inclusive_at_minus_200() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let allowed = fertile_entity(2, Sex::Male, 1, 0);
+    let rejected = fertile_entity(3, Sex::Male, 1, 0);
+
+    female
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(2, -200));
+    female
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(3, -201));
+
+    let entities = vec![female, allowed, rejected];
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(2),
+        "affinity -200 is permitted; -201 is rejected"
+    );
+}
+
+#[test]
+fn conception_uses_relationship_preferred_partner() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let close_unknown = fertile_entity(2, Sex::Male, 1, 0);
+    let mut preferred = fertile_entity(3, Sex::Male, 2, 0);
+
+    female.mind.memory.known_entities.push(known_entity(3, 300));
+    preferred
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, 300));
+
+    let mut entities = vec![female, close_unknown, preferred];
+
+    let conceptions = lifecycle::try_conceptions(
+        &mut entities,
+        TICKS_PER_DAY,
+        42,
+        MAX_HEALTH,
+        DAILY_CONCEPTION_SCALE,
+    );
+
+    assert_eq!(conceptions, 1);
+
+    let pregnancy = entities[0]
+        .pregnancy
+        .expect("relationship-preferred partner should conceive");
+
+    assert_eq!(pregnancy.father_id, 3);
 }
