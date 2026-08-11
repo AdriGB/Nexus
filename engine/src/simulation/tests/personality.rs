@@ -1,4 +1,4 @@
-use super::super::autonomy::{evaluate_goals, Goal, Mind};
+use super::super::autonomy::{evaluate_goals, DecisionContext, Goal, Mind};
 use super::super::config::MAX_HEALTH;
 use super::super::entity::Personality;
 use super::super::lifecycle::personality_for;
@@ -80,7 +80,10 @@ fn curious_entity_explores_more() {
         age,
         &base,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     evaluate_goals(
         &mut mind_curious,
@@ -89,7 +92,10 @@ fn curious_entity_explores_more() {
         age,
         &curious,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
 
     assert!(mind_curious.utility_scores.explore > mind_base.utility_scores.explore);
@@ -132,7 +138,10 @@ fn cautious_entity_rests_more_and_explores_less() {
         age,
         &base,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     evaluate_goals(
         &mut mind_cautious,
@@ -141,7 +150,10 @@ fn cautious_entity_rests_more_and_explores_less() {
         age,
         &cautious,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
 
     assert!(mind_cautious.utility_scores.rest > mind_base.utility_scores.rest);
@@ -167,7 +179,18 @@ fn neutral_personality_preserves_base_utilities() {
     let health = 70.0;
     let age = 25 * TICKS_PER_YEAR;
 
-    evaluate_goals(&mut mind, hunger, health, age, &neutral, None, (0, (0, 0)));
+    evaluate_goals(
+        &mut mind,
+        hunger,
+        health,
+        age,
+        &neutral,
+        None,
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
+    );
 
     let hunger_ratio = 0.4;
     let food_confidence = 0.25;
@@ -212,7 +235,10 @@ fn personality_does_not_affect_eat_utility() {
         age,
         &extreme,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     evaluate_goals(
         &mut mind_neutral,
@@ -221,7 +247,10 @@ fn personality_does_not_affect_eat_utility() {
         age,
         &neutral,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
 
     assert_eq!(

@@ -1,3 +1,4 @@
+use super::super::autonomy::DecisionContext;
 use super::super::entity::{Entity, Personality};
 use super::super::time::TICKS_PER_YEAR;
 use super::super::Simulation;
@@ -407,7 +408,10 @@ fn socialize_utility_increases_with_positive_affinity() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     let score_no_affinity = mind.utility_scores.socialize;
 
@@ -450,7 +454,10 @@ fn socialize_utility_increases_with_positive_affinity() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     let score_with_affinity = mind.utility_scores.socialize;
 
@@ -753,7 +760,10 @@ fn socialize_utility_is_zero_without_candidates() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
 
     assert_eq!(
@@ -963,7 +973,10 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
 
     assert!(
@@ -981,7 +994,10 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     let visible_score = mind.utility_scores.socialize;
 
@@ -994,7 +1010,10 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
-        (0, (0, 0)),
+        DecisionContext {
+            tick: 0,
+            origin: (0, 0),
+        },
     );
     let memory_only_score = mind.utility_scores.socialize;
 

@@ -1,7 +1,7 @@
 use super::super::entity::{Entity, LifeStage};
 use super::super::spatial::{EntitySnapshot, SpatialGrid};
 use super::action::execute_current_action;
-use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal};
+use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal, DecisionContext};
 use super::mind::{Goal, URGENT_HUNGER_THRESHOLD};
 use super::perception::{perceive_entities, reconcile_resource_memory, scan_visible_resources};
 use crate::pathfinding::PathfindingWorkspace;
@@ -95,7 +95,10 @@ fn profiled_update_entity(
             entity.age_ticks,
             &entity.personality,
             current_goal,
-            (tick, position),
+            DecisionContext {
+                tick,
+                origin: position,
+            },
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
         profile.planning_us += start.elapsed().as_micros() as u64;

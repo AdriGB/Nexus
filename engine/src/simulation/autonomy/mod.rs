@@ -1,5 +1,6 @@
 mod action;
 mod decision;
+mod exploration;
 mod mind;
 mod perception;
 mod profiling;
@@ -7,7 +8,7 @@ mod social;
 
 pub use self::decision::evaluate_goals;
 #[cfg(test)]
-pub use self::decision::exploration_target;
+pub use self::exploration::exploration_target;
 #[cfg(test)]
 pub use self::mind::KnownEntity;
 #[cfg(test)]
@@ -19,6 +20,7 @@ pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;
+pub(in crate::simulation) use self::decision::DecisionContext;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
 
@@ -77,7 +79,10 @@ pub(super) fn update_entity(
             entity.age_ticks,
             &entity.personality,
             current_goal,
-            (tick, position),
+            DecisionContext {
+                tick,
+                origin: position,
+            },
         );
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
