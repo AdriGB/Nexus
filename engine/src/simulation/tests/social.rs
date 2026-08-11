@@ -1208,3 +1208,234 @@ fn abandoned_relationship_decays_over_simulated_days() {
         "decay should continue slowly day by day"
     );
 }
+
+#[test]
+fn repeated_positive_interactions_form_relationship() {
+    let mut world = plain_grid(8, 8);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 3, 3), default_adult(2, 3, 4)],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    // Compatible + cooperative + sociable → max positive delta (+8)
+    // per interaction, and interval 12 ticks (shortest cooldown).
+    let compatible = Personality {
+        curiosity: 0.0,
+        sociability: 1.0,
+        cooperativeness: 1.0,
+        caution: 0.0,
+        persistence: 0.5,
+    };
+    sim.entities[0].personality = compatible;
+    sim.entities[1].personality = compatible;
+
+    // Keep both pinned within social radius and non-starving across
+    // several interaction windows. No affinity is ever set manually.
+    for _ in 0..60 {
+        sim.entities[0].x = 3;
+        sim.entities[0].y = 3;
+        sim.entities[1].x = 3;
+        sim.entities[1].y = 4;
+        for entity in &mut sim.entities {
+            entity.hunger = 0.0;
+            entity.health = 100.0;
+        }
+        sim.step(&mut world);
+    }
+
+    let known = sim.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|k| k.id == 2)
+        .expect("entity 1 should have stored a relationship with entity 2");
+
+    assert!(
+        known.interaction_count >= 3,
+        "repeated proximity should build interaction history"
+    );
+    assert!(
+        known.affinity > 0,
+        "compatible cooperative partners should form positive affinity"
+    );
+}
+
+#[test]
+fn repeated_negative_interactions_lead_to_avoidance() {
+    let mut world = plain_grid(8, 8);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 3, 3), default_adult(2, 3, 4)],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    // Opposite curiosity/caution + uncooperative, both sociable so the
+    // cooldown stays at its shortest (12 ticks). Compat ≈ 0.33 gives
+    // about -5 per interaction. Nothing is injected manually.
+    sim.entities[0].personality = Personality {
+        curiosity: 0.0,
+        sociability: 1.0,
+        cooperativeness: 0.0,
+        caution: 0.0,
+        persistence: 0.5,
+    };
+    sim.entities[1].personality = Personality {
+        curiosity: 1.0,
+        sociability: 1.0,
+        cooperativeness: 0.0,
+        caution: 1.0,
+        persistence: 0.5,
+    };
+
+    // Phase 1 — formation: repeated bad interactions while pinned within
+    // social radius, until the stored affinity genuinely crosses -200.
+    let mut too_negative = false;
+    for _ in 0..900 {
+        sim.entities[0].x = 3;
+        sim.entities[0].y = 3;
+        sim.entities[1].x = 3;
+        sim.entities[1].y = 4;
+        for entity in &mut sim.entities {
+            entity.hunger = 0.0;
+            entity.health = 100.0;
+        }
+        sim.step(&mut world);
+
+        if sim.entities()[0].mind.memory.affinity_to(2).unwrap_or(0) < -200 {
+            too_negative = true;
+            break;
+        }
+    }
+    assert!(
+        too_negative,
+        "repeated bad interactions should drive affinity below -200"
+    );
+
+    // Force a fresh decision after the relationship became strongly
+    // negative: the last interaction may have crossed the threshold
+    // in the middle of an existing social plan.
+    sim.entities[0].mind.clear_goal();
+    sim.entities[0].path.clear();
+    sim.entities[0].path_index = 0;
+
+    // Phase 2 — avoidance: separate them beyond perception (and far
+    // outside SOCIAL_RADIUS) so no involuntary interaction can resume.
+    let interactions_before_avoidance = interaction_count(&sim, 0, 2);
+
+    for _ in 0..100 {
+        sim.entities[0].x = 2;
+        sim.entities[0].y = 2;
+        sim.entities[1].x = 7;
+        sim.entities[1].y = 7;
+
+        for entity in &mut sim.entities {
+            entity.hunger = 0.0;
+            entity.health = 100.0;
+        }
+
+        sim.step(&mut world);
+
+        if let Some(target) = sim.entities()[0]
+            .mind
+            .current_action()
+            .and_then(|action| action.target_entity_id())
+        {
+            assert_ne!(
+                target, 2,
+                "strongly negative partner must not be sought voluntarily"
+            );
+        }
+    }
+
+    assert_eq!(
+        interaction_count(&sim, 0, 2),
+        interactions_before_avoidance,
+        "separated hostile entities should not resume interaction"
+    );
+}
+
+#[test]
+fn formed_relationship_later_decays_when_abandoned() {
+    let mut world = plain_grid(16, 16);
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 3, 3), default_adult(2, 3, 4)],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    let compatible = Personality {
+        curiosity: 0.0,
+        sociability: 1.0,
+        cooperativeness: 1.0,
+        caution: 0.0,
+        persistence: 0.5,
+    };
+    sim.entities[0].personality = compatible;
+    sim.entities[1].personality = compatible;
+
+    // Form a real positive relationship through repeated interactions.
+    for _ in 0..80 {
+        sim.entities[0].x = 3;
+        sim.entities[0].y = 3;
+        sim.entities[1].x = 3;
+        sim.entities[1].y = 4;
+        for entity in &mut sim.entities {
+            entity.hunger = 0.0;
+            entity.health = 100.0;
+        }
+        sim.step(&mut world);
+    }
+
+    let formed = sim.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|k| k.id == 2)
+        .copied()
+        .expect("relationship should have formed");
+    assert!(
+        formed.affinity > 0,
+        "relationship must be positive before decay"
+    );
+    let formed_affinity = formed.affinity;
+    let last_interaction = formed.last_interaction_tick;
+
+    // Abandon it: move the partner far beyond perception so no new
+    // interaction renews the relationship.
+    sim.entities[1].x = 15;
+    sim.entities[1].y = 15;
+
+    // Jump the clock to the first day boundary at/after the 30-day decay
+    // window, so the single step lands on a daily decay pass.
+    let window_start = last_interaction + super::super::autonomy::RELATIONSHIP_DECAY_START_TICKS;
+    let boundary = window_start.div_ceil(super::super::time::TICKS_PER_DAY)
+        * super::super::time::TICKS_PER_DAY;
+    sim.tick = boundary - 1;
+    sim.entities[0].x = 3;
+    sim.entities[0].y = 3;
+    for entity in &mut sim.entities {
+        entity.hunger = 0.0;
+        entity.health = 100.0;
+    }
+    sim.step(&mut world);
+
+    let after = sim.entities()[0]
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .find(|k| k.id == 2)
+        .expect("relationship should still be remembered");
+    assert!(
+        after.affinity < formed_affinity,
+        "a formed relationship should slowly decay when abandoned: {} -> {}",
+        formed_affinity,
+        after.affinity,
+    );
+}
