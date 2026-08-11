@@ -134,22 +134,22 @@ Las funciones pendientes de geografía quedan pospuestas hasta que influyan dire
 
 Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 
-* [ ] Goal `Socialize`
-* [ ] Acción `ApproachEntity`
-* [ ] Acción `Interact`
+* [x] Goal `Socialize`
+* [x] Acción `ApproachEntity`
+* [x] Acción `Interact`
 * [ ] Selección de interlocutor mediante:
 
-  * [ ] sociabilidad
-  * [ ] afinidad
-  * [ ] familiaridad
-  * [ ] distancia
+  * [x] sociabilidad
+  * [x] afinidad
+  * [x] familiaridad
+  * [x] distancia
   * [ ] necesidades actuales
 * [x] Resultado determinista de una interacción
 * [x] Compatibilidad entre personalidades
 * [x] Cambios positivos y negativos de afinidad
 * [x] Cooldown social
-* [ ] Evitar individuos con afinidad negativa
-* [ ] Buscar individuos con afinidad positiva
+* [x] Evitar individuos con afinidad negativa
+* [ ] Buscar individuos con afinidad positiva (desde memoria)
 * [ ] Decaimiento lento de relaciones abandonadas
 * [ ] Inspector de relaciones conocidas
 * [ ] Tests de formación y deterioro de afinidad
