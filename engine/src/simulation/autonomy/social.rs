@@ -1,7 +1,10 @@
-use super::super::entity::{Entity, LifeStage, Personality};
+use super::super::entity::{Entity, EntityActivity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_DAY;
-use super::mind::{manhattan, KnownEntity};
+use super::exploration::plan_exploration;
+use super::mind::{manhattan, Action, Goal, KnownEntity, Mind};
+use crate::pathfinding::{self, PathfindingWorkspace};
+use crate::world::Grid;
 use std::collections::HashMap;
 
 pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
@@ -60,6 +63,181 @@ fn interaction_delta(compatibility: f32, other_cooperativeness: f32) -> i16 {
     let cooperation_effect = ((other_cooperativeness - 0.5) * 8.0).round() as i16;
 
     compatibility_effect + cooperation_effect
+}
+
+/// Select the best entity to socialize with based on affinity, familiarity,
+/// and distance.
+///
+/// First checks visible entities. If none are suitable but there are known
+/// entities with positive affinity that are not currently visible, may select
+/// one from memory to seek out.
+fn select_social_target(
+    mind: &Mind,
+    origin: (u32, u32),
+    entity_id: u32,
+    population: &[EntitySnapshot],
+    personality: &Personality,
+    tick: u64,
+) -> Option<u32> {
+    let mut best_visible: Option<(i32, u32)> = None;
+    let mut best_memory: Option<(i32, u32)> = None;
+
+    for &visible_id in &mind.visible_entities {
+        if visible_id == entity_id {
+            continue;
+        }
+
+        let Some(snapshot) = population.iter().find(|s| s.id == visible_id) else {
+            continue;
+        };
+
+        let distance = manhattan(origin, (snapshot.x, snapshot.y)) as i32;
+        let known = mind
+            .memory
+            .known_entities
+            .iter()
+            .find(|k| k.id == visible_id);
+        let affinity = known.map_or(0, |k| k.affinity as i32);
+        let familiarity = known.map_or(0u32, |k| k.interaction_count) as i32;
+
+        if affinity < -200 {
+            continue;
+        }
+
+        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
+
+        match best_visible {
+            None => best_visible = Some((score, visible_id)),
+            Some((best_score, _)) if score > best_score => {
+                best_visible = Some((score, visible_id));
+            }
+            _ => {}
+        }
+    }
+
+    if let Some((visible_score, _)) = best_visible {
+        if visible_score >= 50 {
+            return best_visible.map(|(_, id)| id);
+        }
+    }
+
+    for known in &mind.memory.known_entities {
+        if known.id == entity_id {
+            continue;
+        }
+
+        if known.seek_on_cooldown(tick) {
+            continue;
+        }
+
+        if mind.visible_entities.binary_search(&known.id).is_ok() {
+            continue;
+        }
+
+        let Some(score) = remembered_social_score(known, tick, origin, personality) else {
+            continue;
+        };
+
+        match best_memory {
+            None => best_memory = Some((score, known.id)),
+            Some((best_score, _)) if score > best_score => {
+                best_memory = Some((score, known.id));
+            }
+            _ => {}
+        }
+    }
+
+    best_memory.or(best_visible).map(|(_, id)| id)
+}
+
+/// Plan a Socialize goal for the entity.
+///
+/// If no suitable target exists, falls back to exploration.
+pub(super) fn plan_socialize(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    population: &[EntitySnapshot],
+) {
+    let origin = (entity.x, entity.y);
+
+    let Some(target_id) = select_social_target(
+        &entity.mind,
+        origin,
+        entity.id,
+        population,
+        &entity.personality,
+        tick,
+    ) else {
+        plan_exploration(entity, world, tick, pathfinding_workspace);
+        return;
+    };
+
+    let is_visible = entity
+        .mind
+        .visible_entities
+        .binary_search(&target_id)
+        .is_ok();
+
+    let target_pos = if is_visible {
+        let Some(target_snapshot) = population.iter().find(|s| s.id == target_id) else {
+            plan_exploration(entity, world, tick, pathfinding_workspace);
+            return;
+        };
+        (target_snapshot.x, target_snapshot.y)
+    } else {
+        let Some(known) = entity
+            .mind
+            .memory
+            .known_entities
+            .iter()
+            .find(|k| k.id == target_id)
+        else {
+            plan_exploration(entity, world, tick, pathfinding_workspace);
+            return;
+        };
+        (known.last_seen_x, known.last_seen_y)
+    };
+
+    if manhattan(origin, target_pos) <= SOCIAL_RADIUS {
+        if is_visible {
+            entity
+                .mind
+                .set_plan(Goal::Socialize, vec![Action::Interact(target_id)], tick);
+            entity.activity = EntityActivity::Socializing;
+        } else {
+            entity.mind.memory.mark_failed_social_seek(target_id, tick);
+            entity.mind.clear_goal();
+            entity.path.clear();
+            entity.path_index = 0;
+            entity.activity = EntityActivity::Idle;
+        }
+        return;
+    }
+
+    if let Some(path) =
+        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target_pos)
+    {
+        entity.path = path.into_iter().skip(1).collect();
+        entity.path_index = 0;
+        entity.mind.set_plan(
+            Goal::Socialize,
+            vec![
+                Action::ApproachEntity(target_id),
+                Action::Interact(target_id),
+            ],
+            tick,
+        );
+        entity.activity = EntityActivity::Moving;
+    } else {
+        if !is_visible {
+            entity.mind.memory.mark_failed_social_seek(target_id, tick);
+        }
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+    }
 }
 
 pub(super) fn process_social_interactions(
@@ -185,6 +363,7 @@ pub(super) fn process_social_interactions(
 
 #[cfg(test)]
 mod tests {
+    use super::super::mind::{KnownEntity, Mind, FAILED_SOCIAL_SEEK_RETRY_TICKS};
     use super::*;
 
     fn personality(sociability: f32, cooperativeness: f32) -> Personality {
@@ -194,6 +373,31 @@ mod tests {
             cooperativeness,
             caution: 0.5,
             persistence: 0.5,
+        }
+    }
+
+    fn social_personality() -> Personality {
+        Personality {
+            curiosity: 0.0,
+            sociability: 1.0,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.5,
+        }
+    }
+
+    fn remembered_entity(id: u32, affinity: i16) -> KnownEntity {
+        KnownEntity {
+            id,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 10,
+            last_seen_y: 0,
+            observed_ticks: 1,
+            affinity,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
         }
     }
 
@@ -253,5 +457,50 @@ mod tests {
     #[test]
     fn neutral_defaults_give_moderate_positive_delta() {
         assert_eq!(interaction_delta(1.0, 0.5), 4);
+    }
+
+    #[test]
+    fn failed_social_seek_does_not_immediately_retry() {
+        let personality = social_personality();
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(remembered_entity(2, 800));
+
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 10),
+            Some(2)
+        );
+
+        assert!(mind.memory.mark_failed_social_seek(2, 10));
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 11),
+            None
+        );
+        assert_eq!(
+            select_social_target(
+                &mind,
+                (0, 0),
+                1,
+                &[],
+                &personality,
+                10 + FAILED_SOCIAL_SEEK_RETRY_TICKS,
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn selects_highest_affinity_from_memory() {
+        let personality = social_personality();
+        let mut mind = Mind::default();
+        mind.memory.known_entities = vec![
+            remembered_entity(2, 0),
+            remembered_entity(3, 800),
+            remembered_entity(4, 0),
+        ];
+
+        assert_eq!(
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 0),
+            Some(3)
+        );
     }
 }
