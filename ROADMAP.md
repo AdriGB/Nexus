@@ -152,7 +152,7 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 * [X] Buscar individuos con afinidad positiva (desde memoria)
 * [x] Decaimiento lento de relaciones abandonadas
 * [ ] Inspector de relaciones conocidas
-* [ ] Tests de formación y deterioro de afinidad
+* [x] Tests de formación y deterioro de afinidad
 * [x] Reproducción influida por relaciones existentes
 
 ### Vertical de validación
