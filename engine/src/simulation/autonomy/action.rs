@@ -160,6 +160,7 @@ pub(super) fn execute_current_action(
                 } else {
                     // Arrived at last known position but target is not visible
                     // — abandon Socialize
+                    entity.mind.memory.mark_failed_social_seek(target_id, tick);
                     entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }
@@ -215,12 +216,14 @@ pub(super) fn execute_current_action(
                     } else {
                         // Arrived at last known position but target is not visible
                         // — abandon Socialize
+                        entity.mind.memory.mark_failed_social_seek(target_id, tick);
                         entity.mind.clear_goal();
                         entity.activity = EntityActivity::Idle;
                     }
                 } else if !currently_visible {
                     // Arrived at last known position but target is not here
                     // and not visible — abandon Socialize
+                    entity.mind.memory.mark_failed_social_seek(target_id, tick);
                     entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }

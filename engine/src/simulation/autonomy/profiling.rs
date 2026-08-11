@@ -95,6 +95,7 @@ fn profiled_update_entity(
             entity.age_ticks,
             &entity.personality,
             current_goal,
+            (tick, position),
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
         profile.planning_us += start.elapsed().as_micros() as u64;

@@ -73,6 +73,7 @@ impl Action {
 const MIN_AFFINITY: i16 = -1_000;
 pub(super) const NEUTRAL_AFFINITY: i16 = 0;
 const MAX_AFFINITY: i16 = 1_000;
+pub(super) const FAILED_SOCIAL_SEEK_RETRY_TICKS: u64 = 50;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KnownResource {
@@ -96,6 +97,22 @@ pub struct KnownEntity {
     pub affinity: i16,
     pub last_interaction_tick: u64,
     pub interaction_count: u32,
+    pub seek_retry_after_tick: Option<u64>,
+}
+
+impl KnownEntity {
+    pub(super) fn mark_failed_seek(&mut self, tick: u64) {
+        self.seek_retry_after_tick = Some(tick.saturating_add(FAILED_SOCIAL_SEEK_RETRY_TICKS));
+    }
+
+    pub(super) fn clear_seek_cooldown(&mut self) {
+        self.seek_retry_after_tick = None;
+    }
+
+    pub(super) fn seek_on_cooldown(self, tick: u64) -> bool {
+        self.seek_retry_after_tick
+            .is_some_and(|retry_after_tick| tick < retry_after_tick)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -202,7 +219,20 @@ impl Memory {
 
         known.last_interaction_tick = tick;
         known.interaction_count = known.interaction_count.saturating_add(1);
+        known.clear_seek_cooldown();
 
+        true
+    }
+
+    pub(super) fn mark_failed_social_seek(&mut self, entity_id: u32, tick: u64) -> bool {
+        let Ok(index) = self
+            .known_entities
+            .binary_search_by_key(&entity_id, |known| known.id)
+        else {
+            return false;
+        };
+
+        self.known_entities[index].mark_failed_seek(tick);
         true
     }
 
@@ -353,6 +383,7 @@ mod tests {
             affinity: NEUTRAL_AFFINITY,
             last_interaction_tick: 0,
             interaction_count: 0,
+            seek_retry_after_tick: None,
         }
     }
 

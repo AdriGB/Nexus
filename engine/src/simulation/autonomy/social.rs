@@ -1,11 +1,44 @@
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
-use super::mind::manhattan;
+use super::super::time::TICKS_PER_DAY;
+use super::mind::{manhattan, KnownEntity};
 use std::collections::HashMap;
 
 pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
 pub(super) const MIN_INTERACTION_INTERVAL: u64 = 12;
 pub(super) const MAX_INTERACTION_INTERVAL: u64 = 72;
+const MIN_REMEMBERED_SOCIAL_SCORE: i32 = 100;
+const STALE_PENALTY_PER_DAY: i32 = 10;
+
+pub(super) fn remembered_social_score(
+    known: &KnownEntity,
+    tick: u64,
+    origin: (u32, u32),
+    personality: &Personality,
+) -> Option<i32> {
+    if known.seek_on_cooldown(tick) {
+        return None;
+    }
+
+    let distance = manhattan(origin, (known.last_seen_x, known.last_seen_y));
+    let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+    let distance_penalty = (distance as f32 * distance_weight) as i32;
+    let age_days = tick.saturating_sub(known.last_seen_tick) / TICKS_PER_DAY;
+    let stale_penalty = i32::try_from(age_days)
+        .unwrap_or(i32::MAX)
+        .saturating_mul(STALE_PENALTY_PER_DAY);
+    let score = i32::from(known.affinity.max(0))
+        .saturating_mul(2)
+        .saturating_add(
+            i32::try_from(known.interaction_count)
+                .unwrap_or(i32::MAX)
+                .saturating_mul(5),
+        )
+        .saturating_sub(distance_penalty)
+        .saturating_sub(stale_penalty);
+
+    (score >= MIN_REMEMBERED_SOCIAL_SCORE).then_some(score)
+}
 
 pub(super) fn interaction_interval(a: &Personality, b: &Personality) -> u64 {
     let sociability = (a.sociability + b.sociability) * 0.5;

@@ -361,6 +361,7 @@ fn entity_avoids_negative_affinity_target() {
             affinity: -500,
             last_interaction_tick: 0,
             interaction_count: 0,
+            seek_retry_after_tick: None,
         });
 
     // Run — entity should NOT socialize with entity 2
@@ -406,6 +407,7 @@ fn socialize_utility_increases_with_positive_affinity() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
     let score_no_affinity = mind.utility_scores.socialize;
 
@@ -422,6 +424,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             affinity: 500,
             last_interaction_tick: 0,
             interaction_count: 3,
+            seek_retry_after_tick: None,
         });
     mind.memory
         .known_entities
@@ -435,6 +438,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             affinity: 300,
             last_interaction_tick: 0,
             interaction_count: 2,
+            seek_retry_after_tick: None,
         });
     // Socialize utility requires visible candidates
     mind.visible_entities = vec![10, 11];
@@ -446,6 +450,7 @@ fn socialize_utility_increases_with_positive_affinity() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
     let score_with_affinity = mind.utility_scores.socialize;
 
@@ -748,6 +753,7 @@ fn socialize_utility_is_zero_without_candidates() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
 
     assert_eq!(
@@ -871,6 +877,7 @@ fn entity_seeks_remembered_high_affinity_target() {
             affinity: 500, // Strong positive affinity
             last_interaction_tick: 0,
             interaction_count: 5,
+            seek_retry_after_tick: None,
         });
 
     // Clear any visible entities to force memory-based decision
@@ -929,6 +936,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             affinity: 500,
             last_interaction_tick: 0,
             interaction_count: 3,
+            seek_retry_after_tick: None,
         });
     mind.memory
         .known_entities
@@ -942,6 +950,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             affinity: 400,
             last_interaction_tick: 0,
             interaction_count: 2,
+            seek_retry_after_tick: None,
         });
 
     // No visible entities
@@ -954,6 +963,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
 
     assert!(
@@ -971,6 +981,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
     let visible_score = mind.utility_scores.socialize;
 
@@ -983,6 +994,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         25 * super::super::time::TICKS_PER_YEAR,
         &personality,
         None,
+        (0, (0, 0)),
     );
     let memory_only_score = mind.utility_scores.socialize;
 
@@ -1101,6 +1113,7 @@ fn low_affinity_memory_does_not_trigger_seek() {
             affinity: 50, // Below threshold
             last_interaction_tick: 0,
             interaction_count: 1,
+            seek_retry_after_tick: None,
         });
 
     // No visible entities
