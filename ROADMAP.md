@@ -150,7 +150,7 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 * [x] Cooldown social
 * [x] Evitar individuos con afinidad negativa
 * [X] Buscar individuos con afinidad positiva (desde memoria)
-* [ ] Decaimiento lento de relaciones abandonadas
+* [x] Decaimiento lento de relaciones abandonadas
 * [ ] Inspector de relaciones conocidas
 * [ ] Tests de formación y deterioro de afinidad
 * [x] Reproducción influida por relaciones existentes
