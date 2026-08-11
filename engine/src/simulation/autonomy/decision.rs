@@ -74,7 +74,7 @@ pub fn evaluate_goals(
     // entities with high positive affinity that could be sought out.
     let socialize = {
         let has_visible = !mind.visible_entities.is_empty();
-        
+
         let positive_affinity_count = mind
             .memory
             .known_entities
@@ -83,18 +83,26 @@ pub fn evaluate_goals(
             .count() as f32;
         let total_known = mind.memory.known_entities.len().max(1) as f32;
         let affinity_ratio = positive_affinity_count / total_known;
+        let strongest_positive_affinity = mind
+            .memory
+            .known_entities
+            .iter()
+            .map(|known| known.affinity.max(0))
+            .max()
+            .unwrap_or(0) as f32
+            / 1_000.0;
         let sociability_factor = 0.3 + personality.sociability * 0.7;
         let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
-        
+
         let base_social = sated_factor * (0.15 + affinity_ratio * 0.45) * sociability_factor;
-        
+
         if has_visible {
             // Visible candidates present — full utility
             base_social
-        } else if affinity_ratio > 0.3 && personality.sociability > 0.4 {
-            // No visible candidates but good relationships in memory
-            // Utility is reduced since target must be sought first
-            base_social * 0.5
+        } else if strongest_positive_affinity > 0.0 && personality.sociability > 0.4 {
+            // Seeking someone out should scale with the strongest remembered tie,
+            // while remaining less attractive than an equivalent visible contact.
+            sated_factor * (0.1 + strongest_positive_affinity) * sociability_factor * 0.9
         } else {
             0.0
         }
@@ -260,7 +268,7 @@ pub(super) fn plan_goal(
 }
 
 /// Select the best entity to socialize with based on affinity, familiarity, and distance.
-/// 
+///
 /// First checks visible entities. If none are suitable but there are known entities
 /// with positive affinity that are not currently visible, may select one from memory
 /// to seek out.
@@ -332,11 +340,7 @@ fn select_social_target(
         }
 
         // Skip if currently visible (already handled above)
-        if mind
-            .visible_entities
-            .binary_search(&known.id)
-            .is_ok()
-        {
+        if mind.visible_entities.binary_search(&known.id).is_ok() {
             continue;
         }
 
@@ -363,9 +367,7 @@ fn select_social_target(
     }
 
     // Return best from memory if available, otherwise fall back to visible
-    best_memory
-        .or(best_visible)
-        .map(|(_, id)| id)
+    best_memory.or(best_visible).map(|(_, id)| id)
 }
 
 fn plan_socialize(
@@ -663,7 +665,7 @@ fn deterministic_wander_target(
 #[cfg(test)]
 mod tests {
     use super::super::super::time::TICKS_PER_YEAR;
-    use super::super::mind::{chunk_index, Mind, FAILED_EXPLORATION_RETRY_TICKS};
+    use super::super::mind::{chunk_index, KnownEntity, Mind, FAILED_EXPLORATION_RETRY_TICKS};
     use super::*;
     use crate::world::{Terrain, Tile};
 
@@ -734,6 +736,40 @@ mod tests {
             Some(Goal::Eat),
         );
         assert_eq!(goal, Goal::Explore);
+    }
+
+    #[test]
+    fn strong_remembered_relationship_can_trigger_socialize() {
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(KnownEntity {
+            id: 2,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 10,
+            last_seen_y: 10,
+            observed_ticks: 10,
+            affinity: 500,
+            last_interaction_tick: 0,
+            interaction_count: 5,
+        });
+        let personality = Personality {
+            curiosity: 0.0,
+            sociability: 1.0,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.5,
+        };
+
+        let goal = evaluate_goals(
+            &mut mind,
+            0.0,
+            100.0,
+            25 * TICKS_PER_YEAR,
+            &personality,
+            None,
+        );
+
+        assert_eq!(goal, Goal::Socialize);
     }
 
     #[test]

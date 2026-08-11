@@ -880,7 +880,7 @@ fn entity_seeks_remembered_high_affinity_target() {
     let mut found_seek = false;
     for _ in 0..100 {
         sim.step(&mut world);
-        
+
         // Check if entity 1 has Socialize goal and is approaching entity 2
         if sim.entities()[0].mind.current_goal == Some(Goal::Socialize) {
             if let Some(Action::ApproachEntity(2)) = sim.entities()[0].mind.current_action() {
@@ -994,7 +994,6 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
 
 #[test]
 fn seeker_abandons_at_stale_last_seen_position() {
-    use super::super::autonomy::KnownEntity;
     use super::super::entity::EntityActivity;
 
     let mut world = plain_grid(64, 64);
@@ -1111,7 +1110,7 @@ fn low_affinity_memory_does_not_trigger_seek() {
     let mut sought_low_affinity = false;
     for _ in 0..100 {
         sim.step(&mut world);
-        
+
         if sim.entities()[0].mind.current_goal == Some(Goal::Socialize) {
             if let Some(Action::ApproachEntity(99)) = sim.entities()[0].mind.current_action() {
                 sought_low_affinity = true;
