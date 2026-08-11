@@ -163,6 +163,13 @@ impl WorldBridge {
         )
     }
 
+    pub fn first_entity_relationships(&self) -> String {
+        self.simulation
+            .entities()
+            .first()
+            .map_or_else(|| "[]".to_string(), bridge::entity_relationships_json)
+    }
+
     pub fn entity_info(&self, id: u32) -> String {
         self.simulation
             .entities()
