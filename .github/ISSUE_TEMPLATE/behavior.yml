@@ -1,0 +1,75 @@
+name: Behavior slice
+description: Plan one small, observable Nexus behavior.
+title: "feat(scope): "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: Keep the slice small enough that one PR can tell one complete behavioral story.
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What behavior should exist when this issue is done?
+      placeholder: Agents with a social need prefer known individuals with positive affinity.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List concrete, testable outcomes.
+      placeholder: |
+        - Affinity affects the utility score.
+        - The agent does not use unknown relationship data.
+        - Two candidates are covered by a test.
+        - The same seed produces the same choice.
+    validations:
+      required: true
+
+  - type: input
+    id: roadmap
+    attributes:
+      label: Roadmap
+      description: Phase and item this issue advances.
+      placeholder: Phase 2.7 - Social Interaction / Seek positive relationships
+    validations:
+      required: true
+
+  - type: textarea
+    id: causality
+    attributes:
+      label: Causality and knowledge boundaries
+      description: What does the agent know, and why should this outcome occur?
+    validations:
+      required: true
+
+  - type: textarea
+    id: performance
+    attributes:
+      label: Performance constraints
+      description: Note update frequency, complexity, scans, and pathfinding limits.
+      placeholder: Reuse remembered candidates; do not add an A* search every tick.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation-scenario
+    attributes:
+      label: Validation scenario
+      description: Describe the smallest emergent story that proves the behavior.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Ready for implementation
+      options:
+        - label: This issue represents one observable behavior.
+          required: true
+        - label: The acceptance criteria can be verified by tests or an inspector scenario.
+          required: true

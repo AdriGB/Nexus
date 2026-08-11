@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible Nexus regression or incorrect behavior.
+title: "fix(scope): "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the seed, inputs, tick range, and minimal steps when available.
+    validations:
+      required: true
+
+  - type: textarea
+    id: causality
+    attributes:
+      label: Causality or determinism impact
+      description: Does this expose hidden knowledge, change same-seed results, or break replayability?
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add logs, screenshots, failing tests, or profiling output.
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: Commit SHA or branch name
+    validations:
+      required: true

@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   engine:
@@ -22,25 +21,9 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Format check
-        working-directory: engine
-        run: cargo fmt --check
-
-      - name: Clippy native
-        working-directory: engine
-        run: cargo clippy -- -D warnings
-
-      - name: Clippy WASM
-        working-directory: engine
-        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
-
-      - name: Tests
-        working-directory: engine
-        run: cargo test
-
-      - name: Build WASM
-        working-directory: engine
-        run: wasm-pack build --target web --out-dir ../web/src/wasm
+      - name: Validate engine and build WASM
+        shell: pwsh
+        run: ./scripts/check.ps1 -Target engine
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
@@ -71,14 +54,6 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install dependencies
-        working-directory: web
-        run: npm ci
-
-      - name: Type check
-        working-directory: web
-        run: npm run typecheck
-
-      - name: Build
-        working-directory: web
-        run: npm run build
+      - name: Validate web
+        shell: pwsh
+        run: ./scripts/check.ps1 -Target web

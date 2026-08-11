@@ -161,3 +161,13 @@ cd ../web
 npm install
 npm run dev
 ```
+
+## Development workflow
+
+Run the same validation used by CI from the repository root:
+
+```powershell
+./scripts/check.ps1
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the Issue, branch, pull request, validation, and roadmap workflow.
