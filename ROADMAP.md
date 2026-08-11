@@ -137,13 +137,13 @@ Objetivo: convertir las relaciones almacenadas en comportamiento visible.
 * [x] Goal `Socialize`
 * [x] Acción `ApproachEntity`
 * [x] Acción `Interact`
-* [ ] Selección de interlocutor mediante:
+* [x] Selección de interlocutor mediante:
 
   * [x] sociabilidad
   * [x] afinidad
   * [x] familiaridad
   * [x] distancia
-  * [ ] necesidades actuales
+  * [x] necesidades actuales
 * [x] Resultado determinista de una interacción
 * [x] Compatibilidad entre personalidades
 * [x] Cambios positivos y negativos de afinidad

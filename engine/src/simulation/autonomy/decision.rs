@@ -89,7 +89,7 @@ pub fn evaluate_goals(
             .known_entities
             .iter()
             .filter(|known| mind.visible_entities.binary_search(&known.id).is_err())
-            .filter_map(|known| remembered_social_score(known, tick, origin, personality))
+            .filter_map(|known| remembered_social_score(known, tick, origin, personality, 1.0))
             .max();
         let sociability_factor = 0.3 + personality.sociability * 0.7;
         let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;

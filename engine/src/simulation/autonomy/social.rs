@@ -1,3 +1,4 @@
+use super::super::config::{MAX_HEALTH, MAX_HUNGER};
 use super::super::entity::{Entity, EntityActivity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_DAY;
@@ -11,21 +12,37 @@ pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
 pub(super) const MIN_INTERACTION_INTERVAL: u64 = 12;
 pub(super) const MAX_INTERACTION_INTERVAL: u64 = 72;
 const MIN_REMEMBERED_SOCIAL_SCORE: i32 = 100;
+/// Scales how strongly the actor's own current needs amplify the
+/// distance penalty when choosing a social target: hunger or low health
+/// in [0, 100] maps to a need pressure in [1.0, 2.0] with this constant.
+const NEED_DISTANCE_PENALTY: f32 = 1.0;
 const STALE_PENALTY_PER_DAY: i32 = 10;
+
+/// Actor-only need pressure: how much current hunger or low health makes
+/// the actor prefer nearby social targets. Uses `max`, not a sum, so
+/// being both hungry and injured never exceeds 2.0. Target needs are
+/// never observed.
+fn social_need_pressure(hunger: f32, health: f32) -> f32 {
+    let hunger_pressure = (hunger / MAX_HUNGER).clamp(0.0, 1.0);
+    let health_pressure = (1.0 - health / MAX_HEALTH).clamp(0.0, 1.0);
+
+    1.0 + hunger_pressure.max(health_pressure) * NEED_DISTANCE_PENALTY
+}
 
 pub(super) fn remembered_social_score(
     known: &KnownEntity,
     tick: u64,
     origin: (u32, u32),
     personality: &Personality,
+    need_pressure: f32,
 ) -> Option<i32> {
     if known.seek_on_cooldown(tick) {
         return None;
     }
 
     let distance = manhattan(origin, (known.last_seen_x, known.last_seen_y));
-    let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
-    let distance_penalty = (distance as f32 * distance_weight) as i32;
+    let base_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+    let distance_penalty = (distance as f32 * base_weight * need_pressure) as i32;
     let age_days = tick.saturating_sub(known.last_seen_tick) / TICKS_PER_DAY;
     let stale_penalty = i32::try_from(age_days)
         .unwrap_or(i32::MAX)
@@ -77,6 +94,7 @@ fn select_social_target(
     entity_id: u32,
     population: &[EntitySnapshot],
     personality: &Personality,
+    need_pressure: f32,
     tick: u64,
 ) -> Option<u32> {
     let mut best_visible: Option<(i32, u32)> = None;
@@ -104,7 +122,7 @@ fn select_social_target(
             continue;
         }
 
-        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5);
+        let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5) * need_pressure;
         let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
 
         match best_visible {
@@ -135,7 +153,8 @@ fn select_social_target(
             continue;
         }
 
-        let Some(score) = remembered_social_score(known, tick, origin, personality) else {
+        let Some(score) = remembered_social_score(known, tick, origin, personality, need_pressure)
+        else {
             continue;
         };
 
@@ -162,6 +181,7 @@ pub(super) fn plan_socialize(
     population: &[EntitySnapshot],
 ) {
     let origin = (entity.x, entity.y);
+    let pressure = social_need_pressure(entity.hunger, entity.health);
 
     let Some(target_id) = select_social_target(
         &entity.mind,
@@ -169,6 +189,7 @@ pub(super) fn plan_socialize(
         entity.id,
         population,
         &entity.personality,
+        pressure,
         tick,
     ) else {
         plan_exploration(entity, world, tick, pathfinding_workspace);
@@ -363,6 +384,7 @@ pub(super) fn process_social_interactions(
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::spatial::EntitySnapshot;
     use super::super::mind::{KnownEntity, Mind, FAILED_SOCIAL_SEEK_RETRY_TICKS};
     use super::*;
 
@@ -466,13 +488,13 @@ mod tests {
         mind.memory.known_entities.push(remembered_entity(2, 800));
 
         assert_eq!(
-            select_social_target(&mind, (0, 0), 1, &[], &personality, 10),
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 1.0, 10),
             Some(2)
         );
 
         assert!(mind.memory.mark_failed_social_seek(2, 10));
         assert_eq!(
-            select_social_target(&mind, (0, 0), 1, &[], &personality, 11),
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 1.0, 11),
             None
         );
         assert_eq!(
@@ -482,6 +504,7 @@ mod tests {
                 1,
                 &[],
                 &personality,
+                1.0,
                 10 + FAILED_SOCIAL_SEEK_RETRY_TICKS,
             ),
             Some(2)
@@ -499,8 +522,111 @@ mod tests {
         ];
 
         assert_eq!(
-            select_social_target(&mind, (0, 0), 1, &[], &personality, 0),
+            select_social_target(&mind, (0, 0), 1, &[], &personality, 1.0, 0),
             Some(3)
         );
+    }
+
+    // ── Need-aware social target selection ────────────────────────────────
+
+    fn visible_scenario() -> (Mind, Vec<EntitySnapshot>) {
+        let mut mind = Mind::default();
+        mind.visible_entities = vec![2, 3];
+        mind.memory.known_entities.push(remembered_entity(2, 245));
+        mind.memory.known_entities.push(remembered_entity(3, 230));
+        let population = vec![
+            EntitySnapshot { id: 2, x: 12, y: 0 },
+            EntitySnapshot { id: 3, x: 2, y: 0 },
+        ];
+        (mind, population)
+    }
+
+    fn remembered_at(id: u32, affinity: i16, distance_x: u32) -> KnownEntity {
+        KnownEntity {
+            id,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: distance_x,
+            last_seen_y: 0,
+            observed_ticks: 1,
+            affinity,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        }
+    }
+
+    #[test]
+    fn social_need_pressure_increases_with_hunger() {
+        assert_eq!(social_need_pressure(0.0, 100.0), 1.0);
+        assert_eq!(social_need_pressure(50.0, 100.0), 1.5);
+        assert_eq!(social_need_pressure(100.0, 100.0), 2.0);
+    }
+
+    #[test]
+    fn social_need_pressure_increases_with_low_health() {
+        assert_eq!(social_need_pressure(0.0, 100.0), 1.0);
+        assert_eq!(social_need_pressure(0.0, 50.0), 1.5);
+        assert_eq!(social_need_pressure(0.0, 0.0), 2.0);
+    }
+
+    #[test]
+    fn low_need_prefers_high_affinity_distant_target() {
+        let (mind, population) = visible_scenario();
+        let personality = personality(0.0, 0.5);
+
+        let selected = select_social_target(&mind, (0, 0), 1, &population, &personality, 1.2, 0);
+
+        assert_eq!(
+            selected,
+            Some(2),
+            "low need allows crossing ground for a closer-valued friend"
+        );
+    }
+
+    #[test]
+    fn moderate_need_prefers_closer_social_target() {
+        let (mind, population) = visible_scenario();
+        let personality = personality(0.0, 0.5);
+
+        let selected = select_social_target(&mind, (0, 0), 1, &population, &personality, 1.7, 0);
+
+        assert_eq!(selected, Some(3), "moderate need prefers the nearby target");
+    }
+
+    #[test]
+    fn low_need_prefers_high_affinity_distant_remembered_target() {
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(remembered_at(2, 245, 12));
+        mind.memory.known_entities.push(remembered_at(3, 230, 2));
+        let personality = personality(0.0, 0.5);
+
+        let selected = select_social_target(&mind, (0, 0), 1, &[], &personality, 1.2, 0);
+
+        assert_eq!(selected, Some(2));
+    }
+
+    #[test]
+    fn moderate_need_prefers_closer_remembered_target() {
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(remembered_at(2, 245, 12));
+        mind.memory.known_entities.push(remembered_at(3, 230, 2));
+        let personality = personality(0.0, 0.5);
+
+        let selected = select_social_target(&mind, (0, 0), 1, &[], &personality, 1.7, 0);
+
+        assert_eq!(selected, Some(3));
+    }
+
+    #[test]
+    fn need_aware_social_selection_is_deterministic() {
+        let (mind_a, population_a) = visible_scenario();
+        let (mind_b, population_b) = visible_scenario();
+        let personality = personality(0.0, 0.5);
+
+        let first = select_social_target(&mind_a, (0, 0), 1, &population_a, &personality, 1.7, 0);
+        let second = select_social_target(&mind_b, (0, 0), 1, &population_b, &personality, 1.7, 0);
+
+        assert_eq!(first, second);
     }
 }

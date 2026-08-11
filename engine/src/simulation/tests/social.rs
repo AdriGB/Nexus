@@ -1439,3 +1439,31 @@ fn formed_relationship_later_decays_when_abandoned() {
         after.affinity,
     );
 }
+
+#[test]
+fn urgent_hunger_still_prioritizes_eating() {
+    let mut world = plain_grid(8, 8);
+    let food_index = (4 * world.width + 3) as usize;
+    world.resources[food_index] = Some(super::super::super::world::ResourceDeposit {
+        kind: super::super::super::world::ResourceKind::Food,
+        amount: 500,
+    });
+
+    let mut sim = Simulation {
+        entities: vec![default_adult(1, 3, 3), default_adult(2, 5, 5)],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+    sim.entities[0].personality.sociability = 1.0;
+    sim.entities[0].personality.curiosity = 0.0;
+    sim.entities[0].hunger = 90.0;
+
+    sim.step(&mut world);
+
+    assert_eq!(
+        sim.entities()[0].mind.current_goal,
+        Some(Goal::Eat),
+        "urgent hunger must keep the survival priority unchanged"
+    );
+}
