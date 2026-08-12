@@ -16,13 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-          components: rustfmt, clippy
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install
+          rustc --version
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: |
+          curl https://wasm-bindgen.github.io/wasm-pack/installer/init.sh -sSf | sh -s -- --version 0.13.1
+          wasm-pack --version
 
       - name: Validate engine and build WASM
         shell: pwsh
