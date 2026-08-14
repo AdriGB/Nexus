@@ -3,12 +3,22 @@ use super::super::spatial::{EntitySnapshot, SpatialGrid};
 use super::action::execute_current_action;
 use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal, DecisionContext};
 use super::mind::{Goal, URGENT_HUNGER_THRESHOLD};
-use super::perception::{perceive_entities, reconcile_resource_memory, scan_visible_resources};
+use super::perception::{
+    perceive_entities, reconcile_resource_memory, scan_visible_resources, ResourceDiscovery,
+};
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use web_time::Instant;
 
 const PROFILE_SAMPLE_RATE: usize = 4;
+
+type ProfileAutonomyResult = (
+    u64,
+    AutonomyProfile,
+    Vec<(u32, u16)>,
+    Vec<ResourceDiscovery>,
+    Vec<super::SocialInteraction>,
+);
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AutonomyProfile {
@@ -36,7 +46,7 @@ fn profiled_update_entity(
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
     profile: &mut AutonomyProfile,
-) -> u16 {
+) -> (u16, Vec<ResourceDiscovery>) {
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
@@ -45,7 +55,8 @@ fn profiled_update_entity(
     profile.memory_reconciliation_us += reconciliation_us;
 
     let start = Instant::now();
-    let visible_count = scan_visible_resources(&mut entity.mind, world, position, tick);
+    let (visible_count, discoveries) =
+        scan_visible_resources(&mut entity.mind, entity.id, world, position, tick);
     let visible_scan_us = start.elapsed().as_micros() as u64;
     profile.visible_scan_us += visible_scan_us;
     profile.visible_resources_seen += visible_count;
@@ -109,7 +120,7 @@ fn profiled_update_entity(
     profile.action_us += start.elapsed().as_micros() as u64;
     profile.sampled_entities += 1;
 
-    consumed
+    (consumed, discoveries)
 }
 
 pub(crate) fn profile_autonomy(
@@ -119,15 +130,11 @@ pub(crate) fn profile_autonomy(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> (
-    u64,
-    AutonomyProfile,
-    Vec<(u32, u16)>,
-    Vec<super::SocialInteraction>,
-) {
+) -> ProfileAutonomyResult {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
     let mut consumer_ids = Vec::new();
+    let mut discoveries = Vec::new();
 
     for (index, entity) in entities
         .iter_mut()
@@ -136,7 +143,7 @@ pub(crate) fn profile_autonomy(
         })
         .enumerate()
     {
-        let result = if index % PROFILE_SAMPLE_RATE == 0 {
+        let (result, entity_discoveries) = if index % PROFILE_SAMPLE_RATE == 0 {
             profiled_update_entity(
                 entity,
                 world,
@@ -156,6 +163,7 @@ pub(crate) fn profile_autonomy(
                 pathfinding_workspace,
             )
         };
+        discoveries.extend(entity_discoveries);
 
         if result > 0 {
             consumer_ids.push((entity.id, result));
@@ -167,5 +175,5 @@ pub(crate) fn profile_autonomy(
     let interactions = super::social::process_social_interactions(entities, population, tick);
     profile.social_us += social_start.elapsed().as_micros() as u64;
 
-    (consumed, profile, consumer_ids, interactions)
+    (consumed, profile, consumer_ids, discoveries, interactions)
 }

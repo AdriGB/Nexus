@@ -19,6 +19,7 @@ pub(in crate::simulation) use self::mind::{
     RELATIONSHIP_DECAY_PER_DAY, RELATIONSHIP_DECAY_START_TICKS,
 };
 pub use self::perception::perceive;
+pub(in crate::simulation) use self::perception::ResourceDiscovery;
 #[cfg(test)]
 pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
@@ -49,9 +50,9 @@ pub(super) fn update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> u16 {
+) -> (u16, Vec<ResourceDiscovery>) {
     let position = (entity.x, entity.y);
-    perceive(&mut entity.mind, world, position, tick);
+    let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
     perception::perceive_entities(
         &mut entity.mind,
         entity.id,
@@ -92,5 +93,8 @@ pub(super) fn update_entity(
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
     }
 
-    action::execute_current_action(entity, world, tick, population, pathfinding_workspace)
+    (
+        action::execute_current_action(entity, world, tick, population, pathfinding_workspace),
+        discoveries,
+    )
 }

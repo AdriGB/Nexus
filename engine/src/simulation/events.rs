@@ -1,3 +1,4 @@
+use crate::world::ResourceKind;
 use std::collections::VecDeque;
 
 pub const RECENT_EVENT_CAPACITY: usize = 1_024;
@@ -14,6 +15,7 @@ pub enum SimulationEventKind {
     Birth,
     Death,
     Consumption,
+    Discovery,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +25,7 @@ pub enum SimulationEventCause {
     Starvation,
     NaturalDeath,
     AteFood,
+    ResourceFound,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +39,10 @@ pub enum SimulationEventDetails {
     },
     Death,
     Consumption {
+        amount: u16,
+    },
+    ResourceDiscovery {
+        kind: ResourceKind,
         amount: u16,
     },
 }
