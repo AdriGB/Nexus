@@ -35,6 +35,22 @@ fn competing_entities_consume_a_finite_deposit_once() {
     );
     assert_eq!(consumption_events[0].location.x, 0);
     assert_eq!(consumption_events[0].location.y, 0);
+    let discovery_events: Vec<_> = simulation
+        .recent_events()
+        .filter(|event| event.kind == SimulationEventKind::Discovery)
+        .collect();
+    assert_eq!(discovery_events.len(), 1);
+    assert_eq!(discovery_events[0].actor_id, 1);
+    assert!(discovery_events.iter().all(|event| {
+        event.cause == SimulationEventCause::ResourceFound
+            && event.location.x == 0
+            && event.location.y == 0
+            && event.details
+                == SimulationEventDetails::ResourceDiscovery {
+                    kind: crate::world::ResourceKind::Food,
+                    amount: 10,
+                }
+    }));
 }
 
 #[test]

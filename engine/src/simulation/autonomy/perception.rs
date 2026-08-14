@@ -4,11 +4,27 @@ use crate::world::{Grid, ResourceKind};
 
 const RESOURCE_MEMORY_TTL: u64 = 2_000;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct ResourceDiscovery {
+    pub entity_id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub kind: ResourceKind,
+    pub amount: u16,
+}
+
 fn resource_key(x: u32, y: u32, kind: ResourceKind) -> (u32, u32, u8) {
     (y, x, kind as u8)
 }
 
-fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount: u16, tick: u64) {
+fn remember_resource(
+    mind: &mut Mind,
+    x: u32,
+    y: u32,
+    kind: ResourceKind,
+    amount: u16,
+    tick: u64,
+) -> bool {
     let key = resource_key(x, y, kind);
 
     match mind
@@ -22,6 +38,7 @@ fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount
             known.estimated_amount = amount;
             known.failed_attempts = 0;
             known.avoid_until_tick = 0;
+            false
         }
         Err(index) => {
             mind.memory.known_resources.insert(
@@ -36,6 +53,7 @@ fn remember_resource(mind: &mut Mind, x: u32, y: u32, kind: ResourceKind, amount
                     avoid_until_tick: 0,
                 },
             );
+            true
         }
     }
 }
@@ -107,9 +125,15 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
     }
 }
 
-pub fn perceive(mind: &mut Mind, world: &Grid, position: (u32, u32), tick: u64) {
+pub fn perceive(
+    mind: &mut Mind,
+    entity_id: u32,
+    world: &Grid,
+    position: (u32, u32),
+    tick: u64,
+) -> Vec<ResourceDiscovery> {
     reconcile_resource_memory(mind, world, position, tick);
-    scan_visible_resources(mind, world, position, tick);
+    scan_visible_resources(mind, entity_id, world, position, tick).1
 }
 
 pub(super) fn reconcile_resource_memory(
@@ -161,10 +185,11 @@ pub(super) fn reconcile_resource_memory(
 
 pub(super) fn scan_visible_resources(
     mind: &mut Mind,
+    entity_id: u32,
     world: &Grid,
     position: (u32, u32),
     tick: u64,
-) -> u32 {
+) -> (u32, Vec<ResourceDiscovery>) {
     let radius = mind.perception_radius as i64;
     let min_x = (i64::from(position.0) - radius).max(0) as u32;
     let max_x = (i64::from(position.0) + radius).min(i64::from(world.width) - 1) as u32;
@@ -174,6 +199,7 @@ pub(super) fn scan_visible_resources(
     remember_visible_chunks(mind, world, position);
 
     let mut visible_count = 0u32;
+    let mut discoveries = Vec::new();
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             if manhattan(position, (x, y)) > mind.perception_radius {
@@ -181,12 +207,20 @@ pub(super) fn scan_visible_resources(
             }
             let deposit = world.resources[(y * world.width + x) as usize];
             if let Some(deposit) = deposit {
-                remember_resource(mind, x, y, deposit.kind, deposit.amount, tick);
+                if remember_resource(mind, x, y, deposit.kind, deposit.amount, tick) {
+                    discoveries.push(ResourceDiscovery {
+                        entity_id,
+                        x,
+                        y,
+                        kind: deposit.kind,
+                        amount: deposit.amount,
+                    });
+                }
                 visible_count += 1;
             }
         }
     }
-    visible_count
+    (visible_count, discoveries)
 }
 
 pub(super) fn perceive_entities(
@@ -377,7 +411,7 @@ mod tests {
         });
 
         let mut mind = Mind::default();
-        perceive(&mut mind, &world, position, 10);
+        perceive(&mut mind, 1, &world, position, 10);
 
         assert!(mind
             .memory
@@ -386,13 +420,40 @@ mod tests {
             .any(|known| (known.x, known.y) == position));
 
         world.resources[index] = None;
-        perceive(&mut mind, &world, position, 11);
+        perceive(&mut mind, 1, &world, position, 11);
 
         assert!(!mind
             .memory
             .known_resources
             .iter()
             .any(|known| (known.x, known.y) == position));
+    }
+
+    #[test]
+    fn perception_reports_only_new_resource_memories() {
+        let mut world = plain_grid(8, 8);
+        let position = (3, 3);
+        let index = (position.1 * world.width + position.0) as usize;
+        world.resources[index] = Some(ResourceDeposit {
+            kind: ResourceKind::Timber,
+            amount: 42,
+        });
+        let mut mind = Mind::default();
+
+        let first = perceive(&mut mind, 7, &world, position, 10);
+        let refreshed = perceive(&mut mind, 7, &world, position, 11);
+
+        assert_eq!(
+            first,
+            vec![ResourceDiscovery {
+                entity_id: 7,
+                x: 3,
+                y: 3,
+                kind: ResourceKind::Timber,
+                amount: 42,
+            }]
+        );
+        assert!(refreshed.is_empty());
     }
 
     #[test]
@@ -407,10 +468,10 @@ mod tests {
         });
 
         let mut mind = Mind::default();
-        perceive(&mut mind, &world, resource_position, 10);
+        perceive(&mut mind, 1, &world, resource_position, 10);
 
         world.resources[index] = None;
-        perceive(&mut mind, &world, (5, 5), 11);
+        perceive(&mut mind, 1, &world, (5, 5), 11);
 
         assert!(mind
             .memory
@@ -431,13 +492,13 @@ mod tests {
         });
 
         let mut mind = Mind::default();
-        perceive(&mut mind, &world, position, 10);
+        perceive(&mut mind, 1, &world, position, 10);
 
         world.resources[index] = Some(ResourceDeposit {
             kind: ResourceKind::Food,
             amount: 40,
         });
-        perceive(&mut mind, &world, position, 25);
+        perceive(&mut mind, 1, &world, position, 25);
 
         let known = mind
             .memory

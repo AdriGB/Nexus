@@ -4,7 +4,7 @@ use crate::simulation::{
     self, AutonomyProfile, Entity, LifeStage, Personality, PhaseProfile, PopulationStats,
     Simulation, SimulationEvent, SimulationEventCause, SimulationEventDetails, SimulationEventKind,
 };
-use crate::world::{Grid, RegionKind};
+use crate::world::{Grid, RegionKind, ResourceKind};
 
 fn to_json<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).expect("bridge DTO serialization should not fail")
@@ -281,6 +281,7 @@ struct SimulationEventDto {
     target_affinity_delta: Option<i16>,
     child_id: Option<u32>,
     amount: Option<u16>,
+    resource_kind: Option<&'static str>,
 }
 
 fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
@@ -328,24 +329,43 @@ fn simulation_events_json<'a>(
                 (SimulationEventKind::Consumption, SimulationEventCause::AteFood) => {
                     ("consumption", "ate_food")
                 }
+                (SimulationEventKind::Discovery, SimulationEventCause::ResourceFound) => {
+                    ("discovery", "resource_found")
+                }
                 _ => ("unknown", "unknown"),
             };
-            let (actor_affinity_delta, target_affinity_delta, child_id, amount) = match event
-                .details
-            {
-                SimulationEventDetails::Interaction {
-                    actor_affinity_delta,
-                    target_affinity_delta,
-                } => (
-                    Some(actor_affinity_delta),
-                    Some(target_affinity_delta),
-                    None,
-                    None,
-                ),
-                SimulationEventDetails::Birth { child_id } => (None, None, Some(child_id), None),
-                SimulationEventDetails::Death => (None, None, None, None),
-                SimulationEventDetails::Consumption { amount } => (None, None, None, Some(amount)),
-            };
+            let (actor_affinity_delta, target_affinity_delta, child_id, amount, resource_kind) =
+                match event.details {
+                    SimulationEventDetails::Interaction {
+                        actor_affinity_delta,
+                        target_affinity_delta,
+                    } => (
+                        Some(actor_affinity_delta),
+                        Some(target_affinity_delta),
+                        None,
+                        None,
+                        None,
+                    ),
+                    SimulationEventDetails::Birth { child_id } => {
+                        (None, None, Some(child_id), None, None)
+                    }
+                    SimulationEventDetails::Death => (None, None, None, None, None),
+                    SimulationEventDetails::Consumption { amount } => {
+                        (None, None, None, Some(amount), None)
+                    }
+                    SimulationEventDetails::ResourceDiscovery { kind, amount } => (
+                        None,
+                        None,
+                        None,
+                        Some(amount),
+                        Some(match kind {
+                            ResourceKind::Food => "food",
+                            ResourceKind::Timber => "timber",
+                            ResourceKind::Stone => "stone",
+                            ResourceKind::Iron => "iron",
+                        }),
+                    ),
+                };
 
             SimulationEventDto {
                 id: event.id.to_string(),
@@ -364,6 +384,7 @@ fn simulation_events_json<'a>(
                 target_affinity_delta,
                 child_id,
                 amount,
+                resource_kind,
             }
         })
         .collect();
@@ -707,6 +728,32 @@ mod tests {
         assert_eq!(payload[0]["amount"], 9);
         assert_eq!(payload[0]["target_id"], serde_json::Value::Null);
         assert_eq!(simulation_events_json(events.iter(), 30, Some(5)), "[]");
+    }
+
+    #[test]
+    fn discovery_event_json_includes_resource_observation() {
+        let events = [SimulationEvent {
+            id: 13,
+            tick: 31,
+            location: crate::simulation::EventLocation { x: 7, y: 9 },
+            actor_id: 6,
+            target_id: None,
+            related_entity_ids: vec![6],
+            kind: SimulationEventKind::Discovery,
+            cause: SimulationEventCause::ResourceFound,
+            details: SimulationEventDetails::ResourceDiscovery {
+                kind: ResourceKind::Stone,
+                amount: 17,
+            },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 31, Some(6))).unwrap();
+        assert_eq!(payload[0]["kind"], "discovery");
+        assert_eq!(payload[0]["cause"], "resource_found");
+        assert_eq!(payload[0]["resource_kind"], "stone");
+        assert_eq!(payload[0]["amount"], 17);
+        assert_eq!(simulation_events_json(events.iter(), 31, Some(5)), "[]");
     }
 
     #[test]

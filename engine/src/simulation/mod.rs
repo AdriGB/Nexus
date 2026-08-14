@@ -32,6 +32,13 @@ use web_time::Instant;
 
 pub const INITIAL_POPULATION: u32 = 10;
 
+type AutonomyRunResult = (
+    u64,
+    Vec<(u32, u16)>,
+    Vec<autonomy::ResourceDiscovery>,
+    Vec<autonomy::SocialInteraction>,
+);
+
 #[derive(Clone, Copy, Debug)]
 pub struct PopulationStats {
     pub population: u32,
@@ -205,7 +212,9 @@ impl Simulation {
         let population_index_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
-        let (consumed_this_tick, consumer_ids, interactions) = self.run_autonomy(world);
+        let (consumed_this_tick, consumer_ids, discoveries, interactions) =
+            self.run_autonomy(world);
+        self.record_resource_discoveries(discoveries);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         let autonomy_us = start.elapsed().as_micros() as u64;
@@ -264,14 +273,16 @@ impl Simulation {
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
-        let (consumed_this_tick, profile, consumer_ids, interactions) = autonomy::profile_autonomy(
-            &mut self.entities,
-            world,
-            tick,
-            population_cache,
-            spatial_grid,
-            pathfinding_workspace,
-        );
+        let (consumed_this_tick, profile, consumer_ids, discoveries, interactions) =
+            autonomy::profile_autonomy(
+                &mut self.entities,
+                world,
+                tick,
+                population_cache,
+                spatial_grid,
+                pathfinding_workspace,
+            );
+        self.record_resource_discoveries(discoveries);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
 
@@ -393,7 +404,8 @@ impl Simulation {
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
         self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
-        let (consumed, consumer_ids, interactions) = self.run_autonomy(world);
+        let (consumed, consumer_ids, discoveries, interactions) = self.run_autonomy(world);
+        self.record_resource_discoveries(discoveries);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         self.snap_infants_to_caregivers();
@@ -405,10 +417,7 @@ impl Simulation {
         consumed
     }
 
-    fn run_autonomy(
-        &mut self,
-        world: &mut Grid,
-    ) -> (u64, Vec<(u32, u16)>, Vec<autonomy::SocialInteraction>) {
+    fn run_autonomy(&mut self, world: &mut Grid) -> AutonomyRunResult {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
@@ -416,11 +425,12 @@ impl Simulation {
 
         let mut consumed = 0u64;
         let mut consumer_ids = Vec::new();
+        let mut discoveries = Vec::new();
 
         for entity in self.entities.iter_mut().filter(|entity| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
         }) {
-            let result = autonomy::update_entity(
+            let (result, entity_discoveries) = autonomy::update_entity(
                 entity,
                 world,
                 tick,
@@ -428,6 +438,7 @@ impl Simulation {
                 spatial_grid,
                 pathfinding_workspace,
             );
+            discoveries.extend(entity_discoveries);
             if result > 0 {
                 consumer_ids.push((entity.id, result));
             }
@@ -440,7 +451,7 @@ impl Simulation {
             self.tick,
         );
 
-        (consumed, consumer_ids, interactions)
+        (consumed, consumer_ids, discoveries, interactions)
     }
 
     fn record_social_interactions(&mut self, interactions: Vec<autonomy::SocialInteraction>) {
@@ -491,6 +502,28 @@ impl Simulation {
                 kind: SimulationEventKind::Consumption,
                 cause: SimulationEventCause::AteFood,
                 details: SimulationEventDetails::Consumption { amount },
+            });
+        }
+    }
+
+    fn record_resource_discoveries(&mut self, discoveries: Vec<autonomy::ResourceDiscovery>) {
+        for discovery in discoveries {
+            self.push_event(SimulationEvent {
+                id: 0,
+                tick: self.tick,
+                location: EventLocation {
+                    x: discovery.x,
+                    y: discovery.y,
+                },
+                actor_id: discovery.entity_id,
+                target_id: None,
+                related_entity_ids: vec![discovery.entity_id],
+                kind: SimulationEventKind::Discovery,
+                cause: SimulationEventCause::ResourceFound,
+                details: SimulationEventDetails::ResourceDiscovery {
+                    kind: discovery.kind,
+                    amount: discovery.amount,
+                },
             });
         }
     }

@@ -68,10 +68,10 @@ fn exploration_goal_is_retained_while_its_plan_is_viable() {
 fn stale_resource_memory_is_forgotten() {
     let mut world = grid_from_rows(&["FPPPPPPPPPPPPPPPPPPP"]);
     let mut observer = entity(1, 0, 0, 0.0);
-    perceive(&mut observer.mind, &world, (0, 0), 0);
+    perceive(&mut observer.mind, observer.id, &world, (0, 0), 0);
     assert_eq!(observer.mind.memory.known_resources.len(), 1);
 
-    perceive(&mut observer.mind, &world, (19, 0), 3_000);
+    perceive(&mut observer.mind, observer.id, &world, (19, 0), 3_000);
     assert!(observer.mind.memory.known_resources.is_empty());
     world.resources[0] = None;
 }
@@ -200,7 +200,7 @@ fn exploration_never_targets_a_different_land_region() {
     let origin = (3, 3);
     let origin_region = world.region_id_at(origin.0, origin.1);
     let mut mind = Mind::default();
-    perceive(&mut mind, &world, origin, 0);
+    perceive(&mut mind, 1, &world, origin, 0);
 
     let target = exploration_target(&mind, &world, origin, 1, 0);
 

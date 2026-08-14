@@ -5,6 +5,7 @@ import type {
   ConsumptionEvent,
   DeathEvent,
   InteractionEvent,
+  ResourceDiscoveryEvent,
 } from "../types";
 import {
   filterInteractionEvents,
@@ -33,6 +34,7 @@ function event(
     target_affinity_delta: targetDelta,
     child_id: null,
     amount: null,
+    resource_kind: null,
   };
 }
 
@@ -51,6 +53,7 @@ function birth(): BirthEvent {
     target_affinity_delta: null,
     child_id: 7,
     amount: null,
+    resource_kind: null,
   };
 }
 
@@ -69,6 +72,7 @@ function death(cause: DeathEvent["cause"]): DeathEvent {
     target_affinity_delta: null,
     child_id: null,
     amount: null,
+    resource_kind: null,
   };
 }
 
@@ -87,6 +91,26 @@ function consumption(): ConsumptionEvent {
     target_affinity_delta: null,
     child_id: null,
     amount: 6,
+    resource_kind: null,
+  };
+}
+
+function discovery(): ResourceDiscoveryEvent {
+  return {
+    id: "10",
+    tick: "52",
+    relative_time: "just now",
+    location: { x: 6, y: 3 },
+    actor_id: 8,
+    target_id: null,
+    related_entity_ids: [8],
+    kind: "discovery",
+    cause: "resource_found",
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: null,
+    amount: 14,
+    resource_kind: "timber",
   };
 }
 
@@ -125,6 +149,14 @@ describe("interaction history", () => {
     expect(html).toContain("Consumed at (2, 4)");
     expect(filterInteractionEvents([consumption()], 3)).toHaveLength(1);
     expect(filterInteractionEvents([consumption()], 4)).toHaveLength(0);
+  });
+
+  it("renders and filters resource discoveries", () => {
+    const html = renderInteractionHistory([discovery()]);
+    expect(html).toContain("Entity #8");
+    expect(html).toContain("Discovered timber");
+    expect(html).toContain("Observed 14 at (6, 3)");
+    expect(filterInteractionEvents([discovery()], 8)).toHaveLength(1);
   });
 
   it("renders positive, neutral, and negative deltas with text and symbols", () => {

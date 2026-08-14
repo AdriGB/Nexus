@@ -162,6 +162,7 @@ export interface InteractionEvent extends SimulationEventBase {
   target_affinity_delta: number;
   child_id: null;
   amount: null;
+  resource_kind: null;
 }
 
 export interface BirthEvent extends SimulationEventBase {
@@ -171,6 +172,7 @@ export interface BirthEvent extends SimulationEventBase {
   target_affinity_delta: null;
   child_id: number;
   amount: null;
+  resource_kind: null;
 }
 
 export interface DeathEvent extends SimulationEventBase {
@@ -180,6 +182,7 @@ export interface DeathEvent extends SimulationEventBase {
   target_affinity_delta: null;
   child_id: null;
   amount: null;
+  resource_kind: null;
 }
 
 export interface ConsumptionEvent extends SimulationEventBase {
@@ -189,13 +192,25 @@ export interface ConsumptionEvent extends SimulationEventBase {
   target_affinity_delta: null;
   child_id: null;
   amount: number;
+  resource_kind: null;
+}
+
+export interface ResourceDiscoveryEvent extends SimulationEventBase {
+  kind: "discovery";
+  cause: "resource_found";
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: number;
+  resource_kind: "food" | "timber" | "stone" | "iron";
 }
 
 export type SimulationEvent =
   | InteractionEvent
   | BirthEvent
   | DeathEvent
-  | ConsumptionEvent;
+  | ConsumptionEvent
+  | ResourceDiscoveryEvent;
 
 export interface PopulationStats {
   population: number;
