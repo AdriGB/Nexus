@@ -1,5 +1,5 @@
 import { state } from "../state";
-import type { InteractionEvent } from "../types";
+import type { SimulationEvent } from "../types";
 
 const DISPLAY_BATCH_SIZE = 100;
 
@@ -27,9 +27,9 @@ export function parseEntityFilter(value: string): number | null {
 }
 
 export function filterInteractionEvents(
-  events: InteractionEvent[],
+  events: SimulationEvent[],
   entityId: number | null,
-): InteractionEvent[] {
+): SimulationEvent[] {
   if (entityId === null) return events;
   return events.filter(
     (event) =>
@@ -47,14 +47,37 @@ function affinityDelta(delta: number): string {
   return `<span class="affinity-delta ${tone}" aria-label="${label} affinity change">${symbol}${value} ${label}</span>`;
 }
 
+function entityButton(id: number, label: string): string {
+  return `<button class="interaction-entity-link" type="button" data-entity-id="${id}">${label} #${id}</button>`;
+}
+
+function eventDetails(event: SimulationEvent): string {
+  if (event.kind === "interaction") {
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Actor")}${affinityDelta(event.actor_affinity_delta)}</div>
+      <div class="interaction-event-row">${entityButton(event.target_id!, "Target")}${affinityDelta(event.target_affinity_delta)}</div>
+      <div class="interaction-event-row"><span>Mutual social contact</span><span>(${event.location.x}, ${event.location.y})</span></div>`;
+  }
+  if (event.kind === "birth") {
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Mother")}<span>gave birth</span></div>
+      <div class="interaction-event-row">${entityButton(event.child_id, "Newborn")}<span>born at (${event.location.x}, ${event.location.y})</span></div>`;
+  }
+  if (event.kind === "death") {
+    const cause = event.cause === "starvation" ? "Starvation" : "Natural death";
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>${cause}</span></div>
+      <div class="interaction-event-row"><span>Died at (${event.location.x}, ${event.location.y})</span></div>`;
+  }
+  const exhaustive: never = event;
+  return exhaustive;
+}
+
 export function renderInteractionHistory(
-  events: InteractionEvent[],
+  events: SimulationEvent[],
   entityId: number | null = null,
   visibleLimit = DISPLAY_BATCH_SIZE,
 ): string {
   const filtered = filterInteractionEvents(events, entityId);
   if (filtered.length === 0) {
-    return `<div class="interaction-history-empty">No recent interactions${
+    return `<div class="interaction-history-empty">No recent events${
       entityId === null ? "" : ` for entity #${entityId}`
     }.</div>`;
   }
@@ -66,9 +89,7 @@ export function renderInteractionHistory(
         <strong>Event #${event.id}</strong>
         <span>Tick ${event.tick} · ${escapeHtml(event.relative_time)}</span>
       </div>
-      <div class="interaction-event-row"><button class="interaction-entity-link" type="button" data-entity-id="${event.actor_id}">Actor #${event.actor_id}</button>${affinityDelta(event.actor_affinity_delta)}</div>
-      <div class="interaction-event-row"><button class="interaction-entity-link" type="button" data-entity-id="${event.target_id}">Target #${event.target_id}</button>${affinityDelta(event.target_affinity_delta)}</div>
-      <div class="interaction-event-row"><span>Mutual social contact</span><span>(${event.location.x}, ${event.location.y})</span></div>
+      ${eventDetails(event)}
     </article>`,
   );
 
@@ -130,18 +151,18 @@ export function syncInteractionHistory(): void {
   allButton.classList.toggle("active", selectedEntityId === null);
   scope.textContent =
     selectedEntityId === null
-      ? "All recent interactions"
-      : `Interactions involving entity #${selectedEntityId}`;
+      ? "All recent events"
+      : `Events involving entity #${selectedEntityId}`;
 
   if (!state.world) {
     list.innerHTML = renderInteractionHistory([], selectedEntityId);
     return;
   }
 
-  const payload = state.world.recent_interaction_events(
+  const payload = state.world.recent_events(
     selectedEntityId ?? undefined,
   );
-  const events = JSON.parse(payload) as InteractionEvent[];
+  const events = JSON.parse(payload) as SimulationEvent[];
   list.innerHTML = renderInteractionHistory(
     events,
     selectedEntityId,

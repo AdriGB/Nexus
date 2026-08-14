@@ -1,4 +1,5 @@
 use super::super::autonomy::SocialInteraction;
+use super::super::entity::Pregnancy;
 use super::super::events::RecentEventHistory;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{
@@ -150,4 +151,62 @@ fn same_seed_and_steps_produce_the_same_event_sequence() {
         simulation_a.recent_events().collect::<Vec<_>>(),
         simulation_b.recent_events().collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn successful_birth_records_mother_and_newborn() {
+    let world = plain_grid(8, 8);
+    let mut simulation = Simulation::default();
+    let mut mother = entity(1, 3, 3, 0.0);
+    mother.pregnancy = Some(Pregnancy {
+        father_id: 2,
+        conceived_tick: 0,
+        due_tick: 10,
+    });
+    simulation.entities = vec![mother];
+    simulation.next_entity_id = 2;
+    simulation.tick = 10;
+
+    simulation.update_pregnancies(&world);
+
+    let events: Vec<_> = simulation.recent_events().collect();
+    assert_eq!(events.len(), 1);
+    let event = events[0];
+    assert_eq!(event.kind, SimulationEventKind::Birth);
+    assert_eq!(event.cause, SimulationEventCause::Born);
+    assert_eq!(event.actor_id, 1);
+    assert_eq!(event.target_id, None);
+    assert_eq!(event.related_entity_ids, vec![1, 2]);
+    assert_eq!(event.details, SimulationEventDetails::Birth { child_id: 2 });
+    assert_eq!(event.location.x, simulation.entities[1].x);
+    assert_eq!(event.location.y, simulation.entities[1].y);
+}
+
+#[test]
+fn deaths_record_their_immediate_cause_before_removal() {
+    let mut simulation = Simulation::default();
+    let mut starved = entity(1, 2, 3, 0.0);
+    starved.health = 0.0;
+    let mut aged = entity(2, 4, 5, 0.0);
+    aged.age_ticks = aged.lifespan_ticks;
+    aged.health = 0.0;
+    simulation.entities = vec![starved, aged];
+    simulation.tick = 20;
+
+    simulation.remove_dead_entities();
+
+    assert!(simulation.entities.is_empty());
+    let events: Vec<_> = simulation.recent_events().collect();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].actor_id, 1);
+    assert_eq!(events[0].cause, SimulationEventCause::Starvation);
+    assert_eq!(events[0].location, EventLocation { x: 2, y: 3 });
+    assert_eq!(events[1].actor_id, 2);
+    assert_eq!(events[1].cause, SimulationEventCause::NaturalDeath);
+    assert_eq!(events[1].location, EventLocation { x: 4, y: 5 });
+    assert!(events.iter().all(|event| {
+        event.kind == SimulationEventKind::Death
+            && event.details == SimulationEventDetails::Death
+            && event.target_id.is_none()
+    }));
 }

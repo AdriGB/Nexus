@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { InteractionEvent } from "../types";
+import type { BirthEvent, DeathEvent, InteractionEvent } from "../types";
 import {
   filterInteractionEvents,
   parseEntityFilter,
@@ -26,15 +26,70 @@ function event(
     cause: "mutual_social_contact",
     actor_affinity_delta: actorDelta,
     target_affinity_delta: targetDelta,
+    child_id: null,
+  };
+}
+
+function birth(): BirthEvent {
+  return {
+    id: "6",
+    tick: "49",
+    relative_time: "just now",
+    location: { x: 5, y: 7 },
+    actor_id: 1,
+    target_id: null,
+    related_entity_ids: [1, 7],
+    kind: "birth",
+    cause: "born",
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: 7,
+  };
+}
+
+function death(cause: DeathEvent["cause"]): DeathEvent {
+  return {
+    id: "7",
+    tick: "50",
+    relative_time: "just now",
+    location: { x: 8, y: 9 },
+    actor_id: 4,
+    target_id: null,
+    related_entity_ids: [4],
+    kind: "death",
+    cause,
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: null,
   };
 }
 
 describe("interaction history", () => {
   it("renders a clear empty state for all events and selected entities", () => {
-    expect(renderInteractionHistory([])).toContain("No recent interactions.");
+    expect(renderInteractionHistory([])).toContain("No recent events.");
     expect(renderInteractionHistory([], 42)).toContain(
-      "No recent interactions for entity #42.",
+      "No recent events for entity #42.",
     );
+  });
+
+  it("renders births and both death causes without optional participants", () => {
+    const html = renderInteractionHistory([
+      birth(),
+      death("starvation"),
+      { ...death("natural_death"), id: "8", actor_id: 5, related_entity_ids: [5] },
+    ]);
+
+    expect(html).toContain("Mother #1");
+    expect(html).toContain("Newborn #7");
+    expect(html).toContain("Starvation");
+    expect(html).toContain("Natural death");
+    expect(html).not.toContain("Target #null");
+  });
+
+  it("filters lifecycle events through actors and related newborns", () => {
+    const events = [birth(), death("starvation")];
+    expect(filterInteractionEvents(events, 7).map(({ id }) => id)).toEqual(["6"]);
+    expect(filterInteractionEvents(events, 4).map(({ id }) => id)).toEqual(["7"]);
   });
 
   it("renders positive, neutral, and negative deltas with text and symbols", () => {

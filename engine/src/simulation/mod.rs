@@ -442,8 +442,8 @@ impl Simulation {
 
     fn record_social_interactions(&mut self, interactions: Vec<autonomy::SocialInteraction>) {
         for interaction in interactions {
-            let event = SimulationEvent {
-                id: self.next_event_id,
+            self.push_event(SimulationEvent {
+                id: 0,
                 tick: self.tick,
                 location: EventLocation {
                     x: interaction.location.0,
@@ -458,13 +458,17 @@ impl Simulation {
                     actor_affinity_delta: interaction.actor_affinity_delta,
                     target_affinity_delta: interaction.target_affinity_delta,
                 },
-            };
-            self.next_event_id = self
-                .next_event_id
-                .checked_add(1)
-                .expect("simulation event id space exhausted");
-            self.recent_events.push(event);
+            });
         }
+    }
+
+    fn push_event(&mut self, mut event: SimulationEvent) {
+        event.id = self.next_event_id;
+        self.next_event_id = self
+            .next_event_id
+            .checked_add(1)
+            .expect("simulation event id space exhausted");
+        self.recent_events.push(event);
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {
@@ -505,6 +509,32 @@ impl Simulation {
     }
 
     fn remove_dead_entities(&mut self) {
+        let deaths: Vec<_> = self
+            .entities
+            .iter()
+            .filter(|entity| entity.health <= 0.0)
+            .map(|entity| {
+                let cause = if entity.age_ticks >= entity.lifespan_ticks {
+                    SimulationEventCause::NaturalDeath
+                } else {
+                    SimulationEventCause::Starvation
+                };
+                (entity.id, entity.x, entity.y, cause)
+            })
+            .collect();
+        for (entity_id, x, y, cause) in deaths {
+            self.push_event(SimulationEvent {
+                id: 0,
+                tick: self.tick,
+                location: EventLocation { x, y },
+                actor_id: entity_id,
+                target_id: None,
+                related_entity_ids: vec![entity_id],
+                kind: SimulationEventKind::Death,
+                cause,
+                details: SimulationEventDetails::Death,
+            });
+        }
         let population_before_deaths = self.entities.len();
         self.entities.retain(|entity| entity.health > 0.0);
         self.deaths = self
@@ -516,11 +546,25 @@ impl Simulation {
         let capacity = MAX_POPULATION.saturating_sub(self.entities.len());
         let births = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
         for (position, mother_id) in births {
-            if self.push_newborn(position).is_some() {
+            if let Some(child_id) = self.push_newborn(position) {
                 if let Some(child) = self.entities.last_mut() {
                     child.caregiver_id = Some(mother_id);
                 }
                 self.births = self.births.saturating_add(1);
+                self.push_event(SimulationEvent {
+                    id: 0,
+                    tick: self.tick,
+                    location: EventLocation {
+                        x: position.0,
+                        y: position.1,
+                    },
+                    actor_id: mother_id,
+                    target_id: None,
+                    related_entity_ids: vec![mother_id, child_id],
+                    kind: SimulationEventKind::Birth,
+                    cause: SimulationEventCause::Born,
+                    details: SimulationEventDetails::Birth { child_id },
+                });
             }
         }
     }

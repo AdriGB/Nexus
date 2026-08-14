@@ -267,18 +267,19 @@ struct EventLocationDto {
 }
 
 #[derive(Serialize)]
-struct InteractionEventDto {
+struct SimulationEventDto {
     id: String,
     tick: String,
     relative_time: String,
     location: EventLocationDto,
     actor_id: u32,
-    target_id: u32,
+    target_id: Option<u32>,
     related_entity_ids: Vec<u32>,
     kind: &'static str,
     cause: &'static str,
-    actor_affinity_delta: i16,
-    target_affinity_delta: i16,
+    actor_affinity_delta: Option<i16>,
+    target_affinity_delta: Option<i16>,
+    child_id: Option<u32>,
 }
 
 fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
@@ -297,12 +298,12 @@ fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
     }
 }
 
-fn interaction_events_json<'a>(
+fn simulation_events_json<'a>(
     events: impl DoubleEndedIterator<Item = &'a SimulationEvent>,
     current_tick: u64,
     entity_id: Option<u32>,
 ) -> String {
-    let interactions: Vec<InteractionEventDto> = events
+    let events: Vec<SimulationEventDto> = events
         .rev()
         .filter(|event| {
             entity_id.is_none_or(|id| {
@@ -311,21 +312,34 @@ fn interaction_events_json<'a>(
                     || event.related_entity_ids.contains(&id)
             })
         })
-        .filter_map(|event| {
-            if event.kind != SimulationEventKind::Interaction
-                || event.cause != SimulationEventCause::MutualSocialContact
-            {
-                return None;
-            }
-            let target_id = event.target_id?;
-            let (actor_affinity_delta, target_affinity_delta) = match event.details {
+        .map(|event| {
+            let (kind, cause) = match (event.kind, event.cause) {
+                (SimulationEventKind::Interaction, SimulationEventCause::MutualSocialContact) => {
+                    ("interaction", "mutual_social_contact")
+                }
+                (SimulationEventKind::Birth, SimulationEventCause::Born) => ("birth", "born"),
+                (SimulationEventKind::Death, SimulationEventCause::Starvation) => {
+                    ("death", "starvation")
+                }
+                (SimulationEventKind::Death, SimulationEventCause::NaturalDeath) => {
+                    ("death", "natural_death")
+                }
+                _ => ("unknown", "unknown"),
+            };
+            let (actor_affinity_delta, target_affinity_delta, child_id) = match event.details {
                 SimulationEventDetails::Interaction {
                     actor_affinity_delta,
                     target_affinity_delta,
-                } => (actor_affinity_delta, target_affinity_delta),
+                } => (
+                    Some(actor_affinity_delta),
+                    Some(target_affinity_delta),
+                    None,
+                ),
+                SimulationEventDetails::Birth { child_id } => (None, None, Some(child_id)),
+                SimulationEventDetails::Death => (None, None, None),
             };
 
-            Some(InteractionEventDto {
+            SimulationEventDto {
                 id: event.id.to_string(),
                 tick: event.tick.to_string(),
                 relative_time: relative_event_time(current_tick, event.tick),
@@ -334,26 +348,38 @@ fn interaction_events_json<'a>(
                     y: event.location.y,
                 },
                 actor_id: event.actor_id,
-                target_id,
+                target_id: event.target_id,
                 related_entity_ids: event.related_entity_ids.clone(),
-                kind: "interaction",
-                cause: "mutual_social_contact",
+                kind,
+                cause,
                 actor_affinity_delta,
                 target_affinity_delta,
-            })
+                child_id,
+            }
         })
         .collect();
 
-    to_json(&interactions)
+    to_json(&events)
 }
 
-/// Serializes the existing bounded event history without mutating simulation state.
-/// Filtering happens only when this bridge query is requested.
+/// Preserves the original interaction-only API for existing consumers.
 pub(crate) fn recent_interaction_events_json(
     simulation: &Simulation,
     entity_id: Option<u32>,
 ) -> String {
-    interaction_events_json(simulation.recent_events(), simulation.tick(), entity_id)
+    simulation_events_json(
+        simulation
+            .recent_events()
+            .filter(|event| event.kind == SimulationEventKind::Interaction),
+        simulation.tick(),
+        entity_id,
+    )
+}
+
+/// Serializes the bounded event history without mutating simulation state.
+/// Filtering happens only when this bridge query is requested.
+pub(crate) fn recent_events_json(simulation: &Simulation, entity_id: Option<u32>) -> String {
+    simulation_events_json(simulation.recent_events(), simulation.tick(), entity_id)
 }
 
 #[derive(Serialize)]
@@ -571,7 +597,7 @@ mod tests {
         ];
 
         let payload: serde_json::Value =
-            serde_json::from_str(&interaction_events_json(events.iter(), 48, None)).unwrap();
+            serde_json::from_str(&simulation_events_json(events.iter(), 48, None)).unwrap();
 
         assert_eq!(payload[0]["id"], "9");
         assert_eq!(payload[1]["id"], "7");
@@ -598,15 +624,57 @@ mod tests {
 
         for entity_id in [1, 2, 99] {
             let payload: serde_json::Value =
-                serde_json::from_str(&interaction_events_json(events.iter(), 12, Some(entity_id)))
+                serde_json::from_str(&simulation_events_json(events.iter(), 12, Some(entity_id)))
                     .unwrap();
             assert_eq!(payload.as_array().unwrap().len(), 1);
             assert_eq!(payload[0]["id"], "1");
         }
 
-        assert_eq!(interaction_events_json(events.iter(), 12, Some(50)), "[]");
+        assert_eq!(simulation_events_json(events.iter(), 12, Some(50)), "[]");
         let empty: [SimulationEvent; 0] = [];
-        assert_eq!(interaction_events_json(empty.iter(), 12, None), "[]");
+        assert_eq!(simulation_events_json(empty.iter(), 12, None), "[]");
+    }
+
+    #[test]
+    fn lifecycle_events_json_handles_optional_participants_and_causes() {
+        let events = [
+            SimulationEvent {
+                id: 10,
+                tick: 20,
+                location: crate::simulation::EventLocation { x: 2, y: 3 },
+                actor_id: 1,
+                target_id: None,
+                related_entity_ids: vec![1, 5],
+                kind: SimulationEventKind::Birth,
+                cause: SimulationEventCause::Born,
+                details: SimulationEventDetails::Birth { child_id: 5 },
+            },
+            SimulationEvent {
+                id: 11,
+                tick: 21,
+                location: crate::simulation::EventLocation { x: 4, y: 6 },
+                actor_id: 9,
+                target_id: None,
+                related_entity_ids: vec![9],
+                kind: SimulationEventKind::Death,
+                cause: SimulationEventCause::NaturalDeath,
+                details: SimulationEventDetails::Death,
+            },
+        ];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 21, None)).unwrap();
+        assert_eq!(payload[0]["kind"], "death");
+        assert_eq!(payload[0]["cause"], "natural_death");
+        assert_eq!(payload[0]["target_id"], serde_json::Value::Null);
+        assert_eq!(payload[1]["kind"], "birth");
+        assert_eq!(payload[1]["cause"], "born");
+        assert_eq!(payload[1]["child_id"], 5);
+
+        let newborn: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 21, Some(5))).unwrap();
+        assert_eq!(newborn.as_array().unwrap().len(), 1);
+        assert_eq!(newborn[0]["id"], "10");
     }
 
     #[test]
