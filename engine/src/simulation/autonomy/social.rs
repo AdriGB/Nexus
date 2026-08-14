@@ -8,6 +8,15 @@ use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::Grid;
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct SocialInteraction {
+    pub actor_id: u32,
+    pub target_id: u32,
+    pub location: (u32, u32),
+    pub actor_affinity_delta: i16,
+    pub target_affinity_delta: i16,
+}
+
 pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
 pub(super) const MIN_INTERACTION_INTERVAL: u64 = 12;
 pub(super) const MAX_INTERACTION_INTERVAL: u64 = 72;
@@ -265,14 +274,14 @@ pub(super) fn process_social_interactions(
     entities: &mut [Entity],
     population: &[EntitySnapshot],
     tick: u64,
-) {
+) -> Vec<SocialInteraction> {
     let id_to_index: HashMap<u32, usize> = entities
         .iter()
         .enumerate()
         .map(|(index, entity)| (entity.id, index))
         .collect();
 
-    let mut pairs: Vec<(usize, usize, i16, i16)> = Vec::new();
+    let mut pairs: Vec<(usize, usize, SocialInteraction)> = Vec::new();
 
     for (entity_index, entity) in entities.iter().enumerate() {
         if entity.health <= 0.0 || LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Infant
@@ -363,23 +372,39 @@ pub(super) fn process_social_interactions(
                 entities[entity_index].personality.cooperativeness,
             );
 
-            pairs.push((entity_index, b_index, delta_a, delta_b));
+            pairs.push((
+                entity_index,
+                b_index,
+                SocialInteraction {
+                    actor_id: a_id,
+                    target_id: b_id,
+                    location: a_pos,
+                    actor_affinity_delta: delta_a,
+                    target_affinity_delta: delta_b,
+                },
+            ));
         }
     }
 
-    for (index_a, index_b, delta_a, delta_b) in pairs {
-        let a_id = entities[index_a].id;
-        let b_id = entities[index_b].id;
-        let recorded_a = entities[index_a]
-            .mind
-            .memory
-            .record_interaction(b_id, tick, delta_a);
-        let recorded_b = entities[index_b]
-            .mind
-            .memory
-            .record_interaction(a_id, tick, delta_b);
+    let mut interactions = Vec::with_capacity(pairs.len());
+    for (index_a, index_b, interaction) in pairs {
+        let recorded_a = entities[index_a].mind.memory.record_interaction(
+            interaction.target_id,
+            tick,
+            interaction.actor_affinity_delta,
+        );
+        let recorded_b = entities[index_b].mind.memory.record_interaction(
+            interaction.actor_id,
+            tick,
+            interaction.target_affinity_delta,
+        );
         debug_assert!(recorded_a && recorded_b);
+        if recorded_a && recorded_b {
+            interactions.push(interaction);
+        }
     }
+
+    interactions
 }
 
 #[cfg(test)]

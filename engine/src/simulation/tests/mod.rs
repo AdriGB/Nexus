@@ -2,6 +2,7 @@ mod autonomy;
 mod biology;
 mod core;
 mod dependency;
+mod events;
 mod movement;
 mod parity;
 mod personality;

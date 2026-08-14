@@ -119,7 +119,12 @@ pub(crate) fn profile_autonomy(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> (u64, AutonomyProfile, Vec<(u32, u16)>) {
+) -> (
+    u64,
+    AutonomyProfile,
+    Vec<(u32, u16)>,
+    Vec<super::SocialInteraction>,
+) {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
     let mut consumer_ids = Vec::new();
@@ -159,8 +164,8 @@ pub(crate) fn profile_autonomy(
     }
 
     let social_start = Instant::now();
-    super::social::process_social_interactions(entities, population, tick);
+    let interactions = super::social::process_social_interactions(entities, population, tick);
     profile.social_us += social_start.elapsed().as_micros() as u64;
 
-    (consumed, profile, consumer_ids)
+    (consumed, profile, consumer_ids, interactions)
 }
