@@ -73,7 +73,6 @@ impl RecentEventHistory {
         self.events.push_back(event);
     }
 
-    #[cfg(test)]
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.events.iter()
     }
