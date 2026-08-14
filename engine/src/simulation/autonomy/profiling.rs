@@ -4,7 +4,8 @@ use super::action::execute_current_action;
 use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal, DecisionContext};
 use super::mind::{Goal, URGENT_HUNGER_THRESHOLD};
 use super::perception::{
-    perceive_entities, reconcile_resource_memory, scan_visible_resources, ResourceDiscovery,
+    perceive_entities, reconcile_resource_memory, scan_visible_resources, EntityEncounter,
+    ResourceDiscovery,
 };
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
@@ -17,6 +18,7 @@ type ProfileAutonomyResult = (
     AutonomyProfile,
     Vec<(u32, u16)>,
     Vec<ResourceDiscovery>,
+    Vec<EntityEncounter>,
     Vec<super::SocialInteraction>,
 );
 
@@ -46,7 +48,7 @@ fn profiled_update_entity(
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
     profile: &mut AutonomyProfile,
-) -> (u16, Vec<ResourceDiscovery>) {
+) -> (u16, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
@@ -67,7 +69,7 @@ fn profiled_update_entity(
     profile.known_resources_max = profile.known_resources_max.max(known_resources_count);
 
     let start = Instant::now();
-    perceive_entities(
+    let encounters = perceive_entities(
         &mut entity.mind,
         entity.id,
         position,
@@ -120,7 +122,7 @@ fn profiled_update_entity(
     profile.action_us += start.elapsed().as_micros() as u64;
     profile.sampled_entities += 1;
 
-    (consumed, discoveries)
+    (consumed, discoveries, encounters)
 }
 
 pub(crate) fn profile_autonomy(
@@ -135,6 +137,7 @@ pub(crate) fn profile_autonomy(
     let mut consumed = 0u64;
     let mut consumer_ids = Vec::new();
     let mut discoveries = Vec::new();
+    let mut encounters = Vec::new();
 
     for (index, entity) in entities
         .iter_mut()
@@ -143,7 +146,7 @@ pub(crate) fn profile_autonomy(
         })
         .enumerate()
     {
-        let (result, entity_discoveries) = if index % PROFILE_SAMPLE_RATE == 0 {
+        let (result, entity_discoveries, entity_encounters) = if index % PROFILE_SAMPLE_RATE == 0 {
             profiled_update_entity(
                 entity,
                 world,
@@ -164,6 +167,7 @@ pub(crate) fn profile_autonomy(
             )
         };
         discoveries.extend(entity_discoveries);
+        encounters.extend(entity_encounters);
 
         if result > 0 {
             consumer_ids.push((entity.id, result));
@@ -175,5 +179,12 @@ pub(crate) fn profile_autonomy(
     let interactions = super::social::process_social_interactions(entities, population, tick);
     profile.social_us += social_start.elapsed().as_micros() as u64;
 
-    (consumed, profile, consumer_ids, discoveries, interactions)
+    (
+        consumed,
+        profile,
+        consumer_ids,
+        discoveries,
+        encounters,
+        interactions,
+    )
 }

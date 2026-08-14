@@ -35,10 +35,13 @@ fn successful_social_interaction_records_one_complete_event() {
 
     simulation.step(&mut world);
 
-    let events: Vec<_> = simulation.recent_events().collect();
+    let events: Vec<_> = simulation
+        .recent_events()
+        .filter(|event| event.kind == SimulationEventKind::Interaction)
+        .collect();
     assert_eq!(events.len(), 1);
     let event = events[0];
-    assert_eq!(event.id, 1);
+    assert_eq!(event.id, 2);
     assert_eq!(event.tick, 1);
     assert_eq!(event.location, EventLocation { x: 2, y: 3 });
     assert_eq!(event.actor_id, 1);
@@ -68,6 +71,57 @@ fn successful_social_interaction_records_one_complete_event() {
             actor_affinity_delta: actor_delta,
             target_affinity_delta: target_delta,
         }
+    );
+}
+
+#[test]
+fn mutual_first_sight_records_one_canonical_encounter() {
+    let mut world = plain_grid(8, 8);
+    let mut simulation = Simulation::default();
+    simulation.entities = vec![entity(1, 2, 3, 0.0), entity(2, 3, 3, 0.0)];
+    for entity in &mut simulation.entities {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+    }
+    simulation.next_entity_id = 3;
+
+    simulation.step(&mut world);
+
+    let encounters: Vec<_> = simulation
+        .recent_events()
+        .filter(|event| event.kind == SimulationEventKind::Encounter)
+        .collect();
+    assert_eq!(encounters.len(), 1);
+    let encounter = encounters[0];
+    assert_eq!(encounter.id, 1);
+    assert_eq!(encounter.tick, 1);
+    assert_eq!(encounter.location, EventLocation { x: 2, y: 3 });
+    assert_eq!(encounter.actor_id, 1);
+    assert_eq!(encounter.target_id, Some(2));
+    assert_eq!(encounter.related_entity_ids, vec![1, 2]);
+    assert_eq!(encounter.cause, SimulationEventCause::FirstEncounter);
+    assert_eq!(encounter.details, SimulationEventDetails::Encounter);
+}
+
+#[test]
+fn delayed_reciprocal_awareness_does_not_duplicate_encounter() {
+    let mut world = plain_grid(8, 8);
+    let mut adult = entity(1, 2, 3, 0.0);
+    adult.age_ticks = 25 * TICKS_PER_YEAR;
+    let infant = entity(2, 3, 3, 0.0);
+    let mut simulation = Simulation::default();
+    simulation.entities = vec![adult, infant];
+    simulation.next_entity_id = 3;
+
+    simulation.step(&mut world);
+    simulation.entities[1].age_ticks = 25 * TICKS_PER_YEAR;
+    simulation.step(&mut world);
+
+    assert_eq!(
+        simulation
+            .recent_events()
+            .filter(|event| event.kind == SimulationEventKind::Encounter)
+            .count(),
+        1
     );
 }
 

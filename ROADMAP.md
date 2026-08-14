@@ -172,18 +172,18 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
 * [x] Causa inmediata
 * [ ] Eventos de:
 
-  * [ ] nacimiento
-  * [ ] muerte
-  * [ ] consumo
-  * [ ] descubrimiento
-  * [ ] encuentro
+  * [x] nacimiento
+  * [x] muerte
+  * [x] consumo
+  * [x] descubrimiento
+  * [x] encuentro
   * [x] interacción
   * [ ] cambio significativo de afinidad
   * [ ] formación de pareja
   * [ ] separación
 * [x] Buffer circular de eventos recientes
 * [ ] Historial resumido por entidad
-* [ ] Panel cronológico filtrable
+* [x] Panel cronológico filtrable
 * [ ] Explicación de decisiones importantes
 * [ ] Exportación del historial
 * [ ] IDs causales entre eventos relacionados

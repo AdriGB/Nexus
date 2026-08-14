@@ -36,6 +36,7 @@ type AutonomyRunResult = (
     u64,
     Vec<(u32, u16)>,
     Vec<autonomy::ResourceDiscovery>,
+    Vec<autonomy::EntityEncounter>,
     Vec<autonomy::SocialInteraction>,
 );
 
@@ -212,9 +213,10 @@ impl Simulation {
         let population_index_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
-        let (consumed_this_tick, consumer_ids, discoveries, interactions) =
+        let (consumed_this_tick, consumer_ids, discoveries, encounters, interactions) =
             self.run_autonomy(world);
         self.record_resource_discoveries(discoveries);
+        self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         let autonomy_us = start.elapsed().as_micros() as u64;
@@ -273,7 +275,7 @@ impl Simulation {
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
-        let (consumed_this_tick, profile, consumer_ids, discoveries, interactions) =
+        let (consumed_this_tick, profile, consumer_ids, discoveries, encounters, interactions) =
             autonomy::profile_autonomy(
                 &mut self.entities,
                 world,
@@ -283,6 +285,7 @@ impl Simulation {
                 pathfinding_workspace,
             );
         self.record_resource_discoveries(discoveries);
+        self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
 
@@ -404,8 +407,10 @@ impl Simulation {
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
         self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
-        let (consumed, consumer_ids, discoveries, interactions) = self.run_autonomy(world);
+        let (consumed, consumer_ids, discoveries, encounters, interactions) =
+            self.run_autonomy(world);
         self.record_resource_discoveries(discoveries);
+        self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         self.snap_infants_to_caregivers();
@@ -426,11 +431,12 @@ impl Simulation {
         let mut consumed = 0u64;
         let mut consumer_ids = Vec::new();
         let mut discoveries = Vec::new();
+        let mut encounters = Vec::new();
 
         for entity in self.entities.iter_mut().filter(|entity| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
         }) {
-            let (result, entity_discoveries) = autonomy::update_entity(
+            let (result, entity_discoveries, entity_encounters) = autonomy::update_entity(
                 entity,
                 world,
                 tick,
@@ -439,6 +445,7 @@ impl Simulation {
                 pathfinding_workspace,
             );
             discoveries.extend(entity_discoveries);
+            encounters.extend(entity_encounters);
             if result > 0 {
                 consumer_ids.push((entity.id, result));
             }
@@ -451,7 +458,13 @@ impl Simulation {
             self.tick,
         );
 
-        (consumed, consumer_ids, discoveries, interactions)
+        (
+            consumed,
+            consumer_ids,
+            discoveries,
+            encounters,
+            interactions,
+        )
     }
 
     fn record_social_interactions(&mut self, interactions: Vec<autonomy::SocialInteraction>) {
@@ -524,6 +537,66 @@ impl Simulation {
                     kind: discovery.kind,
                     amount: discovery.amount,
                 },
+            });
+        }
+    }
+
+    fn record_entity_encounters(&mut self, mut encounters: Vec<autonomy::EntityEncounter>) {
+        encounters.sort_unstable_by_key(|encounter| {
+            (
+                encounter.observer_id.min(encounter.other_id),
+                encounter.observer_id.max(encounter.other_id),
+                encounter.observer_id,
+            )
+        });
+        encounters.dedup_by_key(|encounter| {
+            (
+                encounter.observer_id.min(encounter.other_id),
+                encounter.observer_id.max(encounter.other_id),
+            )
+        });
+
+        for encounter in encounters {
+            let actor_id = encounter.observer_id.min(encounter.other_id);
+            let target_id = encounter.observer_id.max(encounter.other_id);
+            let previously_known = [(actor_id, target_id), (target_id, actor_id)]
+                .into_iter()
+                .any(|(observer_id, other_id)| {
+                    self.entities
+                        .binary_search_by_key(&observer_id, |entity| entity.id)
+                        .ok()
+                        .and_then(|index| {
+                            self.entities[index]
+                                .mind
+                                .memory
+                                .known_entities
+                                .binary_search_by_key(&other_id, |known| known.id)
+                                .ok()
+                                .map(|known_index| {
+                                    self.entities[index].mind.memory.known_entities[known_index]
+                                        .first_seen_tick
+                                        < self.tick
+                                })
+                        })
+                        .unwrap_or(false)
+                });
+            if previously_known {
+                continue;
+            }
+
+            self.push_event(SimulationEvent {
+                id: 0,
+                tick: self.tick,
+                location: EventLocation {
+                    x: encounter.x,
+                    y: encounter.y,
+                },
+                actor_id,
+                target_id: Some(target_id),
+                related_entity_ids: vec![actor_id, target_id],
+                kind: SimulationEventKind::Encounter,
+                cause: SimulationEventCause::FirstEncounter,
+                details: SimulationEventDetails::Encounter,
             });
         }
     }
