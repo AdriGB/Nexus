@@ -66,6 +66,10 @@ function eventDetails(event: SimulationEvent): string {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>${cause}</span></div>
       <div class="interaction-event-row"><span>Died at (${event.location.x}, ${event.location.y})</span></div>`;
   }
+  if (event.kind === "consumption") {
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>Ate ${event.amount} food</span></div>
+      <div class="interaction-event-row"><span>Consumed at (${event.location.x}, ${event.location.y})</span></div>`;
+  }
   const exhaustive: never = event;
   return exhaustive;
 }

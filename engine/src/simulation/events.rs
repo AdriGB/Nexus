@@ -13,6 +13,7 @@ pub enum SimulationEventKind {
     Interaction,
     Birth,
     Death,
+    Consumption,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,6 +22,7 @@ pub enum SimulationEventCause {
     Born,
     Starvation,
     NaturalDeath,
+    AteFood,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,6 +35,9 @@ pub enum SimulationEventDetails {
         child_id: u32,
     },
     Death,
+    Consumption {
+        amount: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

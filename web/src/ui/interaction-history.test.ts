@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { BirthEvent, DeathEvent, InteractionEvent } from "../types";
+import type {
+  BirthEvent,
+  ConsumptionEvent,
+  DeathEvent,
+  InteractionEvent,
+} from "../types";
 import {
   filterInteractionEvents,
   parseEntityFilter,
@@ -27,6 +32,7 @@ function event(
     actor_affinity_delta: actorDelta,
     target_affinity_delta: targetDelta,
     child_id: null,
+    amount: null,
   };
 }
 
@@ -44,6 +50,7 @@ function birth(): BirthEvent {
     actor_affinity_delta: null,
     target_affinity_delta: null,
     child_id: 7,
+    amount: null,
   };
 }
 
@@ -61,6 +68,25 @@ function death(cause: DeathEvent["cause"]): DeathEvent {
     actor_affinity_delta: null,
     target_affinity_delta: null,
     child_id: null,
+    amount: null,
+  };
+}
+
+function consumption(): ConsumptionEvent {
+  return {
+    id: "9",
+    tick: "51",
+    relative_time: "just now",
+    location: { x: 2, y: 4 },
+    actor_id: 3,
+    target_id: null,
+    related_entity_ids: [3],
+    kind: "consumption",
+    cause: "ate_food",
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: null,
+    amount: 6,
   };
 }
 
@@ -90,6 +116,15 @@ describe("interaction history", () => {
     const events = [birth(), death("starvation")];
     expect(filterInteractionEvents(events, 7).map(({ id }) => id)).toEqual(["6"]);
     expect(filterInteractionEvents(events, 4).map(({ id }) => id)).toEqual(["7"]);
+  });
+
+  it("renders and filters food consumption events", () => {
+    const html = renderInteractionHistory([consumption()]);
+    expect(html).toContain("Entity #3");
+    expect(html).toContain("Ate 6 food");
+    expect(html).toContain("Consumed at (2, 4)");
+    expect(filterInteractionEvents([consumption()], 3)).toHaveLength(1);
+    expect(filterInteractionEvents([consumption()], 4)).toHaveLength(0);
   });
 
   it("renders positive, neutral, and negative deltas with text and symbols", () => {

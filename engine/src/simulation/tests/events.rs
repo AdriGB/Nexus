@@ -210,3 +210,25 @@ fn deaths_record_their_immediate_cause_before_removal() {
             && event.target_id.is_none()
     }));
 }
+
+#[test]
+fn consumption_events_skip_zero_and_preserve_consumer_order() {
+    let mut simulation = Simulation::default();
+    simulation.entities = vec![entity(1, 2, 3, 0.0), entity(2, 4, 5, 0.0)];
+    simulation.record_food_consumptions(&[(1, 3), (2, 0), (2, 7)]);
+
+    let events: Vec<_> = simulation.recent_events().collect();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].id, 1);
+    assert_eq!(events[0].actor_id, 1);
+    assert_eq!(
+        events[0].details,
+        SimulationEventDetails::Consumption { amount: 3 }
+    );
+    assert_eq!(events[1].id, 2);
+    assert_eq!(events[1].actor_id, 2);
+    assert_eq!(
+        events[1].details,
+        SimulationEventDetails::Consumption { amount: 7 }
+    );
+}

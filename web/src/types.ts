@@ -161,6 +161,7 @@ export interface InteractionEvent extends SimulationEventBase {
   actor_affinity_delta: number;
   target_affinity_delta: number;
   child_id: null;
+  amount: null;
 }
 
 export interface BirthEvent extends SimulationEventBase {
@@ -169,6 +170,7 @@ export interface BirthEvent extends SimulationEventBase {
   actor_affinity_delta: null;
   target_affinity_delta: null;
   child_id: number;
+  amount: null;
 }
 
 export interface DeathEvent extends SimulationEventBase {
@@ -177,9 +179,23 @@ export interface DeathEvent extends SimulationEventBase {
   actor_affinity_delta: null;
   target_affinity_delta: null;
   child_id: null;
+  amount: null;
 }
 
-export type SimulationEvent = InteractionEvent | BirthEvent | DeathEvent;
+export interface ConsumptionEvent extends SimulationEventBase {
+  kind: "consumption";
+  cause: "ate_food";
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: number;
+}
+
+export type SimulationEvent =
+  | InteractionEvent
+  | BirthEvent
+  | DeathEvent
+  | ConsumptionEvent;
 
 export interface PopulationStats {
   population: number;
