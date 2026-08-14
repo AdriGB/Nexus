@@ -141,6 +141,29 @@
         <div class="info-grid" id="entity-info-grid"></div>
       </div>
 
+      <!-- Recent social interactions -->
+      <div class="sidebar-section" id="interaction-history">
+        <label class="field-label">Interaction History</label>
+        <div class="interaction-history-controls">
+          <button id="btn-history-all" class="btn-secondary active" type="button">All events</button>
+          <label class="interaction-entity-filter">
+            <span>Entity</span>
+            <input
+              id="interaction-entity-id"
+              class="input-field"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              placeholder="ID"
+              aria-label="Filter interaction history by entity ID"
+            >
+          </label>
+        </div>
+        <p id="interaction-history-scope" class="interaction-history-scope" aria-live="polite">All recent interactions</p>
+        <div id="interaction-history-list" class="interaction-history-list"></div>
+      </div>
+
       <!-- Controls -->
       <div class="sidebar-section" style="border-bottom:none;">
         <label class="field-label">Controls</label>

@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::simulation::{
     self, AutonomyProfile, Entity, LifeStage, Personality, PhaseProfile, PopulationStats,
+    Simulation, SimulationEvent, SimulationEventCause, SimulationEventDetails, SimulationEventKind,
 };
 use crate::world::{Grid, RegionKind};
 
@@ -260,6 +261,102 @@ pub(crate) fn entity_relationships_json(entity: &Entity) -> String {
 }
 
 #[derive(Serialize)]
+struct EventLocationDto {
+    x: u32,
+    y: u32,
+}
+
+#[derive(Serialize)]
+struct InteractionEventDto {
+    id: String,
+    tick: String,
+    relative_time: String,
+    location: EventLocationDto,
+    actor_id: u32,
+    target_id: u32,
+    related_entity_ids: Vec<u32>,
+    kind: &'static str,
+    cause: &'static str,
+    actor_affinity_delta: i16,
+    target_affinity_delta: i16,
+}
+
+fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
+    let elapsed = current_tick.saturating_sub(event_tick);
+    if elapsed == 0 {
+        "just now".to_string()
+    } else if elapsed < 24 {
+        format!("{elapsed}h ago")
+    } else {
+        let days = elapsed / 24;
+        if days < 365 {
+            format!("{days}d ago")
+        } else {
+            format!("{}y ago", days / 365)
+        }
+    }
+}
+
+fn interaction_events_json<'a>(
+    events: impl DoubleEndedIterator<Item = &'a SimulationEvent>,
+    current_tick: u64,
+    entity_id: Option<u32>,
+) -> String {
+    let interactions: Vec<InteractionEventDto> = events
+        .rev()
+        .filter(|event| {
+            entity_id.is_none_or(|id| {
+                event.actor_id == id
+                    || event.target_id == Some(id)
+                    || event.related_entity_ids.contains(&id)
+            })
+        })
+        .filter_map(|event| {
+            if event.kind != SimulationEventKind::Interaction
+                || event.cause != SimulationEventCause::MutualSocialContact
+            {
+                return None;
+            }
+            let target_id = event.target_id?;
+            let (actor_affinity_delta, target_affinity_delta) = match event.details {
+                SimulationEventDetails::Interaction {
+                    actor_affinity_delta,
+                    target_affinity_delta,
+                } => (actor_affinity_delta, target_affinity_delta),
+            };
+
+            Some(InteractionEventDto {
+                id: event.id.to_string(),
+                tick: event.tick.to_string(),
+                relative_time: relative_event_time(current_tick, event.tick),
+                location: EventLocationDto {
+                    x: event.location.x,
+                    y: event.location.y,
+                },
+                actor_id: event.actor_id,
+                target_id,
+                related_entity_ids: event.related_entity_ids.clone(),
+                kind: "interaction",
+                cause: "mutual_social_contact",
+                actor_affinity_delta,
+                target_affinity_delta,
+            })
+        })
+        .collect();
+
+    to_json(&interactions)
+}
+
+/// Serializes the existing bounded event history without mutating simulation state.
+/// Filtering happens only when this bridge query is requested.
+pub(crate) fn recent_interaction_events_json(
+    simulation: &Simulation,
+    entity_id: Option<u32>,
+) -> String {
+    interaction_events_json(simulation.recent_events(), simulation.tick(), entity_id)
+}
+
+#[derive(Serialize)]
 struct ResourceInfoDto {
     kind: &'static str,
     amount: u16,
@@ -440,6 +537,76 @@ mod tests {
             super::entity_relationships_json(&simulation.entities()[0]),
             "[]"
         );
+    }
+
+    fn interaction_event(
+        id: u64,
+        tick: u64,
+        actor_id: u32,
+        target_id: u32,
+        actor_affinity_delta: i16,
+        target_affinity_delta: i16,
+    ) -> SimulationEvent {
+        SimulationEvent {
+            id,
+            tick,
+            location: crate::simulation::EventLocation { x: 4, y: 7 },
+            actor_id,
+            target_id: Some(target_id),
+            related_entity_ids: vec![actor_id, target_id],
+            kind: SimulationEventKind::Interaction,
+            cause: SimulationEventCause::MutualSocialContact,
+            details: SimulationEventDetails::Interaction {
+                actor_affinity_delta,
+                target_affinity_delta,
+            },
+        }
+    }
+
+    #[test]
+    fn interaction_history_json_is_complete_and_newest_first() {
+        let events = [
+            interaction_event(7, 24, 1, 2, 4, -1),
+            interaction_event(9, 47, 3, 4, 0, 2),
+        ];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&interaction_events_json(events.iter(), 48, None)).unwrap();
+
+        assert_eq!(payload[0]["id"], "9");
+        assert_eq!(payload[1]["id"], "7");
+        assert_eq!(payload[0]["tick"], "47");
+        assert_eq!(payload[0]["relative_time"], "1h ago");
+        assert_eq!(
+            payload[0]["location"],
+            serde_json::json!({ "x": 4, "y": 7 })
+        );
+        assert_eq!(payload[0]["actor_id"], 3);
+        assert_eq!(payload[0]["target_id"], 4);
+        assert_eq!(payload[0]["related_entity_ids"], serde_json::json!([3, 4]));
+        assert_eq!(payload[0]["kind"], "interaction");
+        assert_eq!(payload[0]["cause"], "mutual_social_contact");
+        assert_eq!(payload[0]["actor_affinity_delta"], 0);
+        assert_eq!(payload[0]["target_affinity_delta"], 2);
+    }
+
+    #[test]
+    fn interaction_history_json_filters_actor_target_and_related_entities() {
+        let mut first = interaction_event(1, 10, 1, 2, 1, 1);
+        first.related_entity_ids.push(99);
+        let events = [first, interaction_event(2, 11, 3, 4, -1, -1)];
+
+        for entity_id in [1, 2, 99] {
+            let payload: serde_json::Value =
+                serde_json::from_str(&interaction_events_json(events.iter(), 12, Some(entity_id)))
+                    .unwrap();
+            assert_eq!(payload.as_array().unwrap().len(), 1);
+            assert_eq!(payload[0]["id"], "1");
+        }
+
+        assert_eq!(interaction_events_json(events.iter(), 12, Some(50)), "[]");
+        let empty: [SimulationEvent; 0] = [];
+        assert_eq!(interaction_events_json(empty.iter(), 12, None), "[]");
     }
 
     #[test]

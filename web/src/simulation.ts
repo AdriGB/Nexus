@@ -1,6 +1,10 @@
 import { uploadSimulationToRenderer } from "./renderer/renderer";
 import { requestRender, state } from "./state";
 import { syncEntityInspector } from "./ui/entity-inspector";
+import {
+  resetInteractionHistory,
+  syncInteractionHistory,
+} from "./ui/interaction-history";
 import { syncPopulationStats } from "./ui/population-stats";
 import { updateTileInspector } from "./ui/tile-inspector";
 
@@ -71,10 +75,12 @@ export function syncSimulationUi(): void {
   document.getElementById("btn-sim-pause")?.classList.toggle("active", paused);
   syncPopulationStats();
   syncEntityInspector();
+  syncInteractionHistory();
 }
 
 export function resetSimulationView(): void {
   lastWorldRevision = state.world?.simulation_world_revision() ?? 0n;
+  resetInteractionHistory();
   syncSimulationUi();
 }
 

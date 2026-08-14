@@ -13,6 +13,7 @@ export interface IWorldBridge {
   population_stats(): string;
   first_entity_info(): string;
   first_entity_relationships(): string;
+  recent_interaction_events(entityId?: number): string;
   entity_info(id: number): string;
   get_tile_data(
     vx: number,
@@ -141,6 +142,20 @@ export interface KnownRelationshipInfo {
   last_seen_y: number;
   observed_ticks: number;
   seek_retry_after_tick: number | null;
+}
+
+export interface InteractionEvent {
+  id: string;
+  tick: string;
+  relative_time: string;
+  location: TileCoord;
+  actor_id: number;
+  target_id: number;
+  related_entity_ids: number[];
+  kind: "interaction";
+  cause: "mutual_social_contact";
+  actor_affinity_delta: number;
+  target_affinity_delta: number;
 }
 
 export interface PopulationStats {

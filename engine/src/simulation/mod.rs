@@ -120,8 +120,7 @@ impl Simulation {
         &self.entities
     }
 
-    #[cfg(test)]
-    pub fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
+    pub(crate) fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.recent_events.iter()
     }
 

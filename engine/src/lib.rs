@@ -170,6 +170,10 @@ impl WorldBridge {
             .map_or_else(|| "[]".to_string(), bridge::entity_relationships_json)
     }
 
+    pub fn recent_interaction_events(&self, entity_id: Option<u32>) -> String {
+        bridge::recent_interaction_events_json(&self.simulation, entity_id)
+    }
+
     pub fn entity_info(&self, id: u32) -> String {
         self.simulation
             .entities()

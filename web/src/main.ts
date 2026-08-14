@@ -39,6 +39,7 @@ import {
   resetSimulationView,
 } from "./simulation";
 import { installPerformanceDebug } from "./simulation-debug";
+import { bindInteractionHistory } from "./ui/interaction-history";
 
 /* ── World generation ─────────────────────── */
 
@@ -117,6 +118,7 @@ async function boot(): Promise<void> {
   bindControls(generateWorld);
   bindSaveControls(generateWorld);
   bindSimulationControls();
+  bindInteractionHistory();
   installPerformanceDebug();
 
   inputLayer.addEventListener("mousemove", (e) => {
