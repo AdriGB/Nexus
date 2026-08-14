@@ -206,6 +206,7 @@ impl Simulation {
 
         let start = Instant::now();
         let (consumed_this_tick, consumer_ids, interactions) = self.run_autonomy(world);
+        self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         let autonomy_us = start.elapsed().as_micros() as u64;
 
@@ -271,6 +272,7 @@ impl Simulation {
             spatial_grid,
             pathfinding_workspace,
         );
+        self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
 
         self.snap_infants_to_caregivers();
@@ -392,6 +394,7 @@ impl Simulation {
         self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
         let (consumed, consumer_ids, interactions) = self.run_autonomy(world);
+        self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
         self.snap_infants_to_caregivers();
 
@@ -458,6 +461,36 @@ impl Simulation {
                     actor_affinity_delta: interaction.actor_affinity_delta,
                     target_affinity_delta: interaction.target_affinity_delta,
                 },
+            });
+        }
+    }
+
+    fn record_food_consumptions(&mut self, consumptions: &[(u32, u16)]) {
+        for &(entity_id, amount) in consumptions {
+            if amount == 0 {
+                continue;
+            }
+            let Ok(index) = self
+                .entities
+                .binary_search_by_key(&entity_id, |entity| entity.id)
+            else {
+                continue;
+            };
+            let entity = &self.entities[index];
+            let location = EventLocation {
+                x: entity.x,
+                y: entity.y,
+            };
+            self.push_event(SimulationEvent {
+                id: 0,
+                tick: self.tick,
+                location,
+                actor_id: entity_id,
+                target_id: None,
+                related_entity_ids: vec![entity_id],
+                kind: SimulationEventKind::Consumption,
+                cause: SimulationEventCause::AteFood,
+                details: SimulationEventDetails::Consumption { amount },
             });
         }
     }

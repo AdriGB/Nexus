@@ -280,6 +280,7 @@ struct SimulationEventDto {
     actor_affinity_delta: Option<i16>,
     target_affinity_delta: Option<i16>,
     child_id: Option<u32>,
+    amount: Option<u16>,
 }
 
 fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
@@ -324,9 +325,14 @@ fn simulation_events_json<'a>(
                 (SimulationEventKind::Death, SimulationEventCause::NaturalDeath) => {
                     ("death", "natural_death")
                 }
+                (SimulationEventKind::Consumption, SimulationEventCause::AteFood) => {
+                    ("consumption", "ate_food")
+                }
                 _ => ("unknown", "unknown"),
             };
-            let (actor_affinity_delta, target_affinity_delta, child_id) = match event.details {
+            let (actor_affinity_delta, target_affinity_delta, child_id, amount) = match event
+                .details
+            {
                 SimulationEventDetails::Interaction {
                     actor_affinity_delta,
                     target_affinity_delta,
@@ -334,9 +340,11 @@ fn simulation_events_json<'a>(
                     Some(actor_affinity_delta),
                     Some(target_affinity_delta),
                     None,
+                    None,
                 ),
-                SimulationEventDetails::Birth { child_id } => (None, None, Some(child_id)),
-                SimulationEventDetails::Death => (None, None, None),
+                SimulationEventDetails::Birth { child_id } => (None, None, Some(child_id), None),
+                SimulationEventDetails::Death => (None, None, None, None),
+                SimulationEventDetails::Consumption { amount } => (None, None, None, Some(amount)),
             };
 
             SimulationEventDto {
@@ -355,6 +363,7 @@ fn simulation_events_json<'a>(
                 actor_affinity_delta,
                 target_affinity_delta,
                 child_id,
+                amount,
             }
         })
         .collect();
@@ -675,6 +684,29 @@ mod tests {
             serde_json::from_str(&simulation_events_json(events.iter(), 21, Some(5))).unwrap();
         assert_eq!(newborn.as_array().unwrap().len(), 1);
         assert_eq!(newborn[0]["id"], "10");
+    }
+
+    #[test]
+    fn consumption_event_json_includes_amount_and_filters_by_consumer() {
+        let events = [SimulationEvent {
+            id: 12,
+            tick: 30,
+            location: crate::simulation::EventLocation { x: 6, y: 8 },
+            actor_id: 4,
+            target_id: None,
+            related_entity_ids: vec![4],
+            kind: SimulationEventKind::Consumption,
+            cause: SimulationEventCause::AteFood,
+            details: SimulationEventDetails::Consumption { amount: 9 },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 30, Some(4))).unwrap();
+        assert_eq!(payload[0]["kind"], "consumption");
+        assert_eq!(payload[0]["cause"], "ate_food");
+        assert_eq!(payload[0]["amount"], 9);
+        assert_eq!(payload[0]["target_id"], serde_json::Value::Null);
+        assert_eq!(simulation_events_json(events.iter(), 30, Some(5)), "[]");
     }
 
     #[test]

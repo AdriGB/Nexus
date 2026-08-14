@@ -1,6 +1,7 @@
 use super::super::config::{FOOD_SEARCH_THRESHOLD, MAX_HUNGER, STARVATION_DAMAGE_PER_TICK};
 use super::super::time::TICKS_PER_YEAR;
 use super::super::Simulation;
+use super::super::{SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 use super::support::*;
 
 #[test]
@@ -21,6 +22,19 @@ fn competing_entities_consume_a_finite_deposit_once() {
     assert_eq!(simulation.food_consumed, 10);
     assert!(simulation.entities()[0].hunger < simulation.entities()[1].hunger);
     assert_eq!(simulation.world_revision(), 1);
+    let consumption_events: Vec<_> = simulation
+        .recent_events()
+        .filter(|event| event.kind == SimulationEventKind::Consumption)
+        .collect();
+    assert_eq!(consumption_events.len(), 1);
+    assert_eq!(consumption_events[0].actor_id, 1);
+    assert_eq!(consumption_events[0].cause, SimulationEventCause::AteFood);
+    assert_eq!(
+        consumption_events[0].details,
+        SimulationEventDetails::Consumption { amount: 10 }
+    );
+    assert_eq!(consumption_events[0].location.x, 0);
+    assert_eq!(consumption_events[0].location.y, 0);
 }
 
 #[test]
