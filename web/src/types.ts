@@ -14,6 +14,7 @@ export interface IWorldBridge {
   first_entity_info(): string;
   first_entity_relationships(): string;
   recent_interaction_events(entityId?: number): string;
+  recent_events(entityId?: number): string;
   entity_info(id: number): string;
   get_tile_data(
     vx: number,
@@ -144,19 +145,41 @@ export interface KnownRelationshipInfo {
   seek_retry_after_tick: number | null;
 }
 
-export interface InteractionEvent {
+interface SimulationEventBase {
   id: string;
   tick: string;
   relative_time: string;
   location: TileCoord;
   actor_id: number;
-  target_id: number;
+  target_id: number | null;
   related_entity_ids: number[];
+}
+
+export interface InteractionEvent extends SimulationEventBase {
   kind: "interaction";
   cause: "mutual_social_contact";
   actor_affinity_delta: number;
   target_affinity_delta: number;
+  child_id: null;
 }
+
+export interface BirthEvent extends SimulationEventBase {
+  kind: "birth";
+  cause: "born";
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: number;
+}
+
+export interface DeathEvent extends SimulationEventBase {
+  kind: "death";
+  cause: "starvation" | "natural_death";
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+}
+
+export type SimulationEvent = InteractionEvent | BirthEvent | DeathEvent;
 
 export interface PopulationStats {
   population: number;

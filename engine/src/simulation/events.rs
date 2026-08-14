@@ -11,11 +11,16 @@ pub struct EventLocation {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SimulationEventKind {
     Interaction,
+    Birth,
+    Death,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SimulationEventCause {
     MutualSocialContact,
+    Born,
+    Starvation,
+    NaturalDeath,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +29,10 @@ pub enum SimulationEventDetails {
         actor_affinity_delta: i16,
         target_affinity_delta: i16,
     },
+    Birth {
+        child_id: u32,
+    },
+    Death,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
