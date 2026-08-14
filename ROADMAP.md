@@ -165,11 +165,11 @@ Dos individuos se conocen, recuerdan sus encuentros, desarrollan afinidad y comi
 
 Objetivo: registrar por qué sucede cada acontecimiento importante.
 
-* [ ] Modelo central `SimulationEvent`
-* [ ] Tick y ubicación del evento
-* [ ] Actor, objetivo y entidades relacionadas
-* [ ] Tipo de evento
-* [ ] Causa inmediata
+* [x] Modelo central `SimulationEvent`
+* [x] Tick y ubicación del evento
+* [x] Actor, objetivo y entidades relacionadas
+* [x] Tipo de evento
+* [x] Causa inmediata
 * [ ] Eventos de:
 
   * [ ] nacimiento
@@ -177,11 +177,11 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
   * [ ] consumo
   * [ ] descubrimiento
   * [ ] encuentro
-  * [ ] interacción
+  * [x] interacción
   * [ ] cambio significativo de afinidad
   * [ ] formación de pareja
   * [ ] separación
-* [ ] Buffer circular de eventos recientes
+* [x] Buffer circular de eventos recientes
 * [ ] Historial resumido por entidad
 * [ ] Panel cronológico filtrable
 * [ ] Explicación de decisiones importantes

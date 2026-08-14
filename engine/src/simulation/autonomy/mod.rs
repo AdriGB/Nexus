@@ -27,6 +27,7 @@ pub(super) use self::action::effective_movement_speed;
 pub(in crate::simulation) use self::decision::DecisionContext;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
+pub(in crate::simulation) use self::social::SocialInteraction;
 
 use super::entity::Entity;
 use super::spatial::{EntitySnapshot, SpatialGrid};
@@ -37,8 +38,8 @@ pub(super) fn process_social_interactions(
     entities: &mut [Entity],
     population: &[EntitySnapshot],
     tick: u64,
-) {
-    social::process_social_interactions(entities, population, tick);
+) -> Vec<SocialInteraction> {
+    social::process_social_interactions(entities, population, tick)
 }
 
 pub(super) fn update_entity(

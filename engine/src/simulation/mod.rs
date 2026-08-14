@@ -1,6 +1,7 @@
 mod autonomy;
 mod config;
 mod entity;
+mod events;
 mod lifecycle;
 mod spatial;
 mod time;
@@ -12,6 +13,11 @@ use self::config::{
     MAX_HEALTH, MAX_HUNGER, MAX_POPULATION, STARVATION_DAMAGE_PER_TICK,
 };
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
+use self::events::RecentEventHistory;
+pub use self::events::{
+    EventLocation, SimulationEvent, SimulationEventCause, SimulationEventDetails,
+    SimulationEventKind,
+};
 use self::lifecycle::{
     founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
     spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
@@ -67,6 +73,8 @@ pub struct Simulation {
     deaths: u64,
     food_consumed: u64,
     seed: u64,
+    recent_events: RecentEventHistory,
+    next_event_id: u64,
 }
 
 impl Default for Simulation {
@@ -84,6 +92,8 @@ impl Default for Simulation {
             deaths: 0,
             food_consumed: 0,
             seed: 0,
+            recent_events: RecentEventHistory::default(),
+            next_event_id: 1,
         }
     }
 }
@@ -108,6 +118,11 @@ impl Simulation {
 
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    #[cfg(test)]
+    pub fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
+        self.recent_events.iter()
     }
 
     pub fn world_revision(&self) -> u64 {
@@ -191,7 +206,8 @@ impl Simulation {
         let population_index_us = start.elapsed().as_micros() as u64;
 
         let start = Instant::now();
-        let (consumed_this_tick, consumer_ids) = self.run_autonomy(world);
+        let (consumed_this_tick, consumer_ids, interactions) = self.run_autonomy(world);
+        self.record_social_interactions(interactions);
         let autonomy_us = start.elapsed().as_micros() as u64;
 
         self.snap_infants_to_caregivers();
@@ -248,7 +264,7 @@ impl Simulation {
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
-        let (consumed_this_tick, profile, consumer_ids) = autonomy::profile_autonomy(
+        let (consumed_this_tick, profile, consumer_ids, interactions) = autonomy::profile_autonomy(
             &mut self.entities,
             world,
             tick,
@@ -256,6 +272,7 @@ impl Simulation {
             spatial_grid,
             pathfinding_workspace,
         );
+        self.record_social_interactions(interactions);
 
         self.snap_infants_to_caregivers();
         for (id, amount) in consumer_ids {
@@ -375,7 +392,8 @@ impl Simulation {
     fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
         self.snap_infants_to_caregivers();
         self.rebuild_population_index(world);
-        let (consumed, consumer_ids) = self.run_autonomy(world);
+        let (consumed, consumer_ids, interactions) = self.run_autonomy(world);
+        self.record_social_interactions(interactions);
         self.snap_infants_to_caregivers();
 
         for (id, amount) in consumer_ids {
@@ -385,7 +403,10 @@ impl Simulation {
         consumed
     }
 
-    fn run_autonomy(&mut self, world: &mut Grid) -> (u64, Vec<(u32, u16)>) {
+    fn run_autonomy(
+        &mut self,
+        world: &mut Grid,
+    ) -> (u64, Vec<(u32, u16)>, Vec<autonomy::SocialInteraction>) {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
@@ -411,13 +432,40 @@ impl Simulation {
             consumed += u64::from(result);
         }
 
-        autonomy::process_social_interactions(
+        let interactions = autonomy::process_social_interactions(
             &mut self.entities,
             &self.population_cache,
             self.tick,
         );
 
-        (consumed, consumer_ids)
+        (consumed, consumer_ids, interactions)
+    }
+
+    fn record_social_interactions(&mut self, interactions: Vec<autonomy::SocialInteraction>) {
+        for interaction in interactions {
+            let event = SimulationEvent {
+                id: self.next_event_id,
+                tick: self.tick,
+                location: EventLocation {
+                    x: interaction.location.0,
+                    y: interaction.location.1,
+                },
+                actor_id: interaction.actor_id,
+                target_id: Some(interaction.target_id),
+                related_entity_ids: vec![interaction.actor_id, interaction.target_id],
+                kind: SimulationEventKind::Interaction,
+                cause: SimulationEventCause::MutualSocialContact,
+                details: SimulationEventDetails::Interaction {
+                    actor_affinity_delta: interaction.actor_affinity_delta,
+                    target_affinity_delta: interaction.target_affinity_delta,
+                },
+            };
+            self.next_event_id = self
+                .next_event_id
+                .checked_add(1)
+                .expect("simulation event id space exhausted");
+            self.recent_events.push(event);
+        }
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {
