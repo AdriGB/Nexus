@@ -79,7 +79,7 @@ jobs:
           "${RUNNER_TEMP}/rclone" lsd nexus-backup: --config "${config_file}" --max-depth 1
           "${RUNNER_TEMP}/rclone" copyto \
             "${{ steps.bundle.outputs.path }}" \
-            "nexus-backup:${{ steps.bundle.outputs.name }}" \
+            "nexus-backup:Nexus Backups/${{ steps.bundle.outputs.name }}" \
             --config "${config_file}" \
             --checksum \
             --drive-acknowledge-abuse=false \
