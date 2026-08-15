@@ -4,6 +4,7 @@ import type {
   BirthEvent,
   ConsumptionEvent,
   DeathEvent,
+  EncounterEvent,
   InteractionEvent,
   ResourceDiscoveryEvent,
 } from "../types";
@@ -114,6 +115,25 @@ function discovery(): ResourceDiscoveryEvent {
   };
 }
 
+function encounter(): EncounterEvent {
+  return {
+    id: "11",
+    tick: "53",
+    relative_time: "just now",
+    location: { x: 3, y: 5 },
+    actor_id: 2,
+    target_id: 7,
+    related_entity_ids: [2, 7],
+    kind: "encounter",
+    cause: "first_encounter",
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: null,
+    amount: null,
+    resource_kind: null,
+  };
+}
+
 describe("interaction history", () => {
   it("renders a clear empty state for all events and selected entities", () => {
     expect(renderInteractionHistory([])).toContain("No recent events.");
@@ -157,6 +177,15 @@ describe("interaction history", () => {
     expect(html).toContain("Discovered timber");
     expect(html).toContain("Observed 14 at (6, 3)");
     expect(filterInteractionEvents([discovery()], 8)).toHaveLength(1);
+  });
+
+  it("renders and filters first encounters", () => {
+    const html = renderInteractionHistory([encounter()]);
+    expect(html).toContain("Entity #2");
+    expect(html).toContain("first encountered");
+    expect(html).toContain("Entity #7");
+    expect(html).toContain("at (3, 5)");
+    expect(filterInteractionEvents([encounter()], 7)).toHaveLength(1);
   });
 
   it("renders positive, neutral, and negative deltas with text and symbols", () => {

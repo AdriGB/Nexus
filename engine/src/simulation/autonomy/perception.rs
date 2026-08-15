@@ -13,6 +13,14 @@ pub(in crate::simulation) struct ResourceDiscovery {
     pub amount: u16,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct EntityEncounter {
+    pub observer_id: u32,
+    pub other_id: u32,
+    pub x: u32,
+    pub y: u32,
+}
+
 fn resource_key(x: u32, y: u32, kind: ResourceKind) -> (u32, u32, u8) {
     (y, x, kind as u8)
 }
@@ -91,7 +99,7 @@ fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) 
     }
 }
 
-fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
+fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) -> bool {
     match mind
         .memory
         .known_entities
@@ -104,6 +112,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
             known.last_seen_y = other.y;
             known.observed_ticks = known.observed_ticks.saturating_add(1);
             known.clear_seek_cooldown();
+            false
         }
         Err(index) => {
             mind.memory.known_entities.insert(
@@ -121,6 +130,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) {
                     seek_retry_after_tick: None,
                 },
             );
+            true
         }
     }
 }
@@ -230,8 +240,9 @@ pub(super) fn perceive_entities(
     tick: u64,
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
-) {
+) -> Vec<EntityEncounter> {
     mind.visible_entities.clear();
+    let mut encounters = Vec::new();
 
     spatial_grid.visit_candidates(
         position.0,
@@ -246,12 +257,20 @@ pub(super) fn perceive_entities(
 
             if manhattan(position, (other.x, other.y)) <= mind.perception_radius {
                 mind.visible_entities.push(other.id);
-                remember_entity(mind, other, tick);
+                if remember_entity(mind, other, tick) {
+                    encounters.push(EntityEncounter {
+                        observer_id: entity_id,
+                        other_id: other.id,
+                        x: position.0,
+                        y: position.1,
+                    });
+                }
             }
         },
     );
 
     mind.visible_entities.sort_unstable();
+    encounters
 }
 
 #[cfg(test)]

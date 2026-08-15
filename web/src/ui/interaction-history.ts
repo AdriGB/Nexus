@@ -74,6 +74,10 @@ function eventDetails(event: SimulationEvent): string {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>Discovered ${event.resource_kind}</span></div>
       <div class="interaction-event-row"><span>Observed ${event.amount} at (${event.location.x}, ${event.location.y})</span></div>`;
   }
+  if (event.kind === "encounter") {
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>first encountered</span></div>
+      <div class="interaction-event-row">${entityButton(event.target_id, "Entity")}<span>at (${event.location.x}, ${event.location.y})</span></div>`;
+  }
   const exhaustive: never = event;
   return exhaustive;
 }

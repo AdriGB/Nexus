@@ -205,12 +205,24 @@ export interface ResourceDiscoveryEvent extends SimulationEventBase {
   resource_kind: "food" | "timber" | "stone" | "iron";
 }
 
+export interface EncounterEvent extends SimulationEventBase {
+  kind: "encounter";
+  cause: "first_encounter";
+  target_id: number;
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: null;
+  resource_kind: null;
+}
+
 export type SimulationEvent =
   | InteractionEvent
   | BirthEvent
   | DeathEvent
   | ConsumptionEvent
-  | ResourceDiscoveryEvent;
+  | ResourceDiscoveryEvent
+  | EncounterEvent;
 
 export interface PopulationStats {
   population: number;

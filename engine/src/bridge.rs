@@ -332,6 +332,9 @@ fn simulation_events_json<'a>(
                 (SimulationEventKind::Discovery, SimulationEventCause::ResourceFound) => {
                     ("discovery", "resource_found")
                 }
+                (SimulationEventKind::Encounter, SimulationEventCause::FirstEncounter) => {
+                    ("encounter", "first_encounter")
+                }
                 _ => ("unknown", "unknown"),
             };
             let (actor_affinity_delta, target_affinity_delta, child_id, amount, resource_kind) =
@@ -365,6 +368,7 @@ fn simulation_events_json<'a>(
                             ResourceKind::Iron => "iron",
                         }),
                     ),
+                    SimulationEventDetails::Encounter => (None, None, None, None, None),
                 };
 
             SimulationEventDto {
@@ -754,6 +758,29 @@ mod tests {
         assert_eq!(payload[0]["resource_kind"], "stone");
         assert_eq!(payload[0]["amount"], 17);
         assert_eq!(simulation_events_json(events.iter(), 31, Some(5)), "[]");
+    }
+
+    #[test]
+    fn encounter_event_json_includes_both_entities() {
+        let events = [SimulationEvent {
+            id: 14,
+            tick: 32,
+            location: crate::simulation::EventLocation { x: 2, y: 5 },
+            actor_id: 3,
+            target_id: Some(9),
+            related_entity_ids: vec![3, 9],
+            kind: SimulationEventKind::Encounter,
+            cause: SimulationEventCause::FirstEncounter,
+            details: SimulationEventDetails::Encounter,
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 32, Some(9))).unwrap();
+        assert_eq!(payload[0]["kind"], "encounter");
+        assert_eq!(payload[0]["cause"], "first_encounter");
+        assert_eq!(payload[0]["actor_id"], 3);
+        assert_eq!(payload[0]["target_id"], 9);
+        assert_eq!(simulation_events_json(events.iter(), 32, Some(8)), "[]");
     }
 
     #[test]

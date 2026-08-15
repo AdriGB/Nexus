@@ -16,6 +16,7 @@ pub enum SimulationEventKind {
     Death,
     Consumption,
     Discovery,
+    Encounter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,6 +27,7 @@ pub enum SimulationEventCause {
     NaturalDeath,
     AteFood,
     ResourceFound,
+    FirstEncounter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +47,7 @@ pub enum SimulationEventDetails {
         kind: ResourceKind,
         amount: u16,
     },
+    Encounter,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
