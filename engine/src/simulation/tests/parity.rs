@@ -1,4 +1,7 @@
-use super::super::Simulation;
+use super::super::autonomy::KnownEntity;
+use super::super::entity::Personality;
+use super::super::time::TICKS_PER_YEAR;
+use super::super::{Simulation, SimulationEventKind};
 use super::support::*;
 use crate::world::Grid;
 
@@ -119,4 +122,61 @@ fn profile_autonomy_step_matches_step() {
     run_parity(|simulation, world| {
         simulation.profile_autonomy_step(world);
     });
+}
+
+#[test]
+fn profile_step_matches_affinity_change_events_from_step() {
+    let relationship = |id, x, y| KnownEntity {
+        id,
+        first_seen_tick: 0,
+        last_seen_tick: 0,
+        last_seen_x: x,
+        last_seen_y: y,
+        observed_ticks: 1,
+        affinity: 99,
+        last_interaction_tick: 0,
+        interaction_count: 1,
+        seek_retry_after_tick: None,
+    };
+    let mut a = entity(1, 2, 2, 0.0);
+    let mut b = entity(2, 2, 3, 0.0);
+    for entity in [&mut a, &mut b] {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+        entity.personality = Personality {
+            curiosity: 0.5,
+            sociability: 0.5,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.5,
+        };
+    }
+    a.mind.memory.known_entities.push(relationship(2, 2, 3));
+    b.mind.memory.known_entities.push(relationship(1, 2, 2));
+    let mut normal = Simulation {
+        entities: vec![a.clone(), b.clone()],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+    let mut profiled = Simulation {
+        entities: vec![a, b],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+    let mut normal_world = plain_grid(8, 8);
+    let mut profiled_world = plain_grid(8, 8);
+
+    normal.step(&mut normal_world);
+    profiled.profile_step(&mut profiled_world);
+
+    let normal_events: Vec<_> = normal.recent_events().collect();
+    let profiled_events: Vec<_> = profiled.recent_events().collect();
+    assert_eq!(
+        normal_events
+            .iter()
+            .filter(|event| event.kind == SimulationEventKind::AffinityChange)
+            .count(),
+        2
+    );
+    assert_eq!(normal_events, profiled_events);
+    assert_eq!(normal.next_event_id, profiled.next_event_id);
 }

@@ -282,6 +282,9 @@ struct SimulationEventDto {
     child_id: Option<u32>,
     amount: Option<u16>,
     resource_kind: Option<&'static str>,
+    previous_affinity: Option<i16>,
+    new_affinity: Option<i16>,
+    delta: Option<i16>,
 }
 
 fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
@@ -315,61 +318,88 @@ fn simulation_events_json<'a>(
             })
         })
         .map(|event| {
-            let (kind, cause) = match (event.kind, event.cause) {
-                (SimulationEventKind::Interaction, SimulationEventCause::MutualSocialContact) => {
-                    ("interaction", "mutual_social_contact")
-                }
-                (SimulationEventKind::Birth, SimulationEventCause::Born) => ("birth", "born"),
-                (SimulationEventKind::Death, SimulationEventCause::Starvation) => {
-                    ("death", "starvation")
-                }
-                (SimulationEventKind::Death, SimulationEventCause::NaturalDeath) => {
-                    ("death", "natural_death")
-                }
-                (SimulationEventKind::Consumption, SimulationEventCause::AteFood) => {
-                    ("consumption", "ate_food")
-                }
-                (SimulationEventKind::Discovery, SimulationEventCause::ResourceFound) => {
-                    ("discovery", "resource_found")
-                }
-                (SimulationEventKind::Encounter, SimulationEventCause::FirstEncounter) => {
-                    ("encounter", "first_encounter")
-                }
-                _ => ("unknown", "unknown"),
+            let kind = match event.kind {
+                SimulationEventKind::Interaction => "interaction",
+                SimulationEventKind::Birth => "birth",
+                SimulationEventKind::Death => "death",
+                SimulationEventKind::Consumption => "consumption",
+                SimulationEventKind::Discovery => "discovery",
+                SimulationEventKind::Encounter => "encounter",
+                SimulationEventKind::AffinityChange => "affinity_change",
             };
-            let (actor_affinity_delta, target_affinity_delta, child_id, amount, resource_kind) =
-                match event.details {
-                    SimulationEventDetails::Interaction {
-                        actor_affinity_delta,
-                        target_affinity_delta,
-                    } => (
-                        Some(actor_affinity_delta),
-                        Some(target_affinity_delta),
-                        None,
-                        None,
-                        None,
-                    ),
-                    SimulationEventDetails::Birth { child_id } => {
-                        (None, None, Some(child_id), None, None)
-                    }
-                    SimulationEventDetails::Death => (None, None, None, None, None),
-                    SimulationEventDetails::Consumption { amount } => {
-                        (None, None, None, Some(amount), None)
-                    }
-                    SimulationEventDetails::ResourceDiscovery { kind, amount } => (
-                        None,
-                        None,
-                        None,
-                        Some(amount),
-                        Some(match kind {
-                            ResourceKind::Food => "food",
-                            ResourceKind::Timber => "timber",
-                            ResourceKind::Stone => "stone",
-                            ResourceKind::Iron => "iron",
-                        }),
-                    ),
-                    SimulationEventDetails::Encounter => (None, None, None, None, None),
-                };
+            let cause = match event.cause {
+                SimulationEventCause::MutualSocialContact => "mutual_social_contact",
+                SimulationEventCause::Born => "born",
+                SimulationEventCause::Starvation => "starvation",
+                SimulationEventCause::NaturalDeath => "natural_death",
+                SimulationEventCause::AteFood => "ate_food",
+                SimulationEventCause::ResourceFound => "resource_found",
+                SimulationEventCause::FirstEncounter => "first_encounter",
+                SimulationEventCause::RelationshipDecay => "relationship_decay",
+            };
+            let (
+                actor_affinity_delta,
+                target_affinity_delta,
+                child_id,
+                amount,
+                resource_kind,
+                previous_affinity,
+                new_affinity,
+                delta,
+            ) = match event.details {
+                SimulationEventDetails::Interaction {
+                    actor_affinity_delta,
+                    target_affinity_delta,
+                } => (
+                    Some(actor_affinity_delta),
+                    Some(target_affinity_delta),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                SimulationEventDetails::Birth { child_id } => {
+                    (None, None, Some(child_id), None, None, None, None, None)
+                }
+                SimulationEventDetails::Death => (None, None, None, None, None, None, None, None),
+                SimulationEventDetails::Consumption { amount } => {
+                    (None, None, None, Some(amount), None, None, None, None)
+                }
+                SimulationEventDetails::ResourceDiscovery { kind, amount } => (
+                    None,
+                    None,
+                    None,
+                    Some(amount),
+                    Some(match kind {
+                        ResourceKind::Food => "food",
+                        ResourceKind::Timber => "timber",
+                        ResourceKind::Stone => "stone",
+                        ResourceKind::Iron => "iron",
+                    }),
+                    None,
+                    None,
+                    None,
+                ),
+                SimulationEventDetails::Encounter => {
+                    (None, None, None, None, None, None, None, None)
+                }
+                SimulationEventDetails::AffinityChange {
+                    previous_affinity,
+                    new_affinity,
+                    delta,
+                } => (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(previous_affinity),
+                    Some(new_affinity),
+                    Some(delta),
+                ),
+            };
 
             SimulationEventDto {
                 id: event.id.to_string(),
@@ -389,6 +419,9 @@ fn simulation_events_json<'a>(
                 child_id,
                 amount,
                 resource_kind,
+                previous_affinity,
+                new_affinity,
+                delta,
             }
         })
         .collect();
@@ -781,6 +814,37 @@ mod tests {
         assert_eq!(payload[0]["actor_id"], 3);
         assert_eq!(payload[0]["target_id"], 9);
         assert_eq!(simulation_events_json(events.iter(), 32, Some(8)), "[]");
+    }
+
+    #[test]
+    fn affinity_change_event_json_serializes_and_filters_both_entities() {
+        let events = [SimulationEvent {
+            id: 15,
+            tick: 33,
+            location: crate::simulation::EventLocation { x: 3, y: 6 },
+            actor_id: 1,
+            target_id: Some(2),
+            related_entity_ids: vec![1, 2],
+            kind: SimulationEventKind::AffinityChange,
+            cause: SimulationEventCause::RelationshipDecay,
+            details: SimulationEventDetails::AffinityChange {
+                previous_affinity: 100,
+                new_affinity: 99,
+                delta: -1,
+            },
+        }];
+
+        for entity_id in [1, 2] {
+            let payload: serde_json::Value =
+                serde_json::from_str(&simulation_events_json(events.iter(), 33, Some(entity_id)))
+                    .unwrap();
+            assert_eq!(payload[0]["kind"], "affinity_change");
+            assert_eq!(payload[0]["cause"], "relationship_decay");
+            assert_eq!(payload[0]["previous_affinity"], 100);
+            assert_eq!(payload[0]["new_affinity"], 99);
+            assert_eq!(payload[0]["delta"], -1);
+        }
+        assert_eq!(simulation_events_json(events.iter(), 33, Some(99)), "[]");
     }
 
     #[test]

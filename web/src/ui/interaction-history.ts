@@ -78,6 +78,16 @@ function eventDetails(event: SimulationEvent): string {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>first encountered</span></div>
       <div class="interaction-event-row">${entityButton(event.target_id, "Entity")}<span>at (${event.location.x}, ${event.location.y})</span></div>`;
   }
+  if (event.kind === "affinity_change") {
+    const causeLabel =
+      event.cause === "mutual_social_contact"
+        ? "Social interaction"
+        : "Relationship decay";
+    const signedDelta = event.delta >= 0 ? `+${event.delta}` : `${event.delta}`;
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>changed attitude toward</span>${entityButton(event.target_id, "Entity")}</div>
+      <div class="interaction-event-row"><span>Affinity: ${event.previous_affinity} → ${event.new_affinity} (${signedDelta})</span></div>
+      <div class="interaction-event-row"><span>${causeLabel}</span><span>(${event.location.x}, ${event.location.y})</span></div>`;
+  }
   const exhaustive: never = event;
   return exhaustive;
 }

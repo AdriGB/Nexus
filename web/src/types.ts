@@ -163,6 +163,9 @@ export interface InteractionEvent extends SimulationEventBase {
   child_id: null;
   amount: null;
   resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
 }
 
 export interface BirthEvent extends SimulationEventBase {
@@ -173,6 +176,9 @@ export interface BirthEvent extends SimulationEventBase {
   child_id: number;
   amount: null;
   resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
 }
 
 export interface DeathEvent extends SimulationEventBase {
@@ -183,6 +189,9 @@ export interface DeathEvent extends SimulationEventBase {
   child_id: null;
   amount: null;
   resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
 }
 
 export interface ConsumptionEvent extends SimulationEventBase {
@@ -193,6 +202,9 @@ export interface ConsumptionEvent extends SimulationEventBase {
   child_id: null;
   amount: number;
   resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
 }
 
 export interface ResourceDiscoveryEvent extends SimulationEventBase {
@@ -203,6 +215,9 @@ export interface ResourceDiscoveryEvent extends SimulationEventBase {
   child_id: null;
   amount: number;
   resource_kind: "food" | "timber" | "stone" | "iron";
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
 }
 
 export interface EncounterEvent extends SimulationEventBase {
@@ -214,6 +229,23 @@ export interface EncounterEvent extends SimulationEventBase {
   child_id: null;
   amount: null;
   resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
+}
+
+export interface AffinityChangeEvent extends SimulationEventBase {
+  kind: "affinity_change";
+  cause: "mutual_social_contact" | "relationship_decay";
+  target_id: number;
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: null;
+  resource_kind: null;
+  previous_affinity: number;
+  new_affinity: number;
+  delta: number;
 }
 
 export type SimulationEvent =
@@ -222,7 +254,8 @@ export type SimulationEvent =
   | DeathEvent
   | ConsumptionEvent
   | ResourceDiscoveryEvent
-  | EncounterEvent;
+  | EncounterEvent
+  | AffinityChangeEvent;
 
 export interface PopulationStats {
   population: number;

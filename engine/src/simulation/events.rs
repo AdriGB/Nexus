@@ -17,6 +17,7 @@ pub enum SimulationEventKind {
     Consumption,
     Discovery,
     Encounter,
+    AffinityChange,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +29,7 @@ pub enum SimulationEventCause {
     AteFood,
     ResourceFound,
     FirstEncounter,
+    RelationshipDecay,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +50,11 @@ pub enum SimulationEventDetails {
         amount: u16,
     },
     Encounter,
+    AffinityChange {
+        previous_affinity: i16,
+        new_affinity: i16,
+        delta: i16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

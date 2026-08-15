@@ -9,6 +9,7 @@ mod social;
 pub use self::decision::evaluate_goals;
 #[cfg(test)]
 pub use self::exploration::exploration_target;
+pub(in crate::simulation) use self::mind::AffinityChangeRecord;
 #[cfg(test)]
 pub use self::mind::KnownEntity;
 #[cfg(test)]
