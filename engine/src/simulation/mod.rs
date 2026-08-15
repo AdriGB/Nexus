@@ -489,7 +489,7 @@ impl Simulation {
             if let Some(change) = interaction.actor_affinity_change {
                 self.record_affinity_change(
                     interaction.actor_id,
-                    interaction.location,
+                    interaction.actor_location,
                     change,
                     SimulationEventCause::MutualSocialContact,
                 );
@@ -497,7 +497,7 @@ impl Simulation {
             if let Some(change) = interaction.target_affinity_change {
                 self.record_affinity_change(
                     interaction.target_id,
-                    interaction.location,
+                    interaction.target_location,
                     change,
                     SimulationEventCause::MutualSocialContact,
                 );
