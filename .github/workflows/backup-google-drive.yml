@@ -1,0 +1,86 @@
+name: Backup to Google Drive
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: google-drive-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Repository bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Create and verify bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+          short_sha="${GITHUB_SHA:0:12}"
+          bundle_name="nexus-${timestamp}-${short_sha}.bundle"
+          bundle_path="${RUNNER_TEMP}/${bundle_name}"
+
+          git bundle create "${bundle_path}" --all
+          git bundle verify "${bundle_path}"
+
+          echo "name=${bundle_name}" >> "${GITHUB_OUTPUT}"
+          echo "path=${bundle_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install verified rclone release
+        shell: bash
+        env:
+          RCLONE_RELEASE_VERSION: "1.75.0"
+        run: |
+          set -euo pipefail
+
+          archive="rclone-v${RCLONE_RELEASE_VERSION}-linux-amd64.zip"
+          download_base="https://downloads.rclone.org/v${RCLONE_RELEASE_VERSION}"
+
+          cd "${RUNNER_TEMP}"
+          curl --fail --silent --show-error --location --remote-name "${download_base}/${archive}"
+          curl --fail --silent --show-error --location --remote-name "${download_base}/SHA256SUMS"
+          grep -F " ${archive}" SHA256SUMS | sha256sum --check --strict
+          unzip -q "${archive}"
+          install -m 0755 "rclone-v${RCLONE_RELEASE_VERSION}-linux-amd64/rclone" "${RUNNER_TEMP}/rclone"
+          "${RUNNER_TEMP}/rclone" version
+
+      - name: Upload bundle to private Drive folder
+        shell: bash
+        env:
+          GDRIVE_RCLONE_CONFIG: ${{ secrets.GDRIVE_RCLONE_CONFIG }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GDRIVE_RCLONE_CONFIG}" ]]; then
+            echo "Required Google Drive OAuth configuration is not configured." >&2
+            exit 1
+          fi
+
+          config_file="${RUNNER_TEMP}/rclone.conf"
+
+          printf '%s' "${GDRIVE_RCLONE_CONFIG}" > "${config_file}"
+          chmod 600 "${config_file}"
+
+          "${RUNNER_TEMP}/rclone" lsd nexus-backup: --config "${config_file}" --max-depth 1
+          "${RUNNER_TEMP}/rclone" copyto \
+            "${{ steps.bundle.outputs.path }}" \
+            "nexus-backup:Nexus Backups/${{ steps.bundle.outputs.name }}" \
+            --config "${config_file}" \
+            --checksum \
+            --drive-acknowledge-abuse=false \
+            --log-level INFO
