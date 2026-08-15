@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [main, agent/google-drive-backup]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
