@@ -486,7 +486,50 @@ impl Simulation {
                     target_affinity_delta: interaction.target_affinity_delta,
                 },
             });
+            if let Some(change) = interaction.actor_affinity_change {
+                self.record_affinity_change(
+                    interaction.actor_id,
+                    interaction.actor_location,
+                    change,
+                    SimulationEventCause::MutualSocialContact,
+                );
+            }
+            if let Some(change) = interaction.target_affinity_change {
+                self.record_affinity_change(
+                    interaction.target_id,
+                    interaction.target_location,
+                    change,
+                    SimulationEventCause::MutualSocialContact,
+                );
+            }
         }
+    }
+
+    fn record_affinity_change(
+        &mut self,
+        actor_id: u32,
+        location: (u32, u32),
+        change: autonomy::AffinityChangeRecord,
+        cause: SimulationEventCause,
+    ) {
+        self.push_event(SimulationEvent {
+            id: 0,
+            tick: self.tick,
+            location: EventLocation {
+                x: location.0,
+                y: location.1,
+            },
+            actor_id,
+            target_id: Some(change.target_id),
+            related_entity_ids: vec![actor_id, change.target_id],
+            kind: SimulationEventKind::AffinityChange,
+            cause,
+            details: SimulationEventDetails::AffinityChange {
+                previous_affinity: change.previous_affinity,
+                new_affinity: change.new_affinity,
+                delta: change.delta,
+            },
+        });
     }
 
     fn record_food_consumptions(&mut self, consumptions: &[(u32, u16)]) {
@@ -839,8 +882,26 @@ impl Simulation {
         if !self.tick.is_multiple_of(TICKS_PER_DAY) {
             return;
         }
+        let mut changes = Vec::new();
         for entity in &mut self.entities {
-            entity.mind.memory.decay_relationships(self.tick);
+            let actor_id = entity.id;
+            let location = (entity.x, entity.y);
+            changes.extend(
+                entity
+                    .mind
+                    .memory
+                    .decay_relationships(self.tick)
+                    .into_iter()
+                    .map(|change| (actor_id, location, change)),
+            );
+        }
+        for (actor_id, location, change) in changes {
+            self.record_affinity_change(
+                actor_id,
+                location,
+                change,
+                SimulationEventCause::RelationshipDecay,
+            );
         }
     }
 

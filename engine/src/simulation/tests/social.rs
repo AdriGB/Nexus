@@ -113,6 +113,65 @@ fn interaction_respects_cooldown() {
 }
 
 #[test]
+fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
+    let mut a = default_adult(1, 2, 2);
+    let mut b = default_adult(2, 2, 3);
+    a.mind.visible_entities = vec![2];
+    b.mind.visible_entities = vec![1];
+    a.mind
+        .memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
+            id: 2,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 2,
+            last_seen_y: 3,
+            observed_ticks: 1,
+            affinity: 99,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        });
+    b.mind
+        .memory
+        .known_entities
+        .push(super::super::autonomy::KnownEntity {
+            id: 1,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 2,
+            last_seen_y: 2,
+            observed_ticks: 1,
+            affinity: -201,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        });
+    a.personality.cooperativeness = 0.0;
+
+    let mut entities = vec![a, b];
+    let population = vec![
+        super::super::spatial::EntitySnapshot { id: 1, x: 2, y: 2 },
+        super::super::spatial::EntitySnapshot { id: 2, x: 2, y: 3 },
+    ];
+    let interactions =
+        super::super::autonomy::process_social_interactions(&mut entities, &population, 100);
+
+    assert_eq!(interactions.len(), 1);
+    assert_eq!(entities[0].mind.memory.affinity_to(2), Some(103));
+    assert_eq!(entities[1].mind.memory.affinity_to(1), Some(-201));
+    let actor_change = interactions[0]
+        .actor_affinity_change
+        .expect("A -> B should enter bonded");
+    assert_eq!(actor_change.target_id, 2);
+    assert_eq!(actor_change.previous_affinity, 99);
+    assert_eq!(actor_change.new_affinity, 103);
+    assert_eq!(actor_change.delta, 4);
+    assert_eq!(interactions[0].target_affinity_change, None);
+}
+
+#[test]
 fn high_sociability_interacts_more_frequently() {
     let mut world_high = plain_grid(5, 5);
     let mut world_low = plain_grid(5, 5);

@@ -3,7 +3,7 @@ use super::super::entity::{Entity, EntityActivity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_DAY;
 use super::exploration::plan_exploration;
-use super::mind::{manhattan, Action, Goal, KnownEntity, Mind};
+use super::mind::{manhattan, Action, AffinityChangeRecord, Goal, KnownEntity, Mind};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::Grid;
 use std::collections::HashMap;
@@ -13,8 +13,12 @@ pub(in crate::simulation) struct SocialInteraction {
     pub actor_id: u32,
     pub target_id: u32,
     pub location: (u32, u32),
+    pub actor_location: (u32, u32),
+    pub target_location: (u32, u32),
     pub actor_affinity_delta: i16,
     pub target_affinity_delta: i16,
+    pub actor_affinity_change: Option<AffinityChangeRecord>,
+    pub target_affinity_change: Option<AffinityChangeRecord>,
 }
 
 pub(in crate::simulation) const SOCIAL_RADIUS: u32 = 2;
@@ -379,15 +383,19 @@ pub(super) fn process_social_interactions(
                     actor_id: a_id,
                     target_id: b_id,
                     location: a_pos,
+                    actor_location: a_pos,
+                    target_location: b_pos,
                     actor_affinity_delta: delta_a,
                     target_affinity_delta: delta_b,
+                    actor_affinity_change: None,
+                    target_affinity_change: None,
                 },
             ));
         }
     }
 
     let mut interactions = Vec::with_capacity(pairs.len());
-    for (index_a, index_b, interaction) in pairs {
+    for (index_a, index_b, mut interaction) in pairs {
         let recorded_a = entities[index_a].mind.memory.record_interaction(
             interaction.target_id,
             tick,
@@ -398,8 +406,10 @@ pub(super) fn process_social_interactions(
             tick,
             interaction.target_affinity_delta,
         );
-        debug_assert!(recorded_a && recorded_b);
-        if recorded_a && recorded_b {
+        debug_assert!(recorded_a.is_some() && recorded_b.is_some());
+        if let (Some(actor_change), Some(target_change)) = (recorded_a, recorded_b) {
+            interaction.actor_affinity_change = actor_change;
+            interaction.target_affinity_change = target_change;
             interactions.push(interaction);
         }
     }

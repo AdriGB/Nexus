@@ -84,6 +84,31 @@ pub(in crate::simulation) const RELATIONSHIP_DECAY_START_TICKS: u64 = 30 * TICKS
 pub(in crate::simulation) const RELATIONSHIP_DECAY_PER_DAY: i16 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum AffinityBand {
+    Hostile,
+    Ordinary,
+    Bonded,
+}
+
+pub(super) fn affinity_band(affinity: i16) -> AffinityBand {
+    if affinity < -200 {
+        AffinityBand::Hostile
+    } else if affinity < 100 {
+        AffinityBand::Ordinary
+    } else {
+        AffinityBand::Bonded
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct AffinityChangeRecord {
+    pub target_id: u32,
+    pub previous_affinity: i16,
+    pub new_affinity: i16,
+    pub delta: i16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KnownResource {
     pub x: u32,
     pub y: u32,
@@ -157,16 +182,31 @@ impl Memory {
     /// per tick and touches only this memory's own known relationships.
     /// Each individual's affinity is mutated only from their own memory;
     /// neither individual reads the other's memory.
-    pub(in crate::simulation) fn decay_relationships(&mut self, tick: u64) {
+    pub(in crate::simulation) fn decay_relationships(
+        &mut self,
+        tick: u64,
+    ) -> Vec<AffinityChangeRecord> {
+        let mut changes = Vec::new();
         for known in &mut self.known_entities {
             if known.affinity == 0 {
                 continue;
             }
             let time_since_last_interaction = tick.saturating_sub(known.last_interaction_tick);
             if time_since_last_interaction >= RELATIONSHIP_DECAY_START_TICKS {
+                let previous_affinity = known.affinity;
                 known.affinity = move_toward_zero(known.affinity, RELATIONSHIP_DECAY_PER_DAY);
+                let new_affinity = known.affinity;
+                if affinity_band(previous_affinity) != affinity_band(new_affinity) {
+                    changes.push(AffinityChangeRecord {
+                        target_id: known.id,
+                        previous_affinity,
+                        new_affinity,
+                        delta: new_affinity.saturating_sub(previous_affinity),
+                    });
+                }
             }
         }
+        changes
     }
 
     pub fn known_chunk_count(&self) -> usize {
@@ -240,26 +280,37 @@ impl Memory {
         entity_id: u32,
         tick: u64,
         affinity_delta: i16,
-    ) -> bool {
+    ) -> Option<Option<AffinityChangeRecord>> {
         let Ok(index) = self
             .known_entities
             .binary_search_by_key(&entity_id, |known| known.id)
         else {
-            return false;
+            return None;
         };
 
         let known = &mut self.known_entities[index];
+        let previous_affinity = known.affinity;
 
         known.affinity = known
             .affinity
             .saturating_add(affinity_delta)
             .clamp(MIN_AFFINITY, MAX_AFFINITY);
+        let new_affinity = known.affinity;
 
         known.last_interaction_tick = tick;
         known.interaction_count = known.interaction_count.saturating_add(1);
         known.clear_seek_cooldown();
 
-        true
+        Some(
+            (affinity_band(previous_affinity) != affinity_band(new_affinity)).then_some(
+                AffinityChangeRecord {
+                    target_id: entity_id,
+                    previous_affinity,
+                    new_affinity,
+                    delta: new_affinity.saturating_sub(previous_affinity),
+                },
+            ),
+        )
     }
 
     pub(super) fn mark_failed_social_seek(&mut self, entity_id: u32, tick: u64) -> bool {
@@ -559,7 +610,7 @@ mod tests {
         let mut mind = Mind::default();
         mind.memory.known_entities.push(known);
 
-        mind.memory.decay_relationships(tick);
+        let _ = mind.memory.decay_relationships(tick);
 
         assert_eq!(mind.memory.known_entities[0].affinity, 300);
     }
@@ -573,7 +624,7 @@ mod tests {
         let mut mind = Mind::default();
         mind.memory.known_entities.push(known);
 
-        mind.memory.decay_relationships(tick);
+        let _ = mind.memory.decay_relationships(tick);
 
         assert_eq!(
             mind.memory.known_entities[0].affinity,
@@ -590,7 +641,7 @@ mod tests {
         let mut mind = Mind::default();
         mind.memory.known_entities.push(known);
 
-        mind.memory.decay_relationships(tick);
+        let _ = mind.memory.decay_relationships(tick);
 
         assert_eq!(
             mind.memory.known_entities[0].affinity,
@@ -616,7 +667,7 @@ mod tests {
             let mut mind = Mind::default();
             mind.memory.known_entities.push(known);
 
-            mind.memory.decay_relationships(tick);
+            let _ = mind.memory.decay_relationships(tick);
 
             assert_eq!(mind.memory.known_entities[0].affinity, expected);
         }
@@ -631,13 +682,13 @@ mod tests {
         mind.memory.known_entities.push(known);
 
         let tick = RELATIONSHIP_DECAY_START_TICKS;
-        mind.memory.decay_relationships(tick);
+        let _ = mind.memory.decay_relationships(tick);
         assert_eq!(mind.memory.known_entities[0].affinity, 2);
-        mind.memory.decay_relationships(tick + TICKS_PER_DAY);
+        let _ = mind.memory.decay_relationships(tick + TICKS_PER_DAY);
         assert_eq!(mind.memory.known_entities[0].affinity, 1);
-        mind.memory.decay_relationships(tick + 2 * TICKS_PER_DAY);
+        let _ = mind.memory.decay_relationships(tick + 2 * TICKS_PER_DAY);
         assert_eq!(mind.memory.known_entities[0].affinity, 0);
-        mind.memory.decay_relationships(tick + 3 * TICKS_PER_DAY);
+        let _ = mind.memory.decay_relationships(tick + 3 * TICKS_PER_DAY);
         assert_eq!(mind.memory.known_entities[0].affinity, 0);
     }
 
@@ -650,9 +701,9 @@ mod tests {
         let mut mind = Mind::default();
         mind.memory.known_entities.push(known);
 
-        assert!(mind.memory.record_interaction(1, tick, 0));
+        assert_eq!(mind.memory.record_interaction(1, tick, 0), Some(None));
 
-        mind.memory.decay_relationships(tick);
+        let _ = mind.memory.decay_relationships(tick);
 
         assert_eq!(mind.memory.known_entities[0].affinity, 300);
         assert_eq!(mind.memory.known_entities[0].last_interaction_tick, tick);
@@ -677,9 +728,118 @@ mod tests {
         let mut first = scenario();
         let mut second = scenario();
         let decay_tick = 5 * RELATIONSHIP_DECAY_START_TICKS;
-        first.memory.decay_relationships(decay_tick);
-        second.memory.decay_relationships(decay_tick);
+        let first_changes = first.memory.decay_relationships(decay_tick);
+        let second_changes = second.memory.decay_relationships(decay_tick);
 
         assert_eq!(first.memory.known_entities, second.memory.known_entities);
+        assert_eq!(first_changes, second_changes);
+    }
+
+    #[test]
+    fn affinity_band_uses_exact_boundaries() {
+        assert_eq!(affinity_band(MIN_AFFINITY), AffinityBand::Hostile);
+        assert_eq!(affinity_band(-201), AffinityBand::Hostile);
+        assert_eq!(affinity_band(-200), AffinityBand::Ordinary);
+        assert_eq!(affinity_band(99), AffinityBand::Ordinary);
+        assert_eq!(affinity_band(100), AffinityBand::Bonded);
+        assert_eq!(affinity_band(MAX_AFFINITY), AffinityBand::Bonded);
+    }
+
+    #[test]
+    fn record_interaction_handles_unknown_relationship_and_zero_delta() {
+        let mut memory = Memory::default();
+        assert_eq!(memory.record_interaction(99, 10, 8), None);
+
+        memory.known_entities.push(known_entity(1));
+        assert_eq!(memory.record_interaction(1, 10, 0), Some(None));
+        assert_eq!(memory.known_entities[0].affinity, 0);
+        assert_eq!(memory.known_entities[0].last_interaction_tick, 10);
+        assert_eq!(memory.known_entities[0].interaction_count, 1);
+    }
+
+    #[test]
+    fn record_interaction_reports_clamped_actual_delta_and_multi_band_jump() {
+        let mut positive = known_entity(1);
+        positive.affinity = 99;
+        let mut memory = Memory::default();
+        memory.known_entities.push(positive);
+
+        assert_eq!(
+            memory.record_interaction(1, 10, i16::MAX),
+            Some(Some(AffinityChangeRecord {
+                target_id: 1,
+                previous_affinity: 99,
+                new_affinity: MAX_AFFINITY,
+                delta: 901,
+            }))
+        );
+
+        assert_eq!(
+            memory.record_interaction(1, 11, i16::MIN),
+            Some(Some(AffinityChangeRecord {
+                target_id: 1,
+                previous_affinity: MAX_AFFINITY,
+                new_affinity: MIN_AFFINITY,
+                delta: -2_000,
+            }))
+        );
+    }
+
+    #[test]
+    fn record_interaction_reports_entering_and_leaving_bands() {
+        let cases = [
+            (-200, -1, -201, AffinityBand::Hostile),
+            (-201, 1, -200, AffinityBand::Ordinary),
+            (99, 1, 100, AffinityBand::Bonded),
+            (100, -1, 99, AffinityBand::Ordinary),
+        ];
+
+        for (previous, requested_delta, expected, expected_band) in cases {
+            let mut known = known_entity(1);
+            known.affinity = previous;
+            let mut memory = Memory::default();
+            memory.known_entities.push(known);
+
+            let change = memory
+                .record_interaction(1, 10, requested_delta)
+                .flatten()
+                .expect("boundary crossing should be reported");
+            assert_eq!(change.previous_affinity, previous);
+            assert_eq!(change.new_affinity, expected);
+            assert_eq!(change.delta, requested_delta);
+            assert_eq!(affinity_band(change.new_affinity), expected_band);
+        }
+    }
+
+    #[test]
+    fn decay_relationships_reports_only_band_crossings() {
+        let mut bonded = known_entity(1);
+        bonded.affinity = 100;
+        let mut hostile = known_entity(2);
+        hostile.affinity = -201;
+        let mut ordinary = known_entity(3);
+        ordinary.affinity = 50;
+        let mut memory = Memory::default();
+        memory.known_entities = vec![bonded, hostile, ordinary];
+
+        let changes = memory.decay_relationships(RELATIONSHIP_DECAY_START_TICKS);
+        assert_eq!(
+            changes,
+            vec![
+                AffinityChangeRecord {
+                    target_id: 1,
+                    previous_affinity: 100,
+                    new_affinity: 99,
+                    delta: -1,
+                },
+                AffinityChangeRecord {
+                    target_id: 2,
+                    previous_affinity: -201,
+                    new_affinity: -200,
+                    delta: 1,
+                },
+            ]
+        );
+        assert_eq!(memory.known_entities[2].affinity, 49);
     }
 }

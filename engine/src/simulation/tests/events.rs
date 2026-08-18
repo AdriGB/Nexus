@@ -1,5 +1,5 @@
-use super::super::autonomy::SocialInteraction;
-use super::super::entity::Pregnancy;
+use super::super::autonomy::{AffinityChangeRecord, KnownEntity, SocialInteraction};
+use super::super::entity::{Personality, Pregnancy};
 use super::super::events::RecentEventHistory;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{
@@ -18,8 +18,27 @@ fn interaction(
         actor_id,
         target_id,
         location,
+        actor_location: location,
+        target_location: location,
         actor_affinity_delta,
         target_affinity_delta,
+        actor_affinity_change: None,
+        target_affinity_change: None,
+    }
+}
+
+fn known_entity(id: u32, affinity: i16, x: u32, y: u32) -> KnownEntity {
+    KnownEntity {
+        id,
+        first_seen_tick: 0,
+        last_seen_tick: 0,
+        last_seen_x: x,
+        last_seen_y: y,
+        observed_ticks: 1,
+        affinity,
+        last_interaction_tick: 0,
+        interaction_count: 1,
+        seek_retry_after_tick: None,
     }
 }
 
@@ -72,6 +91,176 @@ fn successful_social_interaction_records_one_complete_event() {
             target_affinity_delta: target_delta,
         }
     );
+}
+
+#[test]
+fn affinity_changes_follow_interaction_in_directed_order() {
+    let mut simulation = Simulation::default();
+    simulation.record_social_interactions(vec![SocialInteraction {
+        actor_id: 1,
+        target_id: 2,
+        location: (4, 5),
+        actor_location: (4, 5),
+        target_location: (5, 5),
+        actor_affinity_delta: 4,
+        target_affinity_delta: -4,
+        actor_affinity_change: Some(AffinityChangeRecord {
+            target_id: 2,
+            previous_affinity: 99,
+            new_affinity: 103,
+            delta: 4,
+        }),
+        target_affinity_change: Some(AffinityChangeRecord {
+            target_id: 1,
+            previous_affinity: -200,
+            new_affinity: -204,
+            delta: -4,
+        }),
+    }]);
+
+    let events: Vec<_> = simulation.recent_events().collect();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, SimulationEventKind::Interaction);
+    assert_eq!((events[1].actor_id, events[1].target_id), (1, Some(2)));
+    assert_eq!((events[2].actor_id, events[2].target_id), (2, Some(1)));
+    assert_eq!(events[1].id, 2);
+    assert_eq!(events[2].id, 3);
+    assert_eq!(events[1].cause, SimulationEventCause::MutualSocialContact);
+}
+
+#[test]
+fn interaction_affinity_changes_use_each_relationship_owners_location() {
+    let mut actor = entity(1, 2, 2, 0.0);
+    let mut target = entity(2, 2, 3, 0.0);
+    for entity in [&mut actor, &mut target] {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+        entity.personality = Personality {
+            curiosity: 0.5,
+            sociability: 0.5,
+            cooperativeness: 0.5,
+            caution: 0.5,
+            persistence: 0.5,
+        };
+    }
+    actor
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(2, 99, 2, 3));
+    target
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, 99, 2, 2));
+    let mut simulation = Simulation {
+        entities: vec![actor, target],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+    let mut world = plain_grid(8, 8);
+
+    simulation.step(&mut world);
+
+    let interaction_event = simulation
+        .recent_events()
+        .find(|event| event.kind == SimulationEventKind::Interaction)
+        .expect("social interaction should be recorded");
+    assert_eq!(interaction_event.location, EventLocation { x: 2, y: 2 });
+
+    let affinity_events: Vec<_> = simulation
+        .recent_events()
+        .filter(|event| event.kind == SimulationEventKind::AffinityChange)
+        .collect();
+    assert_eq!(affinity_events.len(), 2);
+    assert_eq!(
+        (
+            affinity_events[0].actor_id,
+            affinity_events[0].target_id,
+            affinity_events[0].location,
+        ),
+        (1, Some(2), EventLocation { x: 2, y: 2 })
+    );
+    assert_eq!(
+        (
+            affinity_events[1].actor_id,
+            affinity_events[1].target_id,
+            affinity_events[1].location,
+        ),
+        (2, Some(1), EventLocation { x: 2, y: 3 })
+    );
+}
+
+#[test]
+fn daily_decay_emits_a_real_affinity_change_event() {
+    let mut actor = entity(1, 6, 7, 0.0);
+    actor
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(2, 100, 8, 7));
+    let mut simulation = Simulation {
+        tick: super::super::autonomy::RELATIONSHIP_DECAY_START_TICKS,
+        entities: vec![actor],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    simulation.run_daily_relationship_decay();
+
+    assert_eq!(simulation.entities[0].mind.memory.affinity_to(2), Some(99));
+    let events: Vec<_> = simulation.recent_events().collect();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].location, EventLocation { x: 6, y: 7 });
+    assert_eq!(events[0].actor_id, 1);
+    assert_eq!(events[0].target_id, Some(2));
+    assert_eq!(events[0].cause, SimulationEventCause::RelationshipDecay);
+    assert_eq!(
+        events[0].details,
+        SimulationEventDetails::AffinityChange {
+            previous_affinity: 100,
+            new_affinity: 99,
+            delta: -1,
+        }
+    );
+}
+
+#[test]
+fn affinity_change_events_are_deterministic_across_identical_steps() {
+    let scenario = || {
+        let mut a = entity(1, 2, 2, 0.0);
+        let mut b = entity(2, 2, 3, 0.0);
+        for entity in [&mut a, &mut b] {
+            entity.age_ticks = 25 * TICKS_PER_YEAR;
+            entity.personality = Personality {
+                curiosity: 0.5,
+                sociability: 0.5,
+                cooperativeness: 0.5,
+                caution: 0.5,
+                persistence: 0.5,
+            };
+        }
+        a.mind.memory.known_entities.push(known_entity(2, 99, 2, 3));
+        b.mind.memory.known_entities.push(known_entity(1, 99, 2, 2));
+        Simulation {
+            entities: vec![a, b],
+            next_entity_id: 3,
+            ..Simulation::default()
+        }
+    };
+    let mut first = scenario();
+    let mut second = scenario();
+    let mut first_world = plain_grid(8, 8);
+    let mut second_world = plain_grid(8, 8);
+
+    first.step(&mut first_world);
+    second.step(&mut second_world);
+
+    let first_events: Vec<_> = first.recent_events().cloned().collect();
+    let second_events: Vec<_> = second.recent_events().cloned().collect();
+    assert!(first_events
+        .iter()
+        .any(|event| event.kind == SimulationEventKind::AffinityChange));
+    assert_eq!(first_events, second_events);
 }
 
 #[test]

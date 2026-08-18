@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  AffinityChangeEvent,
   BirthEvent,
   ConsumptionEvent,
   DeathEvent,
@@ -36,6 +37,9 @@ function event(
     child_id: null,
     amount: null,
     resource_kind: null,
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
   };
 }
 
@@ -55,6 +59,9 @@ function birth(): BirthEvent {
     child_id: 7,
     amount: null,
     resource_kind: null,
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
   };
 }
 
@@ -74,6 +81,9 @@ function death(cause: DeathEvent["cause"]): DeathEvent {
     child_id: null,
     amount: null,
     resource_kind: null,
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
   };
 }
 
@@ -93,6 +103,9 @@ function consumption(): ConsumptionEvent {
     child_id: null,
     amount: 6,
     resource_kind: null,
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
   };
 }
 
@@ -112,6 +125,9 @@ function discovery(): ResourceDiscoveryEvent {
     child_id: null,
     amount: 14,
     resource_kind: "timber",
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
   };
 }
 
@@ -131,6 +147,33 @@ function encounter(): EncounterEvent {
     child_id: null,
     amount: null,
     resource_kind: null,
+    previous_affinity: null,
+    new_affinity: null,
+    delta: null,
+  };
+}
+
+function affinityChange(
+  cause: AffinityChangeEvent["cause"] = "mutual_social_contact",
+): AffinityChangeEvent {
+  return {
+    id: "12",
+    tick: "54",
+    relative_time: "just now",
+    location: { x: 3, y: 5 },
+    actor_id: 2,
+    target_id: 7,
+    related_entity_ids: [2, 7],
+    kind: "affinity_change",
+    cause,
+    actor_affinity_delta: null,
+    target_affinity_delta: null,
+    child_id: null,
+    amount: null,
+    resource_kind: null,
+    previous_affinity: 99,
+    new_affinity: 103,
+    delta: 4,
   };
 }
 
@@ -186,6 +229,21 @@ describe("interaction history", () => {
     expect(html).toContain("Entity #7");
     expect(html).toContain("at (3, 5)");
     expect(filterInteractionEvents([encounter()], 7)).toHaveLength(1);
+  });
+
+  it("renders and filters directed affinity changes", () => {
+    const social = affinityChange();
+    const decay = { ...affinityChange("relationship_decay"), id: "13" };
+    const html = renderInteractionHistory([social, decay]);
+
+    expect(html).toContain("Entity #2");
+    expect(html).toContain("Entity #7");
+    expect(html).toContain("Affinity: 99 → 103 (+4)");
+    expect(html).toContain("Social interaction");
+    expect(html).toContain("Relationship decay");
+    expect(filterInteractionEvents([social], 2)).toHaveLength(1);
+    expect(filterInteractionEvents([social], 7)).toHaveLength(1);
+    expect(filterInteractionEvents([social], 8)).toHaveLength(0);
   });
 
   it("renders positive, neutral, and negative deltas with text and symbols", () => {

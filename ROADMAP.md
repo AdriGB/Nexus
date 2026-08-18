@@ -178,7 +178,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
   * [x] descubrimiento
   * [x] encuentro
   * [x] interacción
-  * [ ] cambio significativo de afinidad
+  * [x] cambio significativo de afinidad
   * [ ] formación de pareja
   * [ ] separación
 * [x] Buffer circular de eventos recientes
