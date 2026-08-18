@@ -1,7 +1,52 @@
 use crate::world::ResourceKind;
 use std::collections::VecDeque;
+use std::fmt;
 
 pub const RECENT_EVENT_CAPACITY: usize = 1_024;
+
+/// Monotonic identifier assigned when an event enters simulation history.
+///
+/// Keeping this distinct from raw ticks prevents accidental comparisons or
+/// assignments between two unrelated `u64` values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EventId(u64);
+
+impl EventId {
+    pub(super) const FIRST: Self = Self::new(1);
+
+    pub(crate) const fn new(value: u64) -> Self {
+        assert!(value != 0, "event IDs start at one");
+        Self(value)
+    }
+
+    pub(super) fn checked_next(self) -> Option<Self> {
+        self.0.checked_add(1).map(Self)
+    }
+}
+
+impl fmt::Display for EventId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+#[cfg(test)]
+mod event_id_tests {
+    use super::EventId;
+
+    #[test]
+    fn event_ids_are_nonzero_and_checked() {
+        assert_eq!(EventId::new(7).to_string(), "7");
+        assert_eq!(EventId::new(7).checked_next(), Some(EventId::new(8)));
+        assert_eq!(EventId::new(u64::MAX).checked_next(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "event IDs start at one")]
+    fn zero_is_not_a_valid_assigned_event_id() {
+        EventId::new(0);
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EventLocation {
@@ -59,7 +104,7 @@ pub enum SimulationEventDetails {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SimulationEvent {
-    pub id: u64,
+    pub id: EventId,
     pub tick: u64,
     pub location: EventLocation,
     pub actor_id: u32,
@@ -68,6 +113,33 @@ pub struct SimulationEvent {
     pub kind: SimulationEventKind,
     pub cause: SimulationEventCause,
     pub details: SimulationEventDetails,
+}
+
+pub(super) struct PendingSimulationEvent {
+    pub tick: u64,
+    pub location: EventLocation,
+    pub actor_id: u32,
+    pub target_id: Option<u32>,
+    pub related_entity_ids: Vec<u32>,
+    pub kind: SimulationEventKind,
+    pub cause: SimulationEventCause,
+    pub details: SimulationEventDetails,
+}
+
+impl PendingSimulationEvent {
+    pub(super) fn assign(self, id: EventId) -> SimulationEvent {
+        SimulationEvent {
+            id,
+            tick: self.tick,
+            location: self.location,
+            actor_id: self.actor_id,
+            target_id: self.target_id,
+            related_entity_ids: self.related_entity_ids,
+            kind: self.kind,
+            cause: self.cause,
+            details: self.details,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

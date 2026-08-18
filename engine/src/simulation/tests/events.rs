@@ -3,7 +3,8 @@ use super::super::entity::{Personality, Pregnancy};
 use super::super::events::RecentEventHistory;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{
-    EventLocation, Simulation, SimulationEventCause, SimulationEventDetails, SimulationEventKind,
+    EventId, EventLocation, Simulation, SimulationEventCause, SimulationEventDetails,
+    SimulationEventKind,
 };
 use super::support::{entity, plain_grid};
 
@@ -60,7 +61,7 @@ fn successful_social_interaction_records_one_complete_event() {
         .collect();
     assert_eq!(events.len(), 1);
     let event = events[0];
-    assert_eq!(event.id, 2);
+    assert_eq!(event.id, EventId::new(2));
     assert_eq!(event.tick, 1);
     assert_eq!(event.location, EventLocation { x: 2, y: 3 });
     assert_eq!(event.actor_id, 1);
@@ -123,8 +124,8 @@ fn affinity_changes_follow_interaction_in_directed_order() {
     assert_eq!(events[0].kind, SimulationEventKind::Interaction);
     assert_eq!((events[1].actor_id, events[1].target_id), (1, Some(2)));
     assert_eq!((events[2].actor_id, events[2].target_id), (2, Some(1)));
-    assert_eq!(events[1].id, 2);
-    assert_eq!(events[2].id, 3);
+    assert_eq!(events[1].id, EventId::new(2));
+    assert_eq!(events[2].id, EventId::new(3));
     assert_eq!(events[1].cause, SimulationEventCause::MutualSocialContact);
 }
 
@@ -281,7 +282,7 @@ fn mutual_first_sight_records_one_canonical_encounter() {
         .collect();
     assert_eq!(encounters.len(), 1);
     let encounter = encounters[0];
-    assert_eq!(encounter.id, 1);
+    assert_eq!(encounter.id, EventId::new(1));
     assert_eq!(encounter.tick, 1);
     assert_eq!(encounter.location, EventLocation { x: 2, y: 3 });
     assert_eq!(encounter.actor_id, 1);
@@ -341,7 +342,7 @@ fn event_ids_and_order_are_monotonic() {
     let events: Vec<_> = simulation.recent_events().collect();
     assert_eq!(
         events.iter().map(|event| event.id).collect::<Vec<_>>(),
-        vec![1, 2]
+        vec![EventId::new(1), EventId::new(2)]
     );
     assert_eq!(
         events
@@ -364,8 +365,8 @@ fn event_history_evicts_the_oldest_event_at_capacity() {
 
     let events: Vec<_> = simulation.recent_events().collect();
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].id, 2);
-    assert_eq!(events[1].id, 3);
+    assert_eq!(events[0].id, EventId::new(2));
+    assert_eq!(events[1].id, EventId::new(3));
 }
 
 #[test]
@@ -462,13 +463,13 @@ fn consumption_events_skip_zero_and_preserve_consumer_order() {
 
     let events: Vec<_> = simulation.recent_events().collect();
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].id, 1);
+    assert_eq!(events[0].id, EventId::new(1));
     assert_eq!(events[0].actor_id, 1);
     assert_eq!(
         events[0].details,
         SimulationEventDetails::Consumption { amount: 3 }
     );
-    assert_eq!(events[1].id, 2);
+    assert_eq!(events[1].id, EventId::new(2));
     assert_eq!(events[1].actor_id, 2);
     assert_eq!(
         events[1].details,
