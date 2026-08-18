@@ -2,7 +2,8 @@ use serde::Serialize;
 
 use super::to_json;
 use crate::simulation::{
-    Simulation, SimulationEvent, SimulationEventCause, SimulationEventDetails, SimulationEventKind,
+    EntityEventSummary, Simulation, SimulationEvent, SimulationEventCause, SimulationEventDetails,
+    SimulationEventKind,
 };
 use crate::world::ResourceKind;
 
@@ -31,6 +32,39 @@ struct SimulationEventDto {
     previous_affinity: Option<i16>,
     new_affinity: Option<i16>,
     delta: Option<i16>,
+}
+
+#[derive(Serialize)]
+struct EntityEventSummaryDto {
+    entity_id: u32,
+    total_events: u32,
+    first_event_tick: Option<String>,
+    latest_event_tick: Option<String>,
+    births: u32,
+    deaths: u32,
+    consumptions: u32,
+    discoveries: u32,
+    encounters: u32,
+    interactions: u32,
+    affinity_changes: u32,
+}
+
+impl From<EntityEventSummary> for EntityEventSummaryDto {
+    fn from(summary: EntityEventSummary) -> Self {
+        Self {
+            entity_id: summary.entity_id,
+            total_events: summary.total_events,
+            first_event_tick: summary.first_event_tick.map(|tick| tick.to_string()),
+            latest_event_tick: summary.latest_event_tick.map(|tick| tick.to_string()),
+            births: summary.births,
+            deaths: summary.deaths,
+            consumptions: summary.consumptions,
+            discoveries: summary.discoveries,
+            encounters: summary.encounters,
+            interactions: summary.interactions,
+            affinity_changes: summary.affinity_changes,
+        }
+    }
 }
 
 fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
@@ -193,4 +227,10 @@ pub(crate) fn recent_interaction_events_json(
 /// Filtering happens only when this bridge query is requested.
 pub(crate) fn recent_events_json(simulation: &Simulation, entity_id: Option<u32>) -> String {
     simulation_events_json(simulation.recent_events(), simulation.tick(), entity_id)
+}
+
+pub(crate) fn entity_event_summary_json(simulation: &Simulation, entity_id: u32) -> String {
+    to_json(&EntityEventSummaryDto::from(
+        simulation.entity_event_summary(entity_id),
+    ))
 }

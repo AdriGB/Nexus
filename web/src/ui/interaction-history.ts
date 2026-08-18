@@ -1,5 +1,5 @@
 import { state } from "../state";
-import type { SimulationEvent } from "../types";
+import type { EntityEventSummary, SimulationEvent } from "../types";
 
 const DISPLAY_BATCH_SIZE = 100;
 
@@ -124,6 +124,37 @@ export function renderInteractionHistory(
   return cards.join("");
 }
 
+export function renderEntityEventSummary(summary: EntityEventSummary): string {
+  if (summary.total_events === 0) {
+    return `<div class="interaction-history-empty">No recent history summary for entity #${summary.entity_id}.</div>`;
+  }
+
+  const stats: Array<[string, number]> = [
+    ["Encounters", summary.encounters],
+    ["Interactions", summary.interactions],
+    ["Affinity changes", summary.affinity_changes],
+    ["Discoveries", summary.discoveries],
+    ["Meals", summary.consumptions],
+    ["Birth events", summary.births],
+    ["Death events", summary.deaths],
+  ];
+  const visibleStats = stats
+    .filter(([, count]) => count > 0)
+    .map(
+      ([label, count]) =>
+        `<div class="interaction-history-summary-stat"><span>${label}</span><strong>${count}</strong></div>`,
+    )
+    .join("");
+  const tickRange =
+    summary.first_event_tick === summary.latest_event_tick
+      ? `Tick ${summary.first_event_tick}`
+      : `Ticks ${summary.first_event_tick}–${summary.latest_event_tick}`;
+
+  return `<div class="interaction-history-summary-header"><strong>Entity #${summary.entity_id}</strong><span>${summary.total_events} recent events</span></div>
+    <div class="interaction-history-summary-range">${tickRange} · bounded simulation history</div>
+    <div class="interaction-history-summary-grid">${visibleStats}</div>`;
+}
+
 export function bindInteractionHistory(): void {
   const input = document.getElementById("interaction-entity-id") as HTMLInputElement;
   const allButton = document.getElementById("btn-history-all")!;
@@ -167,18 +198,28 @@ export function resetInteractionHistory(): void {
 export function syncInteractionHistory(): void {
   const list = document.getElementById("interaction-history-list");
   const scope = document.getElementById("interaction-history-scope");
+  const summaryElement = document.getElementById("interaction-history-summary");
   const allButton = document.getElementById("btn-history-all");
-  if (!list || !scope || !allButton) return;
+  if (!list || !scope || !summaryElement || !allButton) return;
 
   allButton.classList.toggle("active", selectedEntityId === null);
   scope.textContent =
     selectedEntityId === null
       ? "All recent events"
       : `Events involving entity #${selectedEntityId}`;
+  summaryElement.hidden = selectedEntityId === null;
+  summaryElement.innerHTML = "";
 
   if (!state.world) {
     list.innerHTML = renderInteractionHistory([], selectedEntityId);
     return;
+  }
+
+  if (selectedEntityId !== null) {
+    const summary = JSON.parse(
+      state.world.entity_event_summary(selectedEntityId),
+    ) as EntityEventSummary;
+    summaryElement.innerHTML = renderEntityEventSummary(summary);
   }
 
   const payload = state.world.recent_events(

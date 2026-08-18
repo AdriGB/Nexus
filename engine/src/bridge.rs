@@ -6,7 +6,9 @@ mod profiles;
 mod world;
 
 pub(crate) use entities::{entity_info_json, entity_relationships_json};
-pub(crate) use events::{recent_events_json, recent_interaction_events_json};
+pub(crate) use events::{
+    entity_event_summary_json, recent_events_json, recent_interaction_events_json,
+};
 pub(crate) use profiles::{autonomy_profile_json, phase_profile_json, population_stats_json};
 pub(crate) use world::{region_stats_json, tile_info_json};
 
@@ -93,6 +95,21 @@ mod tests {
             super::entity_relationships_json(&simulation.entities()[0]),
             "[]"
         );
+    }
+
+    #[test]
+    fn empty_entity_event_summary_has_a_stable_shape() {
+        let grid = test_grid();
+        let simulation = Simulation::with_population(42, &grid, 1);
+        let payload: serde_json::Value =
+            serde_json::from_str(&entity_event_summary_json(&simulation, 7)).unwrap();
+
+        assert_eq!(payload["entity_id"], 7);
+        assert_eq!(payload["total_events"], 0);
+        assert_eq!(payload["first_event_tick"], serde_json::Value::Null);
+        assert_eq!(payload["latest_event_tick"], serde_json::Value::Null);
+        assert_eq!(payload["interactions"], 0);
+        assert_eq!(payload["affinity_changes"], 0);
     }
 
     fn interaction_event(

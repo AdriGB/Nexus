@@ -145,6 +145,17 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
 }
 .interaction-entity-filter .input-field { width: 100%; min-width: 0; padding: 7px 8px; }
 .interaction-history-scope { margin-top: 7px; color: var(--text-muted); font-size: 9px; }
+.interaction-history-summary {
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.interaction-history-summary-header { display: flex; justify-content: space-between; gap: 8px; font-size: 9px; }
+.interaction-history-summary-range { margin-top: 3px; color: var(--text-muted); font-size: 8px; }
+.interaction-history-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; margin-top: 6px; }
+.interaction-history-summary-stat { display: flex; justify-content: space-between; gap: 4px; color: var(--text-muted); font-size: 8px; }
+.interaction-history-summary-stat strong { color: var(--text); }
 .interaction-history-list { display: grid; gap: 6px; margin-top: 8px; }
 .interaction-history-empty {
   padding: 12px 8px;

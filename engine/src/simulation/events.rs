@@ -115,6 +115,21 @@ pub struct SimulationEvent {
     pub details: SimulationEventDetails,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct EntityEventSummary {
+    pub entity_id: u32,
+    pub total_events: u32,
+    pub first_event_tick: Option<u64>,
+    pub latest_event_tick: Option<u64>,
+    pub births: u32,
+    pub deaths: u32,
+    pub consumptions: u32,
+    pub discoveries: u32,
+    pub encounters: u32,
+    pub interactions: u32,
+    pub affinity_changes: u32,
+}
+
 pub(super) struct PendingSimulationEvent {
     pub tick: u64,
     pub location: EventLocation,
@@ -189,8 +204,108 @@ impl RecentEventHistory {
         self.events.iter()
     }
 
+    pub(super) fn summary_for(&self, entity_id: u32) -> EntityEventSummary {
+        let mut summary = EntityEventSummary {
+            entity_id,
+            ..EntityEventSummary::default()
+        };
+
+        for event in self.events.iter().filter(|event| {
+            event.actor_id == entity_id
+                || event.target_id == Some(entity_id)
+                || event.related_entity_ids.contains(&entity_id)
+        }) {
+            summary.total_events = summary.total_events.saturating_add(1);
+            summary.first_event_tick.get_or_insert(event.tick);
+            summary.latest_event_tick = Some(event.tick);
+            let counter = match event.kind {
+                SimulationEventKind::Birth => &mut summary.births,
+                SimulationEventKind::Death => &mut summary.deaths,
+                SimulationEventKind::Consumption => &mut summary.consumptions,
+                SimulationEventKind::Discovery => &mut summary.discoveries,
+                SimulationEventKind::Encounter => &mut summary.encounters,
+                SimulationEventKind::Interaction => &mut summary.interactions,
+                SimulationEventKind::AffinityChange => &mut summary.affinity_changes,
+            };
+            *counter = counter.saturating_add(1);
+        }
+
+        summary
+    }
+
     #[cfg(test)]
     pub(super) fn next_id(&self) -> EventId {
         self.next_id
+    }
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    fn event(
+        tick: u64,
+        actor_id: u32,
+        target_id: Option<u32>,
+        related_entity_ids: Vec<u32>,
+        kind: SimulationEventKind,
+    ) -> PendingSimulationEvent {
+        PendingSimulationEvent {
+            tick,
+            location: EventLocation { x: 1, y: 2 },
+            actor_id,
+            target_id,
+            related_entity_ids,
+            kind,
+            cause: SimulationEventCause::FirstEncounter,
+            details: SimulationEventDetails::Encounter,
+        }
+    }
+
+    #[test]
+    fn entity_summary_counts_only_related_events_and_preserves_tick_range() {
+        let mut history = RecentEventHistory::default();
+        history.push(event(
+            5,
+            1,
+            Some(2),
+            vec![1, 2],
+            SimulationEventKind::Interaction,
+        ));
+        history.push(event(
+            8,
+            3,
+            None,
+            vec![3, 1],
+            SimulationEventKind::Discovery,
+        ));
+        history.push(event(
+            10,
+            2,
+            Some(3),
+            vec![2, 3],
+            SimulationEventKind::Death,
+        ));
+
+        let summary = history.summary_for(1);
+        assert_eq!(summary.entity_id, 1);
+        assert_eq!(summary.total_events, 2);
+        assert_eq!(summary.first_event_tick, Some(5));
+        assert_eq!(summary.latest_event_tick, Some(8));
+        assert_eq!(summary.interactions, 1);
+        assert_eq!(summary.discoveries, 1);
+        assert_eq!(summary.deaths, 0);
+    }
+
+    #[test]
+    fn entity_summary_has_explicit_empty_state() {
+        let summary = RecentEventHistory::default().summary_for(99);
+        assert_eq!(
+            summary,
+            EntityEventSummary {
+                entity_id: 99,
+                ..EntityEventSummary::default()
+            }
+        );
     }
 }

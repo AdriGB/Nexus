@@ -178,6 +178,10 @@ impl WorldBridge {
         bridge::recent_events_json(&self.simulation, entity_id)
     }
 
+    pub fn entity_event_summary(&self, entity_id: u32) -> String {
+        bridge::entity_event_summary_json(&self.simulation, entity_id)
+    }
+
     pub fn entity_info(&self, id: u32) -> String {
         self.simulation
             .entities()
