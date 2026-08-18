@@ -1,564 +1,27 @@
 use serde::Serialize;
 
+mod entities;
+mod events;
+mod profiles;
+mod world;
+
+pub(crate) use entities::{entity_info_json, entity_relationships_json};
+pub(crate) use events::{recent_events_json, recent_interaction_events_json};
+pub(crate) use profiles::{autonomy_profile_json, phase_profile_json, population_stats_json};
+pub(crate) use world::{region_stats_json, tile_info_json};
+
+#[cfg(test)]
 use crate::simulation::{
-    self, AutonomyProfile, Entity, LifeStage, Personality, PhaseProfile, PopulationStats,
-    Simulation, SimulationEvent, SimulationEventCause, SimulationEventDetails, SimulationEventKind,
+    AutonomyProfile, EventId, PhaseProfile, SimulationEvent, SimulationEventCause,
+    SimulationEventDetails, SimulationEventKind,
 };
-use crate::world::{Grid, RegionKind, ResourceKind};
+#[cfg(test)]
+use crate::world::{Grid, RegionKind};
+#[cfg(test)]
+use events::simulation_events_json;
 
-fn to_json<T: Serialize>(value: &T) -> String {
+pub(super) fn to_json<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).expect("bridge DTO serialization should not fail")
-}
-
-#[derive(Serialize)]
-struct PhaseProfileDto {
-    physiology_us: u64,
-    population_index_us: u64,
-    autonomy_us: u64,
-    starvation_us: u64,
-    resource_changes_us: u64,
-    remove_dead_us: u64,
-    pregnancies_us: u64,
-    conceptions_us: u64,
-    total_us: u64,
-}
-
-pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
-    to_json(&PhaseProfileDto {
-        physiology_us: profile.physiology_us,
-        population_index_us: profile.population_index_us,
-        autonomy_us: profile.autonomy_us,
-        starvation_us: profile.starvation_us,
-        resource_changes_us: profile.resource_changes_us,
-        remove_dead_us: profile.remove_dead_us,
-        pregnancies_us: profile.pregnancies_us,
-        conceptions_us: profile.conceptions_us,
-        total_us: profile.total_us,
-    })
-}
-
-#[derive(Serialize)]
-struct AutonomyProfileDto {
-    resource_perception_us: u64,
-    entity_perception_us: u64,
-    plan_validation_us: u64,
-    planning_us: u64,
-    action_us: u64,
-    sampled_entities: u32,
-    planned_entities: u32,
-    urgent_interrupts: u32,
-    memory_reconciliation_us: u64,
-    visible_scan_us: u64,
-    known_resources_total: u32,
-    known_resources_max: u32,
-    visible_resources_seen: u32,
-    social_us: u64,
-}
-
-pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
-    to_json(&AutonomyProfileDto {
-        resource_perception_us: profile.resource_perception_us,
-        entity_perception_us: profile.entity_perception_us,
-        plan_validation_us: profile.plan_validation_us,
-        planning_us: profile.planning_us,
-        action_us: profile.action_us,
-        sampled_entities: profile.sampled_entities,
-        planned_entities: profile.planned_entities,
-        urgent_interrupts: profile.urgent_interrupts,
-        memory_reconciliation_us: profile.memory_reconciliation_us,
-        visible_scan_us: profile.visible_scan_us,
-        known_resources_total: profile.known_resources_total,
-        known_resources_max: profile.known_resources_max,
-        visible_resources_seen: profile.visible_resources_seen,
-        social_us: profile.social_us,
-    })
-}
-
-#[derive(Serialize)]
-struct PopulationStatsDto {
-    population: u32,
-    births: u64,
-    deaths: u64,
-    females: u32,
-    males: u32,
-    pregnant: u32,
-    hungry: u32,
-    seeking_food: u32,
-    average_hunger: f32,
-    food_consumed: u64,
-}
-
-pub(crate) fn population_stats_json(stats: PopulationStats) -> String {
-    to_json(&PopulationStatsDto {
-        population: stats.population,
-        births: stats.births,
-        deaths: stats.deaths,
-        females: stats.females,
-        males: stats.males,
-        pregnant: stats.pregnant,
-        hungry: stats.hungry,
-        seeking_food: stats.seeking_food,
-        average_hunger: stats.average_hunger,
-        food_consumed: stats.food_consumed,
-    })
-}
-
-#[derive(Serialize)]
-struct UtilityScoresDto {
-    eat: f32,
-    explore: f32,
-    rest: f32,
-}
-
-#[derive(Serialize)]
-struct PersonalityDto {
-    curiosity: f32,
-    sociability: f32,
-    cooperativeness: f32,
-    caution: f32,
-    persistence: f32,
-}
-
-impl From<Personality> for PersonalityDto {
-    fn from(personality: Personality) -> Self {
-        Self {
-            curiosity: personality.curiosity,
-            sociability: personality.sociability,
-            cooperativeness: personality.cooperativeness,
-            caution: personality.caution,
-            persistence: personality.persistence,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct EntityInfoDto {
-    id: u32,
-    x: u32,
-    y: u32,
-    sex: &'static str,
-    hunger: f32,
-    health: f32,
-    age_ticks: u64,
-    age_years: f64,
-    lifespan_ticks: u64,
-    pregnant: bool,
-    pregnancy_due_tick: Option<u64>,
-    activity: &'static str,
-    remaining_path: usize,
-    goal: &'static str,
-    action: &'static str,
-    goal_age_ticks: u64,
-    known_resources: usize,
-    known_entities: usize,
-    known_chunks: usize,
-    visible_entities: usize,
-    utilities: UtilityScoresDto,
-    movement_credit: f32,
-    life_stage: &'static str,
-    stage_movement_factor: f32,
-    caregiver_id: Option<u32>,
-    personality: PersonalityDto,
-}
-
-pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
-    let goal = entity
-        .mind
-        .current_goal
-        .map_or("None", simulation::Goal::label);
-    let action = entity
-        .mind
-        .current_action()
-        .map_or("None", simulation::Action::label);
-    let goal_age_ticks = entity
-        .mind
-        .current_goal
-        .map_or(0, |_| tick.saturating_sub(entity.mind.goal_since_tick));
-    let life_stage = LifeStage::from_age_ticks(entity.age_ticks);
-
-    to_json(&EntityInfoDto {
-        id: entity.id,
-        x: entity.x,
-        y: entity.y,
-        sex: entity.sex.label(),
-        hunger: entity.hunger,
-        health: entity.health,
-        age_ticks: entity.age_ticks,
-        age_years: simulation::years_from_ticks(entity.age_ticks),
-        lifespan_ticks: entity.lifespan_ticks,
-        pregnant: entity.pregnancy.is_some(),
-        pregnancy_due_tick: entity.pregnancy.map(|pregnancy| pregnancy.due_tick),
-        activity: entity.activity.label(),
-        remaining_path: entity.remaining_path_len(),
-        goal,
-        action,
-        goal_age_ticks,
-        known_resources: entity.mind.memory.known_resources.len(),
-        known_entities: entity.mind.memory.known_entities.len(),
-        known_chunks: entity.mind.memory.known_chunk_count(),
-        visible_entities: entity.mind.visible_entities.len(),
-        utilities: UtilityScoresDto {
-            eat: entity.mind.utility_scores.eat,
-            explore: entity.mind.utility_scores.explore,
-            rest: entity.mind.utility_scores.rest,
-        },
-        movement_credit: entity.movement_credit,
-        life_stage: life_stage.label(),
-        stage_movement_factor: life_stage.movement_factor(),
-        caregiver_id: entity.caregiver_id,
-        personality: entity.personality.into(),
-    })
-}
-
-#[derive(Serialize)]
-struct KnownRelationshipInfoDto {
-    id: u32,
-    affinity: i16,
-    interaction_count: u32,
-    first_seen_tick: u64,
-    last_seen_tick: u64,
-    last_interaction_tick: u64,
-    last_seen_x: u32,
-    last_seen_y: u32,
-    observed_ticks: u32,
-    seek_retry_after_tick: Option<u64>,
-}
-
-/// Serializes known relationships ordered by emotional intensity:
-/// absolute affinity descending, interaction count descending, then id.
-/// Raw ticks let the frontend derive human-readable relative times.
-pub(crate) fn entity_relationships_json(entity: &Entity) -> String {
-    let mut relationships: Vec<KnownRelationshipInfoDto> = entity
-        .mind
-        .memory
-        .known_entities
-        .iter()
-        .map(|known| KnownRelationshipInfoDto {
-            id: known.id,
-            affinity: known.affinity,
-            interaction_count: known.interaction_count,
-            first_seen_tick: known.first_seen_tick,
-            last_seen_tick: known.last_seen_tick,
-            last_interaction_tick: known.last_interaction_tick,
-            last_seen_x: known.last_seen_x,
-            last_seen_y: known.last_seen_y,
-            observed_ticks: known.observed_ticks,
-            seek_retry_after_tick: known.seek_retry_after_tick,
-        })
-        .collect();
-
-    relationships.sort_unstable_by_key(|relationship| {
-        use std::cmp::Reverse;
-
-        (
-            Reverse(relationship.affinity.unsigned_abs()),
-            Reverse(relationship.interaction_count),
-            relationship.id,
-        )
-    });
-
-    to_json(&relationships)
-}
-
-#[derive(Serialize)]
-struct EventLocationDto {
-    x: u32,
-    y: u32,
-}
-
-#[derive(Serialize)]
-struct SimulationEventDto {
-    id: String,
-    tick: String,
-    relative_time: String,
-    location: EventLocationDto,
-    actor_id: u32,
-    target_id: Option<u32>,
-    related_entity_ids: Vec<u32>,
-    kind: &'static str,
-    cause: &'static str,
-    actor_affinity_delta: Option<i16>,
-    target_affinity_delta: Option<i16>,
-    child_id: Option<u32>,
-    amount: Option<u16>,
-    resource_kind: Option<&'static str>,
-    previous_affinity: Option<i16>,
-    new_affinity: Option<i16>,
-    delta: Option<i16>,
-}
-
-fn relative_event_time(current_tick: u64, event_tick: u64) -> String {
-    let elapsed = current_tick.saturating_sub(event_tick);
-    if elapsed == 0 {
-        "just now".to_string()
-    } else if elapsed < 24 {
-        format!("{elapsed}h ago")
-    } else {
-        let days = elapsed / 24;
-        if days < 365 {
-            format!("{days}d ago")
-        } else {
-            format!("{}y ago", days / 365)
-        }
-    }
-}
-
-fn simulation_events_json<'a>(
-    events: impl DoubleEndedIterator<Item = &'a SimulationEvent>,
-    current_tick: u64,
-    entity_id: Option<u32>,
-) -> String {
-    let events: Vec<SimulationEventDto> = events
-        .rev()
-        .filter(|event| {
-            entity_id.is_none_or(|id| {
-                event.actor_id == id
-                    || event.target_id == Some(id)
-                    || event.related_entity_ids.contains(&id)
-            })
-        })
-        .map(|event| {
-            let kind = match event.kind {
-                SimulationEventKind::Interaction => "interaction",
-                SimulationEventKind::Birth => "birth",
-                SimulationEventKind::Death => "death",
-                SimulationEventKind::Consumption => "consumption",
-                SimulationEventKind::Discovery => "discovery",
-                SimulationEventKind::Encounter => "encounter",
-                SimulationEventKind::AffinityChange => "affinity_change",
-            };
-            let cause = match event.cause {
-                SimulationEventCause::MutualSocialContact => "mutual_social_contact",
-                SimulationEventCause::Born => "born",
-                SimulationEventCause::Starvation => "starvation",
-                SimulationEventCause::NaturalDeath => "natural_death",
-                SimulationEventCause::AteFood => "ate_food",
-                SimulationEventCause::ResourceFound => "resource_found",
-                SimulationEventCause::FirstEncounter => "first_encounter",
-                SimulationEventCause::RelationshipDecay => "relationship_decay",
-            };
-            let (
-                actor_affinity_delta,
-                target_affinity_delta,
-                child_id,
-                amount,
-                resource_kind,
-                previous_affinity,
-                new_affinity,
-                delta,
-            ) = match event.details {
-                SimulationEventDetails::Interaction {
-                    actor_affinity_delta,
-                    target_affinity_delta,
-                } => (
-                    Some(actor_affinity_delta),
-                    Some(target_affinity_delta),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ),
-                SimulationEventDetails::Birth { child_id } => {
-                    (None, None, Some(child_id), None, None, None, None, None)
-                }
-                SimulationEventDetails::Death => (None, None, None, None, None, None, None, None),
-                SimulationEventDetails::Consumption { amount } => {
-                    (None, None, None, Some(amount), None, None, None, None)
-                }
-                SimulationEventDetails::ResourceDiscovery { kind, amount } => (
-                    None,
-                    None,
-                    None,
-                    Some(amount),
-                    Some(match kind {
-                        ResourceKind::Food => "food",
-                        ResourceKind::Timber => "timber",
-                        ResourceKind::Stone => "stone",
-                        ResourceKind::Iron => "iron",
-                    }),
-                    None,
-                    None,
-                    None,
-                ),
-                SimulationEventDetails::Encounter => {
-                    (None, None, None, None, None, None, None, None)
-                }
-                SimulationEventDetails::AffinityChange {
-                    previous_affinity,
-                    new_affinity,
-                    delta,
-                } => (
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(previous_affinity),
-                    Some(new_affinity),
-                    Some(delta),
-                ),
-            };
-
-            SimulationEventDto {
-                id: event.id.to_string(),
-                tick: event.tick.to_string(),
-                relative_time: relative_event_time(current_tick, event.tick),
-                location: EventLocationDto {
-                    x: event.location.x,
-                    y: event.location.y,
-                },
-                actor_id: event.actor_id,
-                target_id: event.target_id,
-                related_entity_ids: event.related_entity_ids.clone(),
-                kind,
-                cause,
-                actor_affinity_delta,
-                target_affinity_delta,
-                child_id,
-                amount,
-                resource_kind,
-                previous_affinity,
-                new_affinity,
-                delta,
-            }
-        })
-        .collect();
-
-    to_json(&events)
-}
-
-/// Preserves the original interaction-only API for existing consumers.
-pub(crate) fn recent_interaction_events_json(
-    simulation: &Simulation,
-    entity_id: Option<u32>,
-) -> String {
-    simulation_events_json(
-        simulation
-            .recent_events()
-            .filter(|event| event.kind == SimulationEventKind::Interaction),
-        simulation.tick(),
-        entity_id,
-    )
-}
-
-/// Serializes the bounded event history without mutating simulation state.
-/// Filtering happens only when this bridge query is requested.
-pub(crate) fn recent_events_json(simulation: &Simulation, entity_id: Option<u32>) -> String {
-    simulation_events_json(simulation.recent_events(), simulation.tick(), entity_id)
-}
-
-#[derive(Serialize)]
-struct ResourceInfoDto {
-    kind: &'static str,
-    amount: u16,
-}
-
-#[derive(Serialize)]
-struct TileInfoDto {
-    terrain: &'static str,
-    altitude: f64,
-    moisture: f64,
-    temperature: f64,
-    x: u32,
-    y: u32,
-    region_id: u32,
-    region_type: &'static str,
-    region_area: u32,
-    coastal: bool,
-    walkable: bool,
-    movement_cost: Option<f32>,
-    resource: Option<ResourceInfoDto>,
-}
-
-pub(crate) fn tile_info_json(grid: &Grid, x: u32, y: u32) -> String {
-    let Some(tile) = grid.get(x, y) else {
-        return "{}".to_string();
-    };
-
-    let index = (y * grid.width + x) as usize;
-    let region_id = grid.region_ids.get(index).copied().unwrap_or(u32::MAX);
-    let (region_type, region_area) = if let Some(region) = grid.regions.get(region_id as usize) {
-        (
-            match region.kind {
-                RegionKind::Land => "Land",
-                RegionKind::Water => "Water",
-            },
-            region.tile_count,
-        )
-    } else {
-        ("Unknown", 0)
-    };
-    let resource = grid
-        .resources
-        .get(index)
-        .and_then(Option::as_ref)
-        .map(|deposit| ResourceInfoDto {
-            kind: deposit.kind.label(),
-            amount: deposit.amount,
-        });
-
-    to_json(&TileInfoDto {
-        terrain: tile.terrain.label(),
-        altitude: tile.altitude,
-        moisture: tile.moisture,
-        temperature: tile.temperature,
-        x,
-        y,
-        region_id,
-        region_type,
-        region_area,
-        coastal: grid.is_coastal(x, y),
-        walkable: tile.terrain.is_walkable(),
-        movement_cost: tile.terrain.movement_cost(),
-        resource,
-    })
-}
-
-#[derive(Serialize)]
-struct RegionStatsDto {
-    land_regions: usize,
-    water_regions: usize,
-    land_tiles: u32,
-    water_tiles: u32,
-    total_tiles: u32,
-    land_coverage: f64,
-    largest_landmass_pct: f64,
-    islands: usize,
-}
-
-pub(crate) fn region_stats_json(grid: &Grid) -> String {
-    let total = (grid.width * grid.height) as f64;
-    let land: Vec<_> = grid
-        .regions
-        .iter()
-        .filter(|region| region.kind == RegionKind::Land)
-        .collect();
-    let water_regions = grid
-        .regions
-        .iter()
-        .filter(|region| region.kind == RegionKind::Water)
-        .count();
-    let land_tiles = land.iter().map(|region| region.tile_count).sum();
-    let water_tiles = total as u32 - land_tiles;
-    let largest = land
-        .iter()
-        .map(|region| region.tile_count)
-        .max()
-        .unwrap_or(0);
-    let islands = land.iter().filter(|region| !region.touches_border).count();
-
-    to_json(&RegionStatsDto {
-        land_regions: land.len(),
-        water_regions,
-        land_tiles,
-        water_tiles,
-        total_tiles: total as u32,
-        land_coverage: land_tiles as f64 / total,
-        largest_landmass_pct: largest as f64 / total,
-        islands,
-    })
 }
 
 #[cfg(test)]
@@ -641,7 +104,7 @@ mod tests {
         target_affinity_delta: i16,
     ) -> SimulationEvent {
         SimulationEvent {
-            id,
+            id: EventId::new(id),
             tick,
             location: crate::simulation::EventLocation { x: 4, y: 7 },
             actor_id,
@@ -706,7 +169,7 @@ mod tests {
     fn lifecycle_events_json_handles_optional_participants_and_causes() {
         let events = [
             SimulationEvent {
-                id: 10,
+                id: EventId::new(10),
                 tick: 20,
                 location: crate::simulation::EventLocation { x: 2, y: 3 },
                 actor_id: 1,
@@ -717,7 +180,7 @@ mod tests {
                 details: SimulationEventDetails::Birth { child_id: 5 },
             },
             SimulationEvent {
-                id: 11,
+                id: EventId::new(11),
                 tick: 21,
                 location: crate::simulation::EventLocation { x: 4, y: 6 },
                 actor_id: 9,
@@ -747,7 +210,7 @@ mod tests {
     #[test]
     fn consumption_event_json_includes_amount_and_filters_by_consumer() {
         let events = [SimulationEvent {
-            id: 12,
+            id: EventId::new(12),
             tick: 30,
             location: crate::simulation::EventLocation { x: 6, y: 8 },
             actor_id: 4,
@@ -770,7 +233,7 @@ mod tests {
     #[test]
     fn discovery_event_json_includes_resource_observation() {
         let events = [SimulationEvent {
-            id: 13,
+            id: EventId::new(13),
             tick: 31,
             location: crate::simulation::EventLocation { x: 7, y: 9 },
             actor_id: 6,
@@ -796,7 +259,7 @@ mod tests {
     #[test]
     fn encounter_event_json_includes_both_entities() {
         let events = [SimulationEvent {
-            id: 14,
+            id: EventId::new(14),
             tick: 32,
             location: crate::simulation::EventLocation { x: 2, y: 5 },
             actor_id: 3,
@@ -819,7 +282,7 @@ mod tests {
     #[test]
     fn affinity_change_event_json_serializes_and_filters_both_entities() {
         let events = [SimulationEvent {
-            id: 15,
+            id: EventId::new(15),
             tick: 33,
             location: crate::simulation::EventLocation { x: 3, y: 6 },
             actor_id: 1,

@@ -2,6 +2,8 @@
 name = "nexus-engine"
 version = "0.1.0"
 edition = "2021"
+description = "Deterministic engine for the Nexus emergent-society simulation"
+repository = "https://github.com/AdriGB/Nexus"
 
 [lib]
 crate-type = ["cdylib"]
