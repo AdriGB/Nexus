@@ -36,7 +36,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
     assert_eq!(sim_a.entities().len(), sim_b.entities().len());
     assert_eq!(sim_a.food_consumed, sim_b.food_consumed);
     assert_eq!(sim_a.world_revision(), sim_b.world_revision());
-    assert_eq!(sim_a.next_event_id, sim_b.next_event_id);
+    assert_eq!(sim_a.recent_events.next_id(), sim_b.recent_events.next_id());
     assert_eq!(
         sim_a.recent_events().collect::<Vec<_>>(),
         sim_b.recent_events().collect::<Vec<_>>()
@@ -178,5 +178,8 @@ fn profile_step_matches_affinity_change_events_from_step() {
         2
     );
     assert_eq!(normal_events, profiled_events);
-    assert_eq!(normal.next_event_id, profiled.next_event_id);
+    assert_eq!(
+        normal.recent_events.next_id(),
+        profiled.recent_events.next_id()
+    );
 }

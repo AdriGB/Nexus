@@ -13,8 +13,10 @@ use self::autonomy::Mind;
 pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH, MAX_POPULATION};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
+#[cfg(test)]
+pub(crate) use self::events::EventId;
 pub use self::events::{
-    EventId, EventLocation, SimulationEvent, SimulationEventCause, SimulationEventDetails,
+    EventLocation, SimulationEvent, SimulationEventCause, SimulationEventDetails,
     SimulationEventKind,
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
@@ -81,7 +83,6 @@ pub struct Simulation {
     food_consumed: u64,
     seed: u64,
     recent_events: RecentEventHistory,
-    next_event_id: EventId,
 }
 
 impl Default for Simulation {
@@ -100,7 +101,6 @@ impl Default for Simulation {
             food_consumed: 0,
             seed: 0,
             recent_events: RecentEventHistory::default(),
-            next_event_id: EventId::FIRST,
         }
     }
 }
@@ -506,12 +506,7 @@ impl Simulation {
     }
 
     fn push_event(&mut self, event: PendingSimulationEvent) {
-        let assigned_id = self.next_event_id;
-        self.next_event_id = self
-            .next_event_id
-            .checked_next()
-            .expect("simulation event id space exhausted");
-        self.recent_events.push(event.assign(assigned_id));
+        self.recent_events.push(event);
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {
