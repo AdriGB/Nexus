@@ -13,6 +13,7 @@ use self::autonomy::Mind;
 pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH, MAX_POPULATION};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
+pub(crate) use self::events::EntityEventSummary;
 #[cfg(test)]
 pub(crate) use self::events::EventId;
 pub use self::events::{
@@ -129,6 +130,10 @@ impl Simulation {
 
     pub(crate) fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.recent_events.iter()
+    }
+
+    pub(crate) fn entity_event_summary(&self, entity_id: u32) -> EntityEventSummary {
+        self.recent_events.summary_for(entity_id)
     }
 
     pub fn world_revision(&self) -> u64 {

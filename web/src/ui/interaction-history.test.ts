@@ -6,12 +6,14 @@ import type {
   ConsumptionEvent,
   DeathEvent,
   EncounterEvent,
+  EntityEventSummary,
   InteractionEvent,
   ResourceDiscoveryEvent,
 } from "../types";
 import {
   filterInteractionEvents,
   parseEntityFilter,
+  renderEntityEventSummary,
   renderInteractionHistory,
 } from "./interaction-history";
 
@@ -177,7 +179,57 @@ function affinityChange(
   };
 }
 
+function summary(overrides: Partial<EntityEventSummary> = {}): EntityEventSummary {
+  return {
+    entity_id: 2,
+    total_events: 5,
+    first_event_tick: "10",
+    latest_event_tick: "54",
+    births: 0,
+    deaths: 0,
+    consumptions: 1,
+    discoveries: 0,
+    encounters: 1,
+    interactions: 2,
+    affinity_changes: 1,
+    ...overrides,
+  };
+}
+
 describe("interaction history", () => {
+  it("renders a compact entity summary from the domain aggregation", () => {
+    const html = renderEntityEventSummary(summary());
+
+    expect(html).toContain("Entity #2");
+    expect(html).toContain("5 recent events");
+    expect(html).toContain("Ticks 10–54");
+    expect(html).toContain("Interactions");
+    expect(html).toContain("Meals");
+    expect(html).not.toContain("Birth events");
+  });
+
+  it("renders explicit empty and single-tick summary states", () => {
+    expect(
+      renderEntityEventSummary(
+        summary({
+          total_events: 0,
+          first_event_tick: null,
+          latest_event_tick: null,
+          consumptions: 0,
+          encounters: 0,
+          interactions: 0,
+          affinity_changes: 0,
+        }),
+      ),
+    ).toContain("No recent history summary for entity #2");
+
+    expect(
+      renderEntityEventSummary(
+        summary({ first_event_tick: "54", latest_event_tick: "54" }),
+      ),
+    ).toContain("Tick 54");
+  });
+
   it("renders a clear empty state for all events and selected entities", () => {
     expect(renderInteractionHistory([])).toContain("No recent events.");
     expect(renderInteractionHistory([], 42)).toContain(

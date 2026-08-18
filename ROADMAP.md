@@ -182,7 +182,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
   * [ ] formación de pareja
   * [ ] separación
 * [x] Buffer circular de eventos recientes
-* [ ] Historial resumido por entidad
+* [x] Historial resumido por entidad
 * [x] Panel cronológico filtrable
 * [ ] Explicación de decisiones importantes
 * [ ] Exportación del historial

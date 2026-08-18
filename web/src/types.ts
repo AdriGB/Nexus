@@ -15,6 +15,7 @@ export interface IWorldBridge {
   first_entity_relationships(): string;
   recent_interaction_events(entityId?: number): string;
   recent_events(entityId?: number): string;
+  entity_event_summary(entityId: number): string;
   entity_info(id: number): string;
   get_tile_data(
     vx: number,
@@ -256,6 +257,20 @@ export type SimulationEvent =
   | ResourceDiscoveryEvent
   | EncounterEvent
   | AffinityChangeEvent;
+
+export interface EntityEventSummary {
+  entity_id: number;
+  total_events: number;
+  first_event_tick: string | null;
+  latest_event_tick: string | null;
+  births: number;
+  deaths: number;
+  consumptions: number;
+  discoveries: number;
+  encounters: number;
+  interactions: number;
+  affinity_changes: number;
+}
 
 export interface PopulationStats {
   population: number;
