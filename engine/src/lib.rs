@@ -152,6 +152,19 @@ impl WorldBridge {
         self.simulation.spawn_entities(&self.grid, count)
     }
 
+    pub fn transfer_inventory_item(
+        &mut self,
+        source_id: u32,
+        target_id: u32,
+        kind: &str,
+        quantity: u16,
+    ) -> u16 {
+        simulation::ItemKind::from_slug(kind).map_or(0, |kind| {
+            self.simulation
+                .transfer_item(source_id, target_id, kind, quantity)
+        })
+    }
+
     pub fn population_stats(&self) -> String {
         bridge::population_stats_json(self.simulation.population_stats())
     }

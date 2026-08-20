@@ -22,6 +22,16 @@ impl ItemKind {
             Self::Iron => "Iron",
         }
     }
+
+    pub fn from_slug(value: &str) -> Option<Self> {
+        match value {
+            "food" => Some(Self::Food),
+            "timber" => Some(Self::Timber),
+            "stone" => Some(Self::Stone),
+            "iron" => Some(Self::Iron),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,13 +65,11 @@ impl Inventory {
     pub const fn amount(&self, kind: ItemKind) -> u16 {
         self.amounts[kind.index()]
     }
-    #[allow(dead_code, reason = "public API for the upcoming gathering slice")]
     pub fn add(&mut self, kind: ItemKind, quantity: u16) -> u16 {
         let accepted = quantity.min(self.remaining_capacity());
         self.amounts[kind.index()] += accepted;
         accepted
     }
-    #[allow(dead_code, reason = "public API for the upcoming gathering slice")]
     pub fn remove(&mut self, kind: ItemKind, quantity: u16) -> u16 {
         let slot = &mut self.amounts[kind.index()];
         let removed = quantity.min(*slot);

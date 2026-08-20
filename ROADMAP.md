@@ -203,7 +203,7 @@ Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 * [x] Inventario personal
 * [x] Capacidad de carga
 * [x] Tipos y cantidades de objetos
-* [ ] Transferencia entre entidades
+* [x] Transferencia entre entidades
 * [x] Inspector de inventario
 
 ## Gathering

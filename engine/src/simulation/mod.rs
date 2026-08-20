@@ -129,6 +129,50 @@ impl Simulation {
         &self.entities
     }
 
+    pub fn transfer_item(
+        &mut self,
+        source_id: u32,
+        target_id: u32,
+        kind: ItemKind,
+        quantity: u16,
+    ) -> u16 {
+        if source_id == target_id || quantity == 0 {
+            return 0;
+        }
+        let Ok(source_index) = self
+            .entities
+            .binary_search_by_key(&source_id, |entity| entity.id)
+        else {
+            return 0;
+        };
+        let Ok(target_index) = self
+            .entities
+            .binary_search_by_key(&target_id, |entity| entity.id)
+        else {
+            return 0;
+        };
+
+        let moved = quantity
+            .min(self.entities[source_index].inventory.amount(kind))
+            .min(self.entities[target_index].inventory.remaining_capacity());
+        if moved == 0 {
+            return 0;
+        }
+
+        let (source, target) = if source_index < target_index {
+            let (before_target, from_target) = self.entities.split_at_mut(target_index);
+            (&mut before_target[source_index], &mut from_target[0])
+        } else {
+            let (before_source, from_source) = self.entities.split_at_mut(source_index);
+            (&mut from_source[0], &mut before_source[target_index])
+        };
+        let removed = source.inventory.remove(kind, moved);
+        let accepted = target.inventory.add(kind, moved);
+        debug_assert_eq!(removed, moved);
+        debug_assert_eq!(accepted, moved);
+        moved
+    }
+
     pub(crate) fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.recent_events.iter()
     }

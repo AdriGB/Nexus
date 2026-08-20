@@ -3,6 +3,7 @@ mod biology;
 mod core;
 mod dependency;
 mod events;
+mod inventory_transfer;
 mod movement;
 mod parity;
 mod personality;
