@@ -184,8 +184,8 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
 * [x] Buffer circular de eventos recientes
 * [x] Historial resumido por entidad
 * [x] Panel cronológico filtrable
-* [ ] Explicación de decisiones importantes
-* [ ] Exportación del historial
+* [x] Explicación de decisiones importantes
+* [x] Exportación del historial
 * [ ] IDs causales entre eventos relacionados
 
 ### Vertical de validación

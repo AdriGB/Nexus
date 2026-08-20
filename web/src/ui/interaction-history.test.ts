@@ -11,6 +11,7 @@ import type {
   ResourceDiscoveryEvent,
 } from "../types";
 import {
+  createEventHistoryExport,
   filterInteractionEvents,
   parseEntityFilter,
   renderEntityEventSummary,
@@ -66,6 +67,33 @@ function birth(): BirthEvent {
     delta: null,
   };
 }
+
+describe("event history export", () => {
+  it("exports a stable versioned payload with string ticks", () => {
+    const events = [event(1, 2, 3, 4, 5), event(2, 4, 5, -2, 1)];
+
+    expect(createEventHistoryExport(events, 9_007_199_254_740_993n, null)).toEqual({
+      schema: "nexus-event-history/v1",
+      simulation_tick: "9007199254740993",
+      entity_filter: null,
+      event_count: 2,
+      events,
+    });
+  });
+
+  it("exports only events involving the selected entity", () => {
+    const included = event(1, 2, 3, 4, 5);
+    const history = createEventHistoryExport(
+      [included, event(2, 4, 5, -2, 1)],
+      48n,
+      3,
+    );
+
+    expect(history.entity_filter).toBe(3);
+    expect(history.event_count).toBe(1);
+    expect(history.events).toEqual([included]);
+  });
+});
 
 function death(cause: DeathEvent["cause"]): DeathEvent {
   return {

@@ -130,7 +130,20 @@ export interface EntityInfo {
     eat: number;
     explore: number;
     rest: number;
+    socialize: number;
   };
+  decision_explanation: {
+    chosen_goal: EntityInfo["goal"];
+    highest_utility_goal: EntityInfo["goal"];
+    chosen_score: number;
+    highest_score: number;
+    switch_margin: number;
+    reason:
+      | "highest_utility"
+      | "goal_persistence"
+      | "dependent_needs_food"
+      | "dependent_follows_caregiver";
+  } | null;
 }
 
 export interface KnownRelationshipInfo {

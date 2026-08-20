@@ -41,6 +41,22 @@ function relationshipColor(affinity: number): string {
   return "#8e8da2";
 }
 
+function decisionExplanation(entity: EntityInfo): string {
+  const explanation = entity.decision_explanation;
+  if (!explanation) return "No decision evaluated yet";
+
+  switch (explanation.reason) {
+    case "goal_persistence":
+      return `${explanation.chosen_goal} was retained: ${explanation.highest_utility_goal} scored ${explanation.highest_score.toFixed(2)}, but did not exceed the current score ${explanation.chosen_score.toFixed(2)} by the ${explanation.switch_margin.toFixed(2)} persistence margin.`;
+    case "dependent_needs_food":
+      return "Eat was selected because this dependent is hungry and remembers available food.";
+    case "dependent_follows_caregiver":
+      return "Follow was selected because this child depends on its caregiver and does not need food now.";
+    case "highest_utility":
+      return `${explanation.chosen_goal} was selected with the highest utility (${explanation.chosen_score.toFixed(2)}).`;
+  }
+}
+
 function relationshipsSection(
   relationships: KnownRelationshipInfo[],
   tick: number,
@@ -149,6 +165,7 @@ export function syncEntityInspector(): void {
       : [infoRow("Due", `${dueInHours.toLocaleString()} hours`)]),
     infoRow("Activity", entity.activity, "entity-activity"),
     infoRow("Goal", entity.goal, "entity-goal"),
+    infoRow("Decision", decisionExplanation(entity)),
     infoRow("Action", entity.action),
     infoRow("Goal retained", `${entity.goal_age_ticks.toLocaleString()} ticks`),
     infoRow("Path remaining", entity.remaining_path.toString()),
@@ -159,5 +176,6 @@ export function syncEntityInspector(): void {
     infoRow("Utility: eat", entity.utilities.eat.toFixed(2)),
     infoRow("Utility: explore", entity.utilities.explore.toFixed(2)),
     infoRow("Utility: rest", entity.utilities.rest.toFixed(2)),
+    infoRow("Utility: socialize", entity.utilities.socialize.toFixed(2)),
   ].join("") + relationshipsHtml;
 }

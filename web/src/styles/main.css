@@ -124,9 +124,9 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
   padding-top: 4px;
 }
 
-.interaction-history-controls {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  .interaction-history-controls {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
   gap: 6px;
   align-items: end;
 }

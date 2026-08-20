@@ -6,6 +6,42 @@ const DISPLAY_BATCH_SIZE = 100;
 let selectedEntityId: number | null = null;
 let visibleEventLimit = DISPLAY_BATCH_SIZE;
 
+export interface EventHistoryExport {
+  schema: "nexus-event-history/v1";
+  simulation_tick: string;
+  entity_filter: number | null;
+  event_count: number;
+  events: SimulationEvent[];
+}
+
+export function createEventHistoryExport(
+  events: SimulationEvent[],
+  simulationTick: bigint,
+  entityId: number | null,
+): EventHistoryExport {
+  const filtered = filterInteractionEvents(events, entityId);
+  return {
+    schema: "nexus-event-history/v1",
+    simulation_tick: simulationTick.toString(),
+    entity_filter: entityId,
+    event_count: filtered.length,
+    events: filtered,
+  };
+}
+
+function downloadEventHistory(history: EventHistoryExport): void {
+  const blob = new Blob([JSON.stringify(history, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const scope = history.entity_filter === null ? "all" : `entity-${history.entity_filter}`;
+  link.href = url;
+  link.download = `nexus-event-history-${scope}-tick-${history.simulation_tick}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
@@ -158,6 +194,7 @@ export function renderEntityEventSummary(summary: EntityEventSummary): string {
 export function bindInteractionHistory(): void {
   const input = document.getElementById("interaction-entity-id") as HTMLInputElement;
   const allButton = document.getElementById("btn-history-all")!;
+  const exportButton = document.getElementById("btn-history-export")!;
 
   input.addEventListener("input", () => {
     selectedEntityId = parseEntityFilter(input.value);
@@ -169,6 +206,19 @@ export function bindInteractionHistory(): void {
     visibleEventLimit = DISPLAY_BATCH_SIZE;
     input.value = "";
     syncInteractionHistory();
+  });
+  exportButton.addEventListener("click", () => {
+    if (!state.world) return;
+    const events = JSON.parse(
+      state.world.recent_events(selectedEntityId ?? undefined),
+    ) as SimulationEvent[];
+    downloadEventHistory(
+      createEventHistoryExport(
+        events,
+        state.world.simulation_tick(),
+        selectedEntityId,
+      ),
+    );
   });
   document.getElementById("interaction-history-list")!.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;

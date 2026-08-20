@@ -8,6 +8,17 @@ struct UtilityScoresDto {
     eat: f32,
     explore: f32,
     rest: f32,
+    socialize: f32,
+}
+
+#[derive(Serialize)]
+struct DecisionExplanationDto {
+    chosen_goal: &'static str,
+    highest_utility_goal: &'static str,
+    chosen_score: f32,
+    highest_score: f32,
+    switch_margin: f32,
+    reason: &'static str,
 }
 
 #[derive(Serialize)]
@@ -54,6 +65,7 @@ struct EntityInfoDto {
     known_chunks: usize,
     visible_entities: usize,
     utilities: UtilityScoresDto,
+    decision_explanation: Option<DecisionExplanationDto>,
     movement_credit: f32,
     life_stage: &'static str,
     stage_movement_factor: f32,
@@ -101,7 +113,18 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
             eat: entity.mind.utility_scores.eat,
             explore: entity.mind.utility_scores.explore,
             rest: entity.mind.utility_scores.rest,
+            socialize: entity.mind.utility_scores.socialize,
         },
+        decision_explanation: entity.mind.decision_explanation.map(|explanation| {
+            DecisionExplanationDto {
+                chosen_goal: explanation.chosen_goal.label(),
+                highest_utility_goal: explanation.highest_utility_goal.label(),
+                chosen_score: explanation.chosen_score,
+                highest_score: explanation.highest_score,
+                switch_margin: explanation.switch_margin,
+                reason: explanation.reason.label(),
+            }
+        }),
         movement_credit: entity.movement_credit,
         life_stage: life_stage.label(),
         stage_movement_factor: life_stage.movement_factor(),

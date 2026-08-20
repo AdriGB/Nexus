@@ -1,7 +1,7 @@
 use super::super::config::FOOD_SEARCH_THRESHOLD;
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
-use super::mind::{Action, Goal, Mind};
+use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
 use super::social::remembered_social_score;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
@@ -51,6 +51,14 @@ pub fn evaluate_goals(
                 rest: 0.0,
                 socialize: 0.0,
             };
+            mind.decision_explanation = Some(DecisionExplanation {
+                chosen_goal: Goal::Eat,
+                highest_utility_goal: Goal::Eat,
+                chosen_score: 1.0,
+                highest_score: 1.0,
+                switch_margin: 0.0,
+                reason: DecisionReason::DependentNeedsFood,
+            });
             return Goal::Eat;
         }
         mind.utility_scores = super::mind::UtilityScores {
@@ -59,6 +67,14 @@ pub fn evaluate_goals(
             rest: 0.5,
             socialize: 0.0,
         };
+        mind.decision_explanation = Some(DecisionExplanation {
+            chosen_goal: Goal::Follow,
+            highest_utility_goal: Goal::Rest,
+            chosen_score: 0.0,
+            highest_score: 0.5,
+            switch_margin: 0.0,
+            reason: DecisionReason::DependentFollowsCaregiver,
+        });
         return Goal::Follow;
     }
 
@@ -129,16 +145,33 @@ pub fn evaluate_goals(
         .max_by(|left, right| left.0.total_cmp(&right.0))
         .unwrap_or((0.0, Goal::Explore));
 
+    let margin = switch_margin(personality.persistence);
     if let Some(current) = current_goal {
         if current != best_goal {
             if let Some((current_score, _)) = scores.iter().find(|(_, goal)| *goal == current) {
-                if best_score <= *current_score + switch_margin(personality.persistence) {
+                if best_score <= *current_score + margin {
+                    mind.decision_explanation = Some(DecisionExplanation {
+                        chosen_goal: current,
+                        highest_utility_goal: best_goal,
+                        chosen_score: *current_score,
+                        highest_score: best_score,
+                        switch_margin: margin,
+                        reason: DecisionReason::GoalPersistence,
+                    });
                     return current;
                 }
             }
         }
     }
 
+    mind.decision_explanation = Some(DecisionExplanation {
+        chosen_goal: best_goal,
+        highest_utility_goal: best_goal,
+        chosen_score: best_score,
+        highest_score: best_score,
+        switch_margin: margin,
+        reason: DecisionReason::HighestUtility,
+    });
     best_goal
 }
 
@@ -273,7 +306,7 @@ pub(super) fn plan_goal(
 #[cfg(test)]
 mod tests {
     use super::super::super::time::TICKS_PER_YEAR;
-    use super::super::mind::{KnownEntity, Mind};
+    use super::super::mind::{KnownEntity, KnownResource, Mind};
     use super::*;
 
     #[test]
@@ -308,6 +341,11 @@ mod tests {
             },
         );
         assert_eq!(goal, Goal::Eat);
+        let explanation = mind.decision_explanation.expect("decision explanation");
+        assert_eq!(explanation.reason, DecisionReason::GoalPersistence);
+        assert_eq!(explanation.chosen_goal, Goal::Eat);
+        assert_eq!(explanation.highest_utility_goal, Goal::Explore);
+        assert!(explanation.highest_score > explanation.chosen_score);
     }
 
     #[test]
@@ -333,6 +371,10 @@ mod tests {
             },
         );
         assert_eq!(goal, Goal::Explore);
+        let explanation = mind.decision_explanation.expect("decision explanation");
+        assert_eq!(explanation.reason, DecisionReason::HighestUtility);
+        assert_eq!(explanation.chosen_goal, Goal::Explore);
+        assert_eq!(explanation.highest_utility_goal, Goal::Explore);
     }
 
     #[test]
@@ -372,5 +414,78 @@ mod tests {
         );
 
         assert_eq!(goal, Goal::Socialize);
+    }
+
+    #[test]
+    fn hungry_child_explains_food_need() {
+        let mut mind = Mind::default();
+        mind.memory.known_resources.push(KnownResource {
+            x: 1,
+            y: 1,
+            kind: ResourceKind::Food,
+            last_seen_tick: 0,
+            estimated_amount: 10,
+            failed_attempts: 0,
+            avoid_until_tick: 0,
+        });
+
+        let goal = evaluate_goals(
+            &mut mind,
+            FOOD_SEARCH_THRESHOLD,
+            100.0,
+            6 * TICKS_PER_YEAR,
+            &Personality {
+                curiosity: 0.5,
+                sociability: 0.5,
+                cooperativeness: 0.5,
+                caution: 0.5,
+                persistence: 0.5,
+            },
+            None,
+            DecisionContext {
+                tick: 0,
+                origin: (0, 0),
+            },
+        );
+
+        assert_eq!(goal, Goal::Eat);
+        assert_eq!(
+            mind.decision_explanation
+                .expect("decision explanation")
+                .reason,
+            DecisionReason::DependentNeedsFood
+        );
+    }
+
+    #[test]
+    fn sated_child_explains_caregiver_dependency() {
+        let mut mind = Mind::default();
+
+        let goal = evaluate_goals(
+            &mut mind,
+            0.0,
+            100.0,
+            6 * TICKS_PER_YEAR,
+            &Personality {
+                curiosity: 0.5,
+                sociability: 0.5,
+                cooperativeness: 0.5,
+                caution: 0.5,
+                persistence: 0.5,
+            },
+            None,
+            DecisionContext {
+                tick: 0,
+                origin: (0, 0),
+            },
+        );
+
+        assert_eq!(goal, Goal::Follow);
+        assert_eq!(
+            mind.decision_explanation
+                .expect("decision explanation")
+                .reason,
+            DecisionReason::DependentFollowsCaregiver
+        );
     }
 }
