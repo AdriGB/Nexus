@@ -105,6 +105,7 @@ pub enum SimulationEventDetails {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SimulationEvent {
     pub id: EventId,
+    pub caused_by_event_id: Option<EventId>,
     pub tick: u64,
     pub location: EventLocation,
     pub actor_id: u32,
@@ -131,6 +132,7 @@ pub(crate) struct EntityEventSummary {
 }
 
 pub(super) struct PendingSimulationEvent {
+    pub caused_by_event_id: Option<EventId>,
     pub tick: u64,
     pub location: EventLocation,
     pub actor_id: u32,
@@ -145,6 +147,7 @@ impl PendingSimulationEvent {
     pub(super) fn assign(self, id: EventId) -> SimulationEvent {
         SimulationEvent {
             id,
+            caused_by_event_id: self.caused_by_event_id,
             tick: self.tick,
             location: self.location,
             actor_id: self.actor_id,
@@ -184,7 +187,7 @@ impl RecentEventHistory {
         }
     }
 
-    pub(super) fn push(&mut self, event: PendingSimulationEvent) {
+    pub(super) fn push(&mut self, event: PendingSimulationEvent) -> EventId {
         let assigned_id = self.next_id;
         self.next_id = self
             .next_id
@@ -192,12 +195,13 @@ impl RecentEventHistory {
             .expect("simulation event id space exhausted");
 
         if self.capacity == 0 {
-            return;
+            return assigned_id;
         }
         if self.events.len() == self.capacity {
             self.events.pop_front();
         }
         self.events.push_back(event.assign(assigned_id));
+        assigned_id
     }
 
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
@@ -251,6 +255,7 @@ mod summary_tests {
         kind: SimulationEventKind,
     ) -> PendingSimulationEvent {
         PendingSimulationEvent {
+            caused_by_event_id: None,
             tick,
             location: EventLocation { x: 1, y: 2 },
             actor_id,

@@ -161,6 +161,7 @@ export interface KnownRelationshipInfo {
 
 interface SimulationEventBase {
   id: string;
+  caused_by_event_id: string | null;
   tick: string;
   relative_time: string;
   location: TileCoord;

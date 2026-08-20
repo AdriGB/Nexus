@@ -120,9 +120,12 @@ function eventDetails(event: SimulationEvent): string {
         ? "Social interaction"
         : "Relationship decay";
     const signedDelta = event.delta >= 0 ? `+${event.delta}` : `${event.delta}`;
+    const causalLink = event.caused_by_event_id
+      ? `<div class="interaction-event-row"><span>Caused by</span><button class="interaction-entity-link" type="button" data-event-target-id="${event.caused_by_event_id}">Event #${event.caused_by_event_id}</button></div>`
+      : "";
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Entity")}<span>changed attitude toward</span>${entityButton(event.target_id, "Entity")}</div>
       <div class="interaction-event-row"><span>Affinity: ${event.previous_affinity} → ${event.new_affinity} (${signedDelta})</span></div>
-      <div class="interaction-event-row"><span>${causeLabel}</span><span>(${event.location.x}, ${event.location.y})</span></div>`;
+      <div class="interaction-event-row"><span>${causeLabel}</span><span>(${event.location.x}, ${event.location.y})</span></div>${causalLink}`;
   }
   const exhaustive: never = event;
   return exhaustive;
@@ -142,7 +145,7 @@ export function renderInteractionHistory(
 
   const shown = filtered.slice(0, visibleLimit);
   const cards = shown.map(
-    (event) => `<article class="interaction-event" data-event-id="${event.id}">
+    (event) => `<article id="event-${event.id}" class="interaction-event" data-event-id="${event.id}">
       <div class="interaction-event-header">
         <strong>Event #${event.id}</strong>
         <span>Tick ${event.tick} · ${escapeHtml(event.relative_time)}</span>
@@ -225,6 +228,14 @@ export function bindInteractionHistory(): void {
     if (target.closest("[data-history-more]")) {
       visibleEventLimit += DISPLAY_BATCH_SIZE;
       syncInteractionHistory();
+      return;
+    }
+    const causalButton = target.closest<HTMLButtonElement>("[data-event-target-id]");
+    if (causalButton) {
+      const causalEvent = document.getElementById(
+        `event-${causalButton.dataset.eventTargetId}`,
+      );
+      causalEvent?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       return;
     }
     const button = target.closest<HTMLButtonElement>("[data-entity-id]");

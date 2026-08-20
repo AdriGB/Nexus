@@ -186,7 +186,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
 * [x] Panel cronológico filtrable
 * [x] Explicación de decisiones importantes
 * [x] Exportación del historial
-* [ ] IDs causales entre eventos relacionados
+* [x] IDs causales entre eventos relacionados
 
 ### Vertical de validación
 

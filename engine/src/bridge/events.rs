@@ -16,6 +16,7 @@ struct EventLocationDto {
 #[derive(Serialize)]
 struct SimulationEventDto {
     id: String,
+    caused_by_event_id: Option<String>,
     tick: String,
     relative_time: String,
     location: EventLocationDto,
@@ -183,6 +184,7 @@ pub(super) fn simulation_events_json<'a>(
 
             SimulationEventDto {
                 id: event.id.to_string(),
+                caused_by_event_id: event.caused_by_event_id.map(|id| id.to_string()),
                 tick: event.tick.to_string(),
                 relative_time: relative_event_time(current_tick, event.tick),
                 location: EventLocationDto {

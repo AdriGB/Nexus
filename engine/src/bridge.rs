@@ -122,6 +122,7 @@ mod tests {
     ) -> SimulationEvent {
         SimulationEvent {
             id: EventId::new(id),
+            caused_by_event_id: None,
             tick,
             location: crate::simulation::EventLocation { x: 4, y: 7 },
             actor_id,
@@ -187,6 +188,7 @@ mod tests {
         let events = [
             SimulationEvent {
                 id: EventId::new(10),
+                caused_by_event_id: None,
                 tick: 20,
                 location: crate::simulation::EventLocation { x: 2, y: 3 },
                 actor_id: 1,
@@ -198,6 +200,7 @@ mod tests {
             },
             SimulationEvent {
                 id: EventId::new(11),
+                caused_by_event_id: None,
                 tick: 21,
                 location: crate::simulation::EventLocation { x: 4, y: 6 },
                 actor_id: 9,
@@ -228,6 +231,7 @@ mod tests {
     fn consumption_event_json_includes_amount_and_filters_by_consumer() {
         let events = [SimulationEvent {
             id: EventId::new(12),
+            caused_by_event_id: None,
             tick: 30,
             location: crate::simulation::EventLocation { x: 6, y: 8 },
             actor_id: 4,
@@ -251,6 +255,7 @@ mod tests {
     fn discovery_event_json_includes_resource_observation() {
         let events = [SimulationEvent {
             id: EventId::new(13),
+            caused_by_event_id: None,
             tick: 31,
             location: crate::simulation::EventLocation { x: 7, y: 9 },
             actor_id: 6,
@@ -277,6 +282,7 @@ mod tests {
     fn encounter_event_json_includes_both_entities() {
         let events = [SimulationEvent {
             id: EventId::new(14),
+            caused_by_event_id: None,
             tick: 32,
             location: crate::simulation::EventLocation { x: 2, y: 5 },
             actor_id: 3,
@@ -300,13 +306,14 @@ mod tests {
     fn affinity_change_event_json_serializes_and_filters_both_entities() {
         let events = [SimulationEvent {
             id: EventId::new(15),
+            caused_by_event_id: Some(EventId::new(9)),
             tick: 33,
             location: crate::simulation::EventLocation { x: 3, y: 6 },
             actor_id: 1,
             target_id: Some(2),
             related_entity_ids: vec![1, 2],
             kind: SimulationEventKind::AffinityChange,
-            cause: SimulationEventCause::RelationshipDecay,
+            cause: SimulationEventCause::MutualSocialContact,
             details: SimulationEventDetails::AffinityChange {
                 previous_affinity: 100,
                 new_affinity: 99,
@@ -319,7 +326,8 @@ mod tests {
                 serde_json::from_str(&simulation_events_json(events.iter(), 33, Some(entity_id)))
                     .unwrap();
             assert_eq!(payload[0]["kind"], "affinity_change");
-            assert_eq!(payload[0]["cause"], "relationship_decay");
+            assert_eq!(payload[0]["cause"], "mutual_social_contact");
+            assert_eq!(payload[0]["caused_by_event_id"], "9");
             assert_eq!(payload[0]["previous_affinity"], 100);
             assert_eq!(payload[0]["new_affinity"], 99);
             assert_eq!(payload[0]["delta"], -1);

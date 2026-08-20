@@ -14,7 +14,6 @@ pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH, MAX_POPULATION};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
 pub(crate) use self::events::EntityEventSummary;
-#[cfg(test)]
 pub(crate) use self::events::EventId;
 pub use self::events::{
     EventLocation, SimulationEvent, SimulationEventCause, SimulationEventDetails,
@@ -340,7 +339,8 @@ impl Simulation {
 
     fn record_social_interactions(&mut self, interactions: Vec<autonomy::SocialInteraction>) {
         for interaction in interactions {
-            self.push_event(PendingSimulationEvent {
+            let interaction_event_id = self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
                 tick: self.tick,
                 location: EventLocation {
                     x: interaction.location.0,
@@ -362,6 +362,7 @@ impl Simulation {
                     interaction.actor_location,
                     change,
                     SimulationEventCause::MutualSocialContact,
+                    Some(interaction_event_id),
                 );
             }
             if let Some(change) = interaction.target_affinity_change {
@@ -370,6 +371,7 @@ impl Simulation {
                     interaction.target_location,
                     change,
                     SimulationEventCause::MutualSocialContact,
+                    Some(interaction_event_id),
                 );
             }
         }
@@ -381,8 +383,10 @@ impl Simulation {
         location: (u32, u32),
         change: autonomy::AffinityChangeRecord,
         cause: SimulationEventCause,
+        caused_by_event_id: Option<EventId>,
     ) {
         self.push_event(PendingSimulationEvent {
+            caused_by_event_id,
             tick: self.tick,
             location: EventLocation {
                 x: location.0,
@@ -418,6 +422,7 @@ impl Simulation {
                 y: entity.y,
             };
             self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
                 tick: self.tick,
                 location,
                 actor_id: entity_id,
@@ -433,6 +438,7 @@ impl Simulation {
     fn record_resource_discoveries(&mut self, discoveries: Vec<autonomy::ResourceDiscovery>) {
         for discovery in discoveries {
             self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
                 tick: self.tick,
                 location: EventLocation {
                     x: discovery.x,
@@ -495,6 +501,7 @@ impl Simulation {
             }
 
             self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
                 tick: self.tick,
                 location: EventLocation {
                     x: encounter.x,
@@ -510,8 +517,8 @@ impl Simulation {
         }
     }
 
-    fn push_event(&mut self, event: PendingSimulationEvent) {
-        self.recent_events.push(event);
+    fn push_event(&mut self, event: PendingSimulationEvent) -> EventId {
+        self.recent_events.push(event)
     }
 
     fn rebuild_population_index(&mut self, world: &Grid) {
@@ -554,6 +561,7 @@ impl Simulation {
             .collect();
         for (entity_id, x, y, cause) in deaths {
             self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
                 tick: self.tick,
                 location: EventLocation { x, y },
                 actor_id: entity_id,
@@ -581,6 +589,7 @@ impl Simulation {
                 }
                 self.births = self.births.saturating_add(1);
                 self.push_event(PendingSimulationEvent {
+                    caused_by_event_id: None,
                     tick: self.tick,
                     location: EventLocation {
                         x: position.0,
@@ -627,6 +636,7 @@ impl Simulation {
                 location,
                 change,
                 SimulationEventCause::RelationshipDecay,
+                None,
             );
         }
     }

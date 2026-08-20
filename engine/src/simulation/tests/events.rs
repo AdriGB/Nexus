@@ -122,10 +122,14 @@ fn affinity_changes_follow_interaction_in_directed_order() {
     let events: Vec<_> = simulation.recent_events().collect();
     assert_eq!(events.len(), 3);
     assert_eq!(events[0].kind, SimulationEventKind::Interaction);
+    assert_eq!(events[0].id, EventId::new(1));
+    assert_eq!(events[0].caused_by_event_id, None);
     assert_eq!((events[1].actor_id, events[1].target_id), (1, Some(2)));
     assert_eq!((events[2].actor_id, events[2].target_id), (2, Some(1)));
     assert_eq!(events[1].id, EventId::new(2));
     assert_eq!(events[2].id, EventId::new(3));
+    assert_eq!(events[1].caused_by_event_id, Some(EventId::new(1)));
+    assert_eq!(events[2].caused_by_event_id, Some(EventId::new(1)));
     assert_eq!(events[1].cause, SimulationEventCause::MutualSocialContact);
 }
 
