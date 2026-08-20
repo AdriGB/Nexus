@@ -40,12 +40,20 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let population_index_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
-    let (consumed_this_tick, world_changed, consumer_ids, discoveries, encounters, interactions) =
-        simulation.run_autonomy(world);
+    let (
+        consumed_this_tick,
+        world_changed,
+        consumer_ids,
+        discoveries,
+        encounters,
+        interactions,
+        food_share_attempts,
+    ) = simulation.run_autonomy(world);
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
     simulation.record_social_interactions(interactions);
+    simulation.process_food_share_attempts(food_share_attempts);
     let autonomy_us = start.elapsed().as_micros() as u64;
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -113,6 +121,7 @@ pub(super) fn run_profiled_autonomy_step(
         discoveries,
         encounters,
         interactions,
+        food_share_attempts,
     ) = autonomy::profile_autonomy(
         &mut simulation.entities,
         world,
@@ -125,6 +134,7 @@ pub(super) fn run_profiled_autonomy_step(
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
     simulation.record_social_interactions(interactions);
+    simulation.process_food_share_attempts(food_share_attempts);
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     for (id, amount) in consumer_ids {

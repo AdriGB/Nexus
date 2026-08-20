@@ -220,18 +220,18 @@ Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 * [x] Recolectar comida
 * [x] Transportar comida
 * [x] Consumir desde el inventario
-* [ ] Compartir comida
+* [x] Compartir comida
 * [ ] Alimentar dependientes
 * [ ] Regeneración limitada de recursos renovables
 * [ ] Estacionalidad básica futura
 
 ## Cooperation
 
-* [ ] Cooperación influida por personalidad
-* [ ] Afinidad influye en el reparto
-* [ ] Rechazo a compartir
+* [x] Cooperación influida por personalidad
+* [x] Afinidad influye en el reparto
+* [x] Rechazo a compartir
 * [ ] Gratitud o resentimiento
-* [ ] Eventos de ayuda y abandono
+* [x] Eventos de ayuda y abandono
 
 ### Vertical de validación
 

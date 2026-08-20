@@ -43,6 +43,7 @@ type AutonomyRunResult = (
     Vec<autonomy::ResourceDiscovery>,
     Vec<autonomy::EntityEncounter>,
     Vec<autonomy::SocialInteraction>,
+    Vec<autonomy::FoodShareAttempt>,
 );
 
 #[derive(Clone, Copy, Debug)]
@@ -327,12 +328,20 @@ impl Simulation {
     fn update_autonomy(&mut self, world: &mut Grid) -> (u64, bool) {
         dependents::snap_infants_to_caregivers(&mut self.entities);
         self.rebuild_population_index(world);
-        let (consumed, world_changed, consumer_ids, discoveries, encounters, interactions) =
-            self.run_autonomy(world);
+        let (
+            consumed,
+            world_changed,
+            consumer_ids,
+            discoveries,
+            encounters,
+            interactions,
+            food_share_attempts,
+        ) = self.run_autonomy(world);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
         self.record_social_interactions(interactions);
+        self.process_food_share_attempts(food_share_attempts);
         dependents::snap_infants_to_caregivers(&mut self.entities);
 
         for (id, amount) in consumer_ids {
@@ -353,6 +362,7 @@ impl Simulation {
         let mut consumer_ids = Vec::new();
         let mut discoveries = Vec::new();
         let mut encounters = Vec::new();
+        let mut food_share_attempts = Vec::new();
 
         for entity in self.entities.iter_mut().filter(|entity| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
@@ -372,6 +382,9 @@ impl Simulation {
             }
             consumed += u64::from(result.food_consumed);
             world_changed |= result.world_changed;
+            if let Some(attempt) = result.food_share_attempt {
+                food_share_attempts.push(attempt);
+            }
         }
 
         let interactions = autonomy::process_social_interactions(
@@ -387,6 +400,7 @@ impl Simulation {
             discoveries,
             encounters,
             interactions,
+            food_share_attempts,
         )
     }
 
@@ -426,6 +440,76 @@ impl Simulation {
                     SimulationEventCause::MutualSocialContact,
                     Some(interaction_event_id),
                 );
+            }
+        }
+    }
+
+    fn process_food_share_attempts(&mut self, attempts: Vec<autonomy::FoodShareAttempt>) {
+        for attempt in attempts {
+            let Ok(actor_index) = self
+                .entities
+                .binary_search_by_key(&attempt.actor_id, |entity| entity.id)
+            else {
+                continue;
+            };
+            let Ok(_target_index) = self
+                .entities
+                .binary_search_by_key(&attempt.target_id, |entity| entity.id)
+            else {
+                continue;
+            };
+
+            let willing = {
+                let actor = &self.entities[actor_index];
+                let affinity = actor
+                    .mind
+                    .memory
+                    .affinity_to(attempt.target_id)
+                    .unwrap_or(0);
+                food_share_willingness(actor.personality.cooperativeness, affinity)
+            };
+
+            let moved = if willing {
+                self.transfer_item(
+                    attempt.actor_id,
+                    attempt.target_id,
+                    ItemKind::Food,
+                    attempt.amount,
+                )
+            } else {
+                0
+            };
+
+            if moved > 0 {
+                self.push_event(PendingSimulationEvent {
+                    caused_by_event_id: None,
+                    tick: self.tick,
+                    location: EventLocation {
+                        x: attempt.actor_location.0,
+                        y: attempt.actor_location.1,
+                    },
+                    actor_id: attempt.actor_id,
+                    target_id: Some(attempt.target_id),
+                    related_entity_ids: vec![attempt.actor_id, attempt.target_id],
+                    kind: SimulationEventKind::FoodShared,
+                    cause: SimulationEventCause::FoodShared,
+                    details: SimulationEventDetails::FoodShared { amount: moved },
+                });
+            } else {
+                self.push_event(PendingSimulationEvent {
+                    caused_by_event_id: None,
+                    tick: self.tick,
+                    location: EventLocation {
+                        x: attempt.actor_location.0,
+                        y: attempt.actor_location.1,
+                    },
+                    actor_id: attempt.actor_id,
+                    target_id: Some(attempt.target_id),
+                    related_entity_ids: vec![attempt.actor_id, attempt.target_id],
+                    kind: SimulationEventKind::FoodShareRefused,
+                    cause: SimulationEventCause::FoodShareRefused,
+                    details: SimulationEventDetails::FoodShareRefused,
+                });
             }
         }
     }
@@ -585,6 +669,7 @@ impl Simulation {
                 id: entity.id,
                 x: entity.x,
                 y: entity.y,
+                hunger: entity.hunger,
             });
 
             self.spatial_grid.insert(snapshot_index, entity.x, entity.y);
@@ -708,6 +793,11 @@ impl Simulation {
             DAILY_CONCEPTION_THRESHOLD,
         );
     }
+}
+
+fn food_share_willingness(cooperativeness: f32, affinity: i16) -> bool {
+    let affinity_factor = ((f32::from(affinity) + 1_000.0) / 2_000.0).clamp(0.0, 1.0);
+    cooperativeness * 0.7 + affinity_factor * 0.3 >= 0.5
 }
 
 #[cfg(test)]

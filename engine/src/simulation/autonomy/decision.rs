@@ -1,4 +1,4 @@
-use super::super::config::FOOD_SEARCH_THRESHOLD;
+use super::super::config::{FOOD_SEARCH_THRESHOLD, MAX_HUNGER};
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
@@ -14,6 +14,7 @@ pub(in crate::simulation) struct DecisionContext {
     pub tick: u64,
     pub origin: (u32, u32),
     pub food_in_inventory: u16,
+    pub visible_food_need: f32,
 }
 
 /// Maps persistence [0.0, 1.0] to the score margin required to abandon
@@ -39,6 +40,7 @@ pub fn evaluate_goals(
         tick,
         origin,
         food_in_inventory,
+        visible_food_need,
     } = context;
     let stage = LifeStage::from_age_ticks(age_ticks);
 
@@ -56,6 +58,7 @@ pub fn evaluate_goals(
                 explore: 0.0,
                 rest: 0.0,
                 socialize: 0.0,
+                share_food: 0.0,
             };
             mind.decision_explanation = Some(DecisionExplanation {
                 chosen_goal: if food_in_inventory > 0 {
@@ -85,6 +88,7 @@ pub fn evaluate_goals(
             explore: 0.0,
             rest: 0.5,
             socialize: 0.0,
+            share_food: 0.0,
         };
         mind.decision_explanation = Some(DecisionExplanation {
             chosen_goal: Goal::Follow,
@@ -152,6 +156,17 @@ pub fn evaluate_goals(
         }
     };
 
+    let share_food = {
+        let has_surplus_food = food_in_inventory >= 20; // At least 2 meals worth
+
+        if visible_food_need < FOOD_SEARCH_THRESHOLD / MAX_HUNGER || !has_surplus_food {
+            0.0
+        } else {
+            let sated_factor = (1.0 - hunger_ratio) * 0.7 + 0.3;
+            sated_factor * visible_food_need
+        }
+    };
+
     let acquire_resource = if has_food_in_inventory {
         0.0
     } else {
@@ -170,6 +185,7 @@ pub fn evaluate_goals(
             * caution_explore_factor,
         rest: (health_deficit * 0.8 + 0.05) * caution_rest_factor,
         socialize,
+        share_food,
     };
 
     let scores = [
@@ -178,6 +194,7 @@ pub fn evaluate_goals(
         (mind.utility_scores.explore, Goal::Explore),
         (mind.utility_scores.rest, Goal::Rest),
         (mind.utility_scores.socialize, Goal::Socialize),
+        (mind.utility_scores.share_food, Goal::ShareFood),
     ];
     let (best_score, best_goal) = scores
         .into_iter()
@@ -302,6 +319,84 @@ fn plan_follow(
     }
 }
 
+fn plan_share_food(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    population: &[EntitySnapshot],
+) {
+    let origin = (entity.x, entity.y);
+
+    // Prefer visible entities with greater need and stronger non-hostile affinity.
+    let mut best_target: Option<(f32, u32, (u32, u32))> = None;
+
+    for &visible_id in &entity.mind.visible_entities {
+        if let Some(known) = entity
+            .mind
+            .memory
+            .known_entities
+            .iter()
+            .find(|k| k.id == visible_id)
+        {
+            if known.affinity < -200 {
+                continue;
+            }
+            if let Some(snapshot) = population.iter().find(|s| s.id == visible_id) {
+                if snapshot.hunger < FOOD_SEARCH_THRESHOLD {
+                    continue;
+                }
+                let target_hunger = snapshot.hunger;
+                let need_factor =
+                    (target_hunger / super::super::config::MAX_HUNGER).clamp(0.0, 1.0);
+                let affinity_factor =
+                    ((f32::from(known.affinity) + 1_000.0) / 2_000.0).clamp(0.0, 1.0);
+                let score = need_factor * affinity_factor;
+
+                let target_pos = (snapshot.x, snapshot.y);
+                match best_target {
+                    None => best_target = Some((score, visible_id, target_pos)),
+                    Some((best_score, _, _)) if score > best_score => {
+                        best_target = Some((score, visible_id, target_pos));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let Some((_, target_id, target_pos)) = best_target else {
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = super::super::entity::EntityActivity::Resting;
+        return;
+    };
+
+    if target_pos == origin {
+        entity
+            .mind
+            .set_plan(Goal::ShareFood, vec![Action::ShareFood(target_id)], tick);
+        entity.activity = super::super::entity::EntityActivity::Socializing;
+        return;
+    }
+
+    if let Some(path) =
+        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target_pos)
+    {
+        entity.path = path.into_iter().skip(1).collect();
+        entity.path_index = 0;
+        let mut actions = Vec::new();
+        if target_pos != origin {
+            actions.push(Action::ApproachEntity(target_id));
+        }
+        actions.push(Action::ShareFood(target_id));
+        entity.mind.set_plan(Goal::ShareFood, actions, tick);
+        entity.activity = super::super::entity::EntityActivity::Moving;
+    } else {
+        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.activity = super::super::entity::EntityActivity::Resting;
+    }
+}
+
 pub(super) fn plan_goal(
     entity: &mut Entity,
     world: &Grid,
@@ -360,6 +455,9 @@ pub(super) fn plan_goal(
         Goal::Socialize => {
             super::social::plan_socialize(entity, world, tick, pathfinding_workspace, population);
         }
+        Goal::ShareFood => {
+            plan_share_food(entity, world, tick, pathfinding_workspace, population);
+        }
     }
 }
 
@@ -399,6 +497,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 10,
+                visible_food_need: 0.0,
             },
         );
         assert_eq!(goal, Goal::Eat);
@@ -430,6 +529,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
+                visible_food_need: 0.0,
             },
         );
         assert_eq!(goal, Goal::Explore);
@@ -473,6 +573,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
+                visible_food_need: 0.0,
             },
         );
 
@@ -509,6 +610,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
+                visible_food_need: 0.0,
             },
         );
 
@@ -542,6 +644,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
+                visible_food_need: 0.0,
             },
         );
 

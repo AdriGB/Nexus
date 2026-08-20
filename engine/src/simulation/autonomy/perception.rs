@@ -304,6 +304,7 @@ mod tests {
             id: 5,
             x: 10,
             y: 20,
+            hunger: 0.0,
         };
         remember_entity(&mut mind, snapshot, 100);
 
@@ -327,6 +328,7 @@ mod tests {
             id: 5,
             x: 10,
             y: 20,
+            hunger: 0.0,
         };
         remember_entity(&mut mind, snapshot_a, 100);
 
@@ -334,6 +336,7 @@ mod tests {
             id: 5,
             x: 15,
             y: 25,
+            hunger: 0.0,
         };
         remember_entity(&mut mind, snapshot_b, 200);
 
@@ -354,6 +357,7 @@ mod tests {
             id: 3,
             x: 10,
             y: 20,
+            hunger: 0.0,
         };
         remember_entity(&mut mind, snapshot, 100);
 
@@ -365,6 +369,7 @@ mod tests {
             id: 3,
             x: 12,
             y: 22,
+            hunger: 0.0,
         };
         remember_entity(&mut mind, snapshot_again, 200);
 
@@ -378,7 +383,12 @@ mod tests {
         let mut mind = Mind::default();
 
         for id in [30, 10, 50, 20, 40] {
-            let snapshot = EntitySnapshot { id, x: 0, y: 0 };
+            let snapshot = EntitySnapshot {
+                id,
+                x: 0,
+                y: 0,
+                hunger: 0.0,
+            };
             remember_entity(&mut mind, snapshot, 0);
         }
 

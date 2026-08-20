@@ -63,6 +63,8 @@ pub enum SimulationEventKind {
     Discovery,
     Encounter,
     AffinityChange,
+    FoodShared,
+    FoodShareRefused,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,6 +77,8 @@ pub enum SimulationEventCause {
     ResourceFound,
     FirstEncounter,
     RelationshipDecay,
+    FoodShared,
+    FoodShareRefused,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,6 +104,10 @@ pub enum SimulationEventDetails {
         new_affinity: i16,
         delta: i16,
     },
+    FoodShared {
+        amount: u16,
+    },
+    FoodShareRefused,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -230,6 +238,9 @@ impl RecentEventHistory {
                 SimulationEventKind::Encounter => &mut summary.encounters,
                 SimulationEventKind::Interaction => &mut summary.interactions,
                 SimulationEventKind::AffinityChange => &mut summary.affinity_changes,
+                SimulationEventKind::FoodShared | SimulationEventKind::FoodShareRefused => {
+                    &mut summary.interactions
+                }
             };
             *counter = counter.saturating_add(1);
         }

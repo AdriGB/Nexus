@@ -33,6 +33,7 @@ struct SimulationEventDto {
     previous_affinity: Option<i16>,
     new_affinity: Option<i16>,
     delta: Option<i16>,
+    refused: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -107,6 +108,8 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventKind::Discovery => "discovery",
                 SimulationEventKind::Encounter => "encounter",
                 SimulationEventKind::AffinityChange => "affinity_change",
+                SimulationEventKind::FoodShared => "food_shared",
+                SimulationEventKind::FoodShareRefused => "food_share_refused",
             };
             let cause = match event.cause {
                 SimulationEventCause::MutualSocialContact => "mutual_social_contact",
@@ -117,6 +120,8 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventCause::ResourceFound => "resource_found",
                 SimulationEventCause::FirstEncounter => "first_encounter",
                 SimulationEventCause::RelationshipDecay => "relationship_decay",
+                SimulationEventCause::FoodShared => "food_shared",
+                SimulationEventCause::FoodShareRefused => "food_share_refused",
             };
             let (
                 actor_affinity_delta,
@@ -127,6 +132,7 @@ pub(super) fn simulation_events_json<'a>(
                 previous_affinity,
                 new_affinity,
                 delta,
+                refused,
             ) = match event.details {
                 SimulationEventDetails::Interaction {
                     actor_affinity_delta,
@@ -140,13 +146,24 @@ pub(super) fn simulation_events_json<'a>(
                     None,
                     None,
                     None,
+                    None,
                 ),
-                SimulationEventDetails::Birth { child_id } => {
-                    (None, None, Some(child_id), None, None, None, None, None)
+                SimulationEventDetails::Birth { child_id } => (
+                    None,
+                    None,
+                    Some(child_id),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                SimulationEventDetails::Death => {
+                    (None, None, None, None, None, None, None, None, None)
                 }
-                SimulationEventDetails::Death => (None, None, None, None, None, None, None, None),
                 SimulationEventDetails::Consumption { amount } => {
-                    (None, None, None, Some(amount), None, None, None, None)
+                    (None, None, None, Some(amount), None, None, None, None, None)
                 }
                 SimulationEventDetails::ResourceDiscovery { kind, amount } => (
                     None,
@@ -162,9 +179,10 @@ pub(super) fn simulation_events_json<'a>(
                     None,
                     None,
                     None,
+                    None,
                 ),
                 SimulationEventDetails::Encounter => {
-                    (None, None, None, None, None, None, None, None)
+                    (None, None, None, None, None, None, None, None, None)
                 }
                 SimulationEventDetails::AffinityChange {
                     previous_affinity,
@@ -179,7 +197,22 @@ pub(super) fn simulation_events_json<'a>(
                     Some(previous_affinity),
                     Some(new_affinity),
                     Some(delta),
+                    None,
                 ),
+                SimulationEventDetails::FoodShared { amount } => (
+                    None,
+                    None,
+                    None,
+                    Some(amount),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                ),
+                SimulationEventDetails::FoodShareRefused => {
+                    (None, None, None, None, None, None, None, None, Some(true))
+                }
             };
 
             SimulationEventDto {
@@ -204,6 +237,7 @@ pub(super) fn simulation_events_json<'a>(
                 previous_affinity,
                 new_affinity,
                 delta,
+                refused,
             }
         })
         .collect();

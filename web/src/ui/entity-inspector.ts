@@ -204,5 +204,6 @@ export function syncEntityInspector(): void {
     infoRow("Utility: explore", entity.utilities.explore.toFixed(2)),
     infoRow("Utility: rest", entity.utilities.rest.toFixed(2)),
     infoRow("Utility: socialize", entity.utilities.socialize.toFixed(2)),
+    infoRow("Utility: share food", entity.utilities.share_food.toFixed(2)),
   ].join("") + renderInventorySection(entity.inventory) + relationshipsHtml;
 }

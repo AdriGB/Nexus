@@ -14,11 +14,21 @@ use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
 const REST_HEALTH_PER_TICK: f32 = 0.25;
+const SHARE_FOOD_AMOUNT: u16 = 10;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct FoodShareAttempt {
+    pub actor_id: u32,
+    pub target_id: u32,
+    pub actor_location: (u32, u32),
+    pub amount: u16,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(in crate::simulation) struct ActionOutcome {
     pub food_consumed: u16,
     pub world_changed: bool,
+    pub food_share_attempt: Option<FoodShareAttempt>,
 }
 
 pub(in crate::simulation) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
@@ -116,6 +126,7 @@ pub(super) fn execute_current_action(
                 ActionOutcome {
                     food_consumed: 0,
                     world_changed: gathered > 0,
+                    food_share_attempt: None,
                 }
             } else {
                 ActionOutcome::default()
@@ -129,6 +140,7 @@ pub(super) fn execute_current_action(
             ActionOutcome {
                 food_consumed: consumed,
                 world_changed: false,
+                food_share_attempt: None,
             }
         }
         Action::Wait => {
@@ -307,6 +319,73 @@ pub(super) fn execute_current_action(
             entity.mind.advance_action();
             entity.activity = EntityActivity::Socializing;
             ActionOutcome::default()
+        }
+        Action::ShareFood(target_id) => {
+            // Require the target to be currently visible — no omniscience
+            if entity
+                .mind
+                .visible_entities
+                .binary_search(&target_id)
+                .is_err()
+            {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.activity = EntityActivity::Idle;
+                return ActionOutcome::default();
+            }
+
+            let Some(snapshot) = population.iter().find(|s| s.id == target_id) else {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.activity = EntityActivity::Idle;
+                return ActionOutcome::default();
+            };
+
+            let origin = (entity.x, entity.y);
+            let target_pos = (snapshot.x, snapshot.y);
+
+            if super::mind::manhattan(origin, target_pos) > SOCIAL_RADIUS {
+                // Target moved out of range — replan
+                entity.movement_credit = 0.0;
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.mind.set_plan(
+                    Goal::ShareFood,
+                    vec![
+                        Action::ApproachEntity(target_id),
+                        Action::ShareFood(target_id),
+                    ],
+                    tick,
+                );
+                entity.activity = EntityActivity::Moving;
+                return ActionOutcome::default();
+            }
+
+            // Check if actor has food to share
+            if entity.inventory.amount(ItemKind::Food) < SHARE_FOOD_AMOUNT {
+                entity.movement_credit = 0.0;
+                entity.mind.advance_action();
+                entity.activity = EntityActivity::Idle;
+                return ActionOutcome::default();
+            }
+
+            entity.movement_credit = 0.0;
+            entity.mind.advance_action();
+            entity.activity = EntityActivity::Socializing;
+            ActionOutcome {
+                food_consumed: 0,
+                world_changed: false,
+                food_share_attempt: Some(FoodShareAttempt {
+                    actor_id: entity.id,
+                    target_id,
+                    actor_location: origin,
+                    amount: SHARE_FOOD_AMOUNT,
+                }),
+            }
         }
     }
 }

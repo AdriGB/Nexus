@@ -140,6 +140,7 @@ export interface EntityInfo {
     explore: number;
     rest: number;
     socialize: number;
+    share_food: number;
   };
   decision_explanation: {
     chosen_goal: EntityInfo["goal"];
@@ -186,6 +187,7 @@ interface SimulationEventBase {
   actor_id: number;
   target_id: number | null;
   related_entity_ids: number[];
+  refused?: boolean | null;
 }
 
 export interface InteractionEvent extends SimulationEventBase {
@@ -281,6 +283,32 @@ export interface AffinityChangeEvent extends SimulationEventBase {
   delta: number;
 }
 
+interface FoodShareEventBase extends SimulationEventBase {
+  target_id: number;
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
+  refused: boolean;
+}
+
+export interface FoodSharedEvent extends FoodShareEventBase {
+  kind: "food_shared";
+  cause: "food_shared";
+  amount: number;
+  refused: false;
+}
+
+export interface FoodShareRefusedEvent extends FoodShareEventBase {
+  kind: "food_share_refused";
+  cause: "food_share_refused";
+  amount: null;
+  refused: true;
+}
+
 export type SimulationEvent =
   | InteractionEvent
   | BirthEvent
@@ -288,7 +316,9 @@ export type SimulationEvent =
   | ConsumptionEvent
   | ResourceDiscoveryEvent
   | EncounterEvent
-  | AffinityChangeEvent;
+  | AffinityChangeEvent
+  | FoodSharedEvent
+  | FoodShareRefusedEvent;
 
 export interface EntityEventSummary {
   entity_id: number;

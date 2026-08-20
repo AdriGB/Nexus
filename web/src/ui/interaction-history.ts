@@ -88,6 +88,12 @@ function entityButton(id: number, label: string): string {
 }
 
 function eventDetails(event: SimulationEvent): string {
+  if (event.kind === "food_shared") {
+    return `shared ${event.amount ?? 0} food with #${event.target_id}`;
+  }
+  if (event.kind === "food_share_refused") {
+    return `refused to share food with #${event.target_id}`;
+  }
   if (event.kind === "interaction") {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Actor")}${affinityDelta(event.actor_affinity_delta)}</div>
       <div class="interaction-event-row">${entityButton(event.target_id!, "Target")}${affinityDelta(event.target_affinity_delta)}</div>
