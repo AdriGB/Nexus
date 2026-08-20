@@ -57,6 +57,24 @@ function decisionExplanation(entity: EntityInfo): string {
   }
 }
 
+export function renderInventorySection(
+  inventory: EntityInfo["inventory"],
+): string {
+  const contents = inventory.items.length
+    ? inventory.items
+        .map((item) => `${item.kind}: ${item.amount}`)
+        .join(" · ")
+    : "Empty";
+  return (
+    infoSectionTitle("Inventory") +
+    infoRow(
+      "Carrying capacity",
+      `${inventory.used_capacity} / ${inventory.capacity}`,
+    ) +
+    infoRow("Contents", contents)
+  );
+}
+
 function relationshipsSection(
   relationships: KnownRelationshipInfo[],
   tick: number,
@@ -177,5 +195,5 @@ export function syncEntityInspector(): void {
     infoRow("Utility: explore", entity.utilities.explore.toFixed(2)),
     infoRow("Utility: rest", entity.utilities.rest.toFixed(2)),
     infoRow("Utility: socialize", entity.utilities.socialize.toFixed(2)),
-  ].join("") + relationshipsHtml;
+  ].join("") + renderInventorySection(entity.inventory) + relationshipsHtml;
 }

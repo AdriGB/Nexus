@@ -87,6 +87,17 @@ mod tests {
     }
 
     #[test]
+    fn founder_inventory_serializes_with_stable_empty_shape() {
+        let (_, entity, _, _) = payloads();
+        let json: serde_json::Value = serde_json::from_str(&entity).unwrap();
+
+        assert_eq!(json["inventory"]["capacity"], 50);
+        assert_eq!(json["inventory"]["used_capacity"], 0);
+        assert_eq!(json["inventory"]["remaining_capacity"], 50);
+        assert_eq!(json["inventory"]["items"], serde_json::json!([]));
+    }
+
+    #[test]
     fn relationships_json_of_empty_memory_serializes_as_empty_array() {
         let grid = test_grid();
         let simulation = Simulation::with_population(42, &grid, 1);

@@ -1,4 +1,5 @@
 use super::autonomy::Mind;
+use super::Inventory;
 
 /// Five deterministic psychological traits, each in [0.0, 1.0].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -77,6 +78,7 @@ pub struct Entity {
     pub movement_credit: f32,
     pub caregiver_id: Option<u32>,
     pub personality: Personality,
+    pub inventory: Inventory,
 }
 
 impl Entity {
