@@ -10,6 +10,12 @@ export interface IWorldBridge {
   simulation_world_revision(): bigint;
   entity_count(): number;
   spawn_entities(count: number): number;
+  transfer_inventory_item(
+    sourceId: number,
+    targetId: number,
+    kind: "food" | "timber" | "stone" | "iron",
+    quantity: number,
+  ): number;
   population_stats(): string;
   first_entity_info(): string;
   first_entity_relationships(): string;
