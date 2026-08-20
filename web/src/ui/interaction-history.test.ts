@@ -27,6 +27,7 @@ function event(
 ): InteractionEvent {
   return {
     id: id.toString(),
+    caused_by_event_id: null,
     tick: "48",
     relative_time: "just now",
     location: { x: 4, y: 7 },
@@ -49,6 +50,7 @@ function event(
 function birth(): BirthEvent {
   return {
     id: "6",
+    caused_by_event_id: null,
     tick: "49",
     relative_time: "just now",
     location: { x: 5, y: 7 },
@@ -98,6 +100,7 @@ describe("event history export", () => {
 function death(cause: DeathEvent["cause"]): DeathEvent {
   return {
     id: "7",
+    caused_by_event_id: null,
     tick: "50",
     relative_time: "just now",
     location: { x: 8, y: 9 },
@@ -120,6 +123,7 @@ function death(cause: DeathEvent["cause"]): DeathEvent {
 function consumption(): ConsumptionEvent {
   return {
     id: "9",
+    caused_by_event_id: null,
     tick: "51",
     relative_time: "just now",
     location: { x: 2, y: 4 },
@@ -142,6 +146,7 @@ function consumption(): ConsumptionEvent {
 function discovery(): ResourceDiscoveryEvent {
   return {
     id: "10",
+    caused_by_event_id: null,
     tick: "52",
     relative_time: "just now",
     location: { x: 6, y: 3 },
@@ -164,6 +169,7 @@ function discovery(): ResourceDiscoveryEvent {
 function encounter(): EncounterEvent {
   return {
     id: "11",
+    caused_by_event_id: null,
     tick: "53",
     relative_time: "just now",
     location: { x: 3, y: 5 },
@@ -188,6 +194,7 @@ function affinityChange(
 ): AffinityChangeEvent {
   return {
     id: "12",
+    caused_by_event_id: cause === "mutual_social_contact" ? "1" : null,
     tick: "54",
     relative_time: "just now",
     location: { x: 3, y: 5 },
@@ -321,6 +328,9 @@ describe("interaction history", () => {
     expect(html).toContain("Affinity: 99 → 103 (+4)");
     expect(html).toContain("Social interaction");
     expect(html).toContain("Relationship decay");
+    expect(html).toContain('data-event-target-id="1"');
+    expect(html).toContain("Caused by");
+    expect(html).toContain("Event #1");
     expect(filterInteractionEvents([social], 2)).toHaveLength(1);
     expect(filterInteractionEvents([social], 7)).toHaveLength(1);
     expect(filterInteractionEvents([social], 8)).toHaveLength(0);
