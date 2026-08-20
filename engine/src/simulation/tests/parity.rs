@@ -59,6 +59,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
         assert_eq!(a.pregnancy, b.pregnancy);
         assert_eq!(a.postpartum_until_tick, b.postpartum_until_tick);
         assert_eq!(a.personality, b.personality);
+        assert_eq!(a.inventory, b.inventory);
 
         // Mind state
         assert_eq!(a.mind.perception_radius, b.mind.perception_radius);

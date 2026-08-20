@@ -1,7 +1,21 @@
 use serde::Serialize;
 
 use super::to_json;
-use crate::simulation::{self, Entity, LifeStage, Personality};
+use crate::simulation::{self, Entity, ItemKind, LifeStage, Personality};
+
+#[derive(Serialize)]
+struct InventoryItemDto {
+    kind: &'static str,
+    amount: u16,
+}
+
+#[derive(Serialize)]
+struct InventoryDto {
+    capacity: u16,
+    used_capacity: u16,
+    remaining_capacity: u16,
+    items: Vec<InventoryItemDto>,
+}
 
 #[derive(Serialize)]
 struct UtilityScoresDto {
@@ -71,6 +85,7 @@ struct EntityInfoDto {
     stage_movement_factor: f32,
     caregiver_id: Option<u32>,
     personality: PersonalityDto,
+    inventory: InventoryDto,
 }
 
 pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
@@ -130,6 +145,21 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         stage_movement_factor: life_stage.movement_factor(),
         caregiver_id: entity.caregiver_id,
         personality: entity.personality.into(),
+        inventory: InventoryDto {
+            capacity: entity.inventory.capacity(),
+            used_capacity: entity.inventory.used_capacity(),
+            remaining_capacity: entity.inventory.remaining_capacity(),
+            items: ItemKind::ALL
+                .into_iter()
+                .filter_map(|kind| {
+                    let amount = entity.inventory.amount(kind);
+                    (amount > 0).then_some(InventoryItemDto {
+                        kind: kind.label(),
+                        amount,
+                    })
+                })
+                .collect(),
+        },
     })
 }
 

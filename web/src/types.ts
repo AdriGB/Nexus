@@ -144,6 +144,15 @@ export interface EntityInfo {
       | "dependent_needs_food"
       | "dependent_follows_caregiver";
   } | null;
+  inventory: {
+    capacity: number;
+    used_capacity: number;
+    remaining_capacity: number;
+    items: Array<{
+      kind: "Food" | "Timber" | "Stone" | "Iron";
+      amount: number;
+    }>;
+  };
 }
 
 export interface KnownRelationshipInfo {

@@ -3,6 +3,7 @@ mod config;
 mod dependents;
 mod entity;
 mod events;
+mod inventory;
 mod lifecycle;
 mod physiology;
 mod pipeline;
@@ -20,6 +21,7 @@ pub use self::events::{
     SimulationEventKind,
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
+pub use self::inventory::{Inventory, ItemKind};
 use self::lifecycle::{
     founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
     spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
@@ -270,6 +272,7 @@ impl Simulation {
             movement_credit: 0.0,
             caregiver_id: None,
             personality: personality_for(self.seed, id),
+            inventory: Inventory::default(),
         });
         Some(id)
     }
