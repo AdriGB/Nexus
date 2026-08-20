@@ -373,6 +373,35 @@ pub struct UtilityScores {
     pub socialize: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecisionReason {
+    HighestUtility,
+    GoalPersistence,
+    DependentNeedsFood,
+    DependentFollowsCaregiver,
+}
+
+impl DecisionReason {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::HighestUtility => "highest_utility",
+            Self::GoalPersistence => "goal_persistence",
+            Self::DependentNeedsFood => "dependent_needs_food",
+            Self::DependentFollowsCaregiver => "dependent_follows_caregiver",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DecisionExplanation {
+    pub chosen_goal: Goal,
+    pub highest_utility_goal: Goal,
+    pub chosen_score: f32,
+    pub highest_score: f32,
+    pub switch_margin: f32,
+    pub reason: DecisionReason,
+}
+
 #[derive(Clone, Debug)]
 pub struct Mind {
     pub perception_radius: u32,
@@ -382,6 +411,7 @@ pub struct Mind {
     pub plan_index: usize,
     pub goal_since_tick: u64,
     pub utility_scores: UtilityScores,
+    pub decision_explanation: Option<DecisionExplanation>,
     pub visible_entities: Vec<u32>,
 }
 
@@ -395,6 +425,7 @@ impl Default for Mind {
             plan_index: 0,
             goal_since_tick: 0,
             utility_scores: UtilityScores::default(),
+            decision_explanation: None,
             visible_entities: Vec::new(),
         }
     }
