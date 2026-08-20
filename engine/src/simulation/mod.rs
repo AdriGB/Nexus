@@ -445,6 +445,9 @@ impl Simulation {
     }
 
     fn process_food_share_attempts(&mut self, attempts: Vec<autonomy::FoodShareAttempt>) {
+        const GRATITUDE_DELTA: i16 = 20;
+        const RESENTMENT_DELTA: i16 = -15;
+
         for attempt in attempts {
             let Ok(actor_index) = self
                 .entities
@@ -452,7 +455,7 @@ impl Simulation {
             else {
                 continue;
             };
-            let Ok(_target_index) = self
+            let Ok(target_index) = self
                 .entities
                 .binary_search_by_key(&attempt.target_id, |entity| entity.id)
             else {
@@ -481,7 +484,7 @@ impl Simulation {
             };
 
             if moved > 0 {
-                self.push_event(PendingSimulationEvent {
+                let event_id = self.push_event(PendingSimulationEvent {
                     caused_by_event_id: None,
                     tick: self.tick,
                     location: EventLocation {
@@ -495,8 +498,24 @@ impl Simulation {
                     cause: SimulationEventCause::FoodShared,
                     details: SimulationEventDetails::FoodShared { amount: moved },
                 });
+                let target_location =
+                    (self.entities[target_index].x, self.entities[target_index].y);
+                if let Some(change) = autonomy::record_directed_affinity(
+                    &mut self.entities[target_index],
+                    attempt.actor_id,
+                    self.tick,
+                    GRATITUDE_DELTA,
+                ) {
+                    self.record_affinity_change(
+                        attempt.target_id,
+                        target_location,
+                        change,
+                        SimulationEventCause::FoodShared,
+                        Some(event_id),
+                    );
+                }
             } else {
-                self.push_event(PendingSimulationEvent {
+                let event_id = self.push_event(PendingSimulationEvent {
                     caused_by_event_id: None,
                     tick: self.tick,
                     location: EventLocation {
@@ -510,6 +529,22 @@ impl Simulation {
                     cause: SimulationEventCause::FoodShareRefused,
                     details: SimulationEventDetails::FoodShareRefused,
                 });
+                let target_location =
+                    (self.entities[target_index].x, self.entities[target_index].y);
+                if let Some(change) = autonomy::record_directed_affinity(
+                    &mut self.entities[target_index],
+                    attempt.actor_id,
+                    self.tick,
+                    RESENTMENT_DELTA,
+                ) {
+                    self.record_affinity_change(
+                        attempt.target_id,
+                        target_location,
+                        change,
+                        SimulationEventCause::FoodShareRefused,
+                        Some(event_id),
+                    );
+                }
             }
         }
     }
