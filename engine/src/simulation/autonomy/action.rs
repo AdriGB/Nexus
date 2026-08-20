@@ -5,14 +5,21 @@ use super::super::config::{
     PREGNANCY_SPEED_PHASE_3, PREGNANCY_SPEED_PHASE_4,
 };
 use super::super::entity::{Entity, EntityActivity, LifeStage};
+use super::super::inventory::ItemKind;
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_WEEK;
-use super::mind::{Action, Goal};
+use super::mind::{Action, Goal, GATHER_AMOUNT, GATHER_DURATION_TICKS};
 use super::social::SOCIAL_RADIUS;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
 const REST_HEALTH_PER_TICK: f32 = 0.25;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(in crate::simulation) struct ActionOutcome {
+    pub food_consumed: u16,
+    pub world_changed: bool,
+}
 
 pub(in crate::simulation) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
     let stage_factor = LifeStage::from_age_ticks(entity.age_ticks).movement_factor();
@@ -43,10 +50,10 @@ pub(super) fn execute_current_action(
     tick: u64,
     population: &[EntitySnapshot],
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> u16 {
+) -> ActionOutcome {
     let Some(action) = entity.mind.current_action() else {
         entity.activity = EntityActivity::Idle;
-        return 0;
+        return ActionOutcome::default();
     };
     match action {
         Action::MoveTo(_, _) | Action::ExploreArea(_, _) => {
@@ -61,7 +68,8 @@ pub(super) fn execute_current_action(
                     entity.mind.clear_goal();
                     entity.path.clear();
                     entity.path_index = 0;
-                    return 0;
+                    entity.action_tick = 0;
+                    return ActionOutcome::default();
                 };
 
                 if entity.movement_credit >= step_cost {
@@ -80,28 +88,48 @@ pub(super) fn execute_current_action(
                 entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
+                entity.action_tick = 0;
                 entity.mind.advance_action();
                 if action.destination().is_some() && entity.mind.current_goal == Some(Goal::Explore)
                 {
                     entity.activity = EntityActivity::Idle;
                 }
             }
-            0
+            ActionOutcome::default()
+        }
+        Action::Gather(kind) => {
+            entity.movement_credit = 0.0;
+            entity.activity = EntityActivity::SeekingFood;
+
+            if entity.action_tick == 0 {
+                // Starting a new gather action
+                entity.action_tick = 1;
+            } else {
+                entity.action_tick = entity.action_tick.saturating_add(1);
+            }
+
+            if entity.action_tick >= GATHER_DURATION_TICKS {
+                let gathered = gather_resource(entity, world, kind, tick);
+                entity.action_tick = 0;
+                entity.mind.advance_action();
+                entity.activity = EntityActivity::Idle;
+                ActionOutcome {
+                    food_consumed: 0,
+                    world_changed: gathered > 0,
+                }
+            } else {
+                ActionOutcome::default()
+            }
         }
         Action::Consume(kind) => {
             entity.movement_credit = 0.0;
-            let consumed = consume_food(entity, world);
-            let position = (entity.x, entity.y);
-            let amount = world.resources[(entity.y * world.width + entity.x) as usize]
-                .filter(|deposit| deposit.kind == kind)
-                .map_or(0, |deposit| deposit.amount);
-            entity
-                .mind
-                .memory
-                .update_known_amount(position, kind, amount, tick);
+            let consumed = consume_food_from_inventory(entity, kind);
             entity.mind.advance_action();
             entity.activity = EntityActivity::Idle;
-            consumed
+            ActionOutcome {
+                food_consumed: consumed,
+                world_changed: false,
+            }
         }
         Action::Wait => {
             entity.movement_credit = 0.0;
@@ -110,7 +138,7 @@ pub(super) fn execute_current_action(
             }
             entity.mind.advance_action();
             entity.activity = EntityActivity::Resting;
-            0
+            ActionOutcome::default()
         }
         Action::ApproachEntity(target_id) => {
             let origin = (entity.x, entity.y);
@@ -146,7 +174,7 @@ pub(super) fn execute_current_action(
                 entity.mind.clear_goal();
                 entity.path.clear();
                 entity.path_index = 0;
-                return 0;
+                return ActionOutcome::default();
             };
 
             // Already close enough?
@@ -164,7 +192,7 @@ pub(super) fn execute_current_action(
                     entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }
-                return 0;
+                return ActionOutcome::default();
             }
 
             // Replan path to target position
@@ -192,7 +220,7 @@ pub(super) fn execute_current_action(
                     entity.mind.clear_goal();
                     entity.path.clear();
                     entity.path_index = 0;
-                    return 0;
+                    return ActionOutcome::default();
                 };
 
                 if entity.movement_credit >= step_cost {
@@ -228,7 +256,7 @@ pub(super) fn execute_current_action(
                     entity.activity = EntityActivity::Idle;
                 }
             }
-            0
+            ActionOutcome::default()
         }
         Action::Interact(target_id) => {
             // Require the target to be currently visible — no omniscience
@@ -243,7 +271,7 @@ pub(super) fn execute_current_action(
                 entity.path.clear();
                 entity.path_index = 0;
                 entity.activity = EntityActivity::Idle;
-                return 0;
+                return ActionOutcome::default();
             }
 
             let Some(snapshot) = population.iter().find(|s| s.id == target_id) else {
@@ -252,7 +280,7 @@ pub(super) fn execute_current_action(
                 entity.path.clear();
                 entity.path_index = 0;
                 entity.activity = EntityActivity::Idle;
-                return 0;
+                return ActionOutcome::default();
             };
 
             let origin = (entity.x, entity.y);
@@ -272,18 +300,18 @@ pub(super) fn execute_current_action(
                     tick,
                 );
                 entity.activity = EntityActivity::Moving;
-                return 0;
+                return ActionOutcome::default();
             }
 
             entity.movement_credit = 0.0;
             entity.mind.advance_action();
             entity.activity = EntityActivity::Socializing;
-            0
+            ActionOutcome::default()
         }
     }
 }
 
-fn consume_food(entity: &mut Entity, world: &mut Grid) -> u16 {
+fn gather_resource(entity: &mut Entity, world: &mut Grid, kind: ResourceKind, tick: u64) -> u16 {
     let index = (entity.y * world.width + entity.x) as usize;
     let Some(slot) = world.resources.get_mut(index) else {
         return 0;
@@ -291,16 +319,46 @@ fn consume_food(entity: &mut Entity, world: &mut Grid) -> u16 {
     let Some(deposit) = slot.as_mut() else {
         return 0;
     };
-    if deposit.kind != ResourceKind::Food {
+    if deposit.kind != kind {
         return 0;
     }
 
-    let consumed = deposit.amount.min(FOOD_CONSUMED_PER_MEAL);
-    deposit.amount -= consumed;
-    let meal_fraction = f32::from(consumed) / f32::from(FOOD_CONSUMED_PER_MEAL);
-    entity.hunger = (entity.hunger - HUNGER_REDUCTION_PER_MEAL * meal_fraction).max(0.0);
+    let available_space = entity.inventory.remaining_capacity();
+    if available_space == 0 {
+        return 0;
+    }
+
+    let gathered = deposit.amount.min(GATHER_AMOUNT).min(available_space);
+    deposit.amount -= gathered;
+    entity.inventory.add(item_kind(kind), gathered);
+
+    let position = (entity.x, entity.y);
+    let amount = deposit.amount;
+    entity
+        .mind
+        .memory
+        .update_known_amount(position, kind, amount, tick);
+
     if deposit.amount == 0 {
         *slot = None;
     }
+    gathered
+}
+
+fn consume_food_from_inventory(entity: &mut Entity, kind: ResourceKind) -> u16 {
+    let consumed = entity
+        .inventory
+        .remove(item_kind(kind), FOOD_CONSUMED_PER_MEAL);
+    let meal_fraction = f32::from(consumed) / f32::from(FOOD_CONSUMED_PER_MEAL);
+    entity.hunger = (entity.hunger - HUNGER_REDUCTION_PER_MEAL * meal_fraction).max(0.0);
     consumed
+}
+
+const fn item_kind(kind: ResourceKind) -> ItemKind {
+    match kind {
+        ResourceKind::Food => ItemKind::Food,
+        ResourceKind::Timber => ItemKind::Timber,
+        ResourceKind::Stone => ItemKind::Stone,
+        ResourceKind::Iron => ItemKind::Iron,
+    }
 }

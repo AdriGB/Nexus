@@ -26,12 +26,15 @@ pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;
+pub(super) use self::action::ActionOutcome;
 pub(in crate::simulation) use self::decision::DecisionContext;
+pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
 pub(in crate::simulation) use self::social::SocialInteraction;
 
 use super::entity::Entity;
+use super::inventory::ItemKind;
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
@@ -51,7 +54,7 @@ pub(super) fn update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-) -> (u16, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
+) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
     let position = (entity.x, entity.y);
     let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
     let encounters = perception::perceive_entities(
@@ -65,7 +68,10 @@ pub(super) fn update_entity(
     decision::invalidate_obsolete_food_plan(entity);
 
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
-        && entity.mind.current_goal != Some(Goal::Eat)
+        && !matches!(
+            entity.mind.current_goal,
+            Some(Goal::Eat | Goal::AcquireResource)
+        )
         && !entity
             .mind
             .remembered_food_targets(position, tick)
@@ -74,6 +80,7 @@ pub(super) fn update_entity(
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
+        entity.action_tick = 0;
     }
 
     if entity.mind.current_action().is_none() {
@@ -89,6 +96,7 @@ pub(super) fn update_entity(
             DecisionContext {
                 tick,
                 origin: position,
+                food_in_inventory: entity.inventory.amount(ItemKind::Food),
             },
         );
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);

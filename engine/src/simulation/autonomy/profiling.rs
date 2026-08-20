@@ -1,4 +1,5 @@
 use super::super::entity::{Entity, LifeStage};
+use super::super::inventory::ItemKind;
 use super::super::spatial::{EntitySnapshot, SpatialGrid};
 use super::action::execute_current_action;
 use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal, DecisionContext};
@@ -15,6 +16,7 @@ const PROFILE_SAMPLE_RATE: usize = 4;
 
 type ProfileAutonomyResult = (
     u64,
+    bool,
     AutonomyProfile,
     Vec<(u32, u16)>,
     Vec<ResourceDiscovery>,
@@ -48,7 +50,11 @@ fn profiled_update_entity(
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
     profile: &mut AutonomyProfile,
-) -> (u16, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
+) -> (
+    super::ActionOutcome,
+    Vec<ResourceDiscovery>,
+    Vec<EntityEncounter>,
+) {
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
@@ -83,7 +89,10 @@ fn profiled_update_entity(
     invalidate_obsolete_food_plan(entity);
 
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
-        && entity.mind.current_goal != Some(Goal::Eat)
+        && !matches!(
+            entity.mind.current_goal,
+            Some(Goal::Eat | Goal::AcquireResource)
+        )
         && !entity
             .mind
             .remembered_food_targets(position, tick)
@@ -93,6 +102,7 @@ fn profiled_update_entity(
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
+        entity.action_tick = 0;
     }
     profile.plan_validation_us += start.elapsed().as_micros() as u64;
 
@@ -111,6 +121,7 @@ fn profiled_update_entity(
             DecisionContext {
                 tick,
                 origin: position,
+                food_in_inventory: entity.inventory.amount(ItemKind::Food),
             },
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
@@ -118,11 +129,11 @@ fn profiled_update_entity(
     }
 
     let start = Instant::now();
-    let consumed = execute_current_action(entity, world, tick, population, pathfinding_workspace);
+    let outcome = execute_current_action(entity, world, tick, population, pathfinding_workspace);
     profile.action_us += start.elapsed().as_micros() as u64;
     profile.sampled_entities += 1;
 
-    (consumed, discoveries, encounters)
+    (outcome, discoveries, encounters)
 }
 
 pub(crate) fn profile_autonomy(
@@ -135,6 +146,7 @@ pub(crate) fn profile_autonomy(
 ) -> ProfileAutonomyResult {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
+    let mut world_changed = false;
     let mut consumer_ids = Vec::new();
     let mut discoveries = Vec::new();
     let mut encounters = Vec::new();
@@ -169,10 +181,11 @@ pub(crate) fn profile_autonomy(
         discoveries.extend(entity_discoveries);
         encounters.extend(entity_encounters);
 
-        if result > 0 {
-            consumer_ids.push((entity.id, result));
+        if result.food_consumed > 0 {
+            consumer_ids.push((entity.id, result.food_consumed));
         }
-        consumed += u64::from(result);
+        consumed += u64::from(result.food_consumed);
+        world_changed |= result.world_changed;
     }
 
     let social_start = Instant::now();
@@ -181,6 +194,7 @@ pub(crate) fn profile_autonomy(
 
     (
         consumed,
+        world_changed,
         profile,
         consumer_ids,
         discoveries,

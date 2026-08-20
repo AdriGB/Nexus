@@ -208,18 +208,18 @@ Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 
 ## Gathering
 
-* [ ] Goal `AcquireResource`
-* [ ] Acción `Gather`
-* [ ] Duración de recolección
+* [x] Goal `AcquireResource`
+* [x] Acción `Gather`
+* [x] Duración de recolección
 * [ ] Herramientas opcionales
-* [ ] Agotamiento de depósitos
-* [ ] Memoria de lugares productivos
+* [x] Agotamiento de depósitos
+* [x] Memoria de lugares productivos
 
 ## Food cycle
 
-* [ ] Recolectar comida
-* [ ] Transportar comida
-* [ ] Consumir desde el inventario
+* [x] Recolectar comida
+* [x] Transportar comida
+* [x] Consumir desde el inventario
 * [ ] Compartir comida
 * [ ] Alimentar dependientes
 * [ ] Regeneración limitada de recursos renovables

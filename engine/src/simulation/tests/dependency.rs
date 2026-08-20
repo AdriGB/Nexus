@@ -114,7 +114,9 @@ fn caregiver_feeds_infant() {
     let infant = simulation.entities.last_mut().unwrap();
     infant.caregiver_id = Some(caregiver_id);
     infant.hunger = 80.0;
-    simulation.step(&mut world);
+    for _ in 0..11 {
+        simulation.step(&mut world);
+    }
 
     let infant = simulation
         .entities()
@@ -137,14 +139,16 @@ fn caregiver_feeds_infant_proportionally() {
     let infant = simulation.entities.last_mut().unwrap();
     infant.caregiver_id = Some(caregiver_id);
     infant.hunger = 80.0;
-    simulation.step(&mut world);
+    for _ in 0..11 {
+        simulation.step(&mut world);
+    }
 
     let infant = simulation
         .entities()
         .iter()
         .find(|entity| entity.id == infant_id)
         .unwrap();
-    let expected = 80.0 + HUNGER_PER_TICK
+    let expected = 80.0 + HUNGER_PER_TICK * 11.0
         - HUNGER_REDUCTION_PER_MEAL * (3.0 / f32::from(FOOD_CONSUMED_PER_MEAL));
     assert!((infant.hunger - expected).abs() < 0.001);
 }

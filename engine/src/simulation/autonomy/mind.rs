@@ -10,11 +10,17 @@ pub(super) const KNOWLEDGE_CHUNK_SIZE: u32 = 8;
 pub(super) const FAILED_EXPLORATION_RETRY_TICKS: u64 = 240;
 pub(in crate::simulation) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
 
+/// Ticks required to complete a gathering action.
+pub(crate) const GATHER_DURATION_TICKS: u32 = 10;
+/// Amount of resource gathered per successful gathering action.
+pub(in crate::simulation) const GATHER_AMOUNT: u16 = 10;
+
 type RememberedFoodTargets = BinaryHeap<Reverse<(u32, u64, (u32, u32))>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Goal {
     Eat,
+    AcquireResource,
     Explore,
     Follow,
     Rest,
@@ -25,6 +31,7 @@ impl Goal {
     pub fn label(self) -> &'static str {
         match self {
             Self::Eat => "Eat",
+            Self::AcquireResource => "Acquire Resource",
             Self::Explore => "Explore",
             Self::Follow => "Follow",
             Self::Rest => "Rest",
@@ -36,6 +43,7 @@ impl Goal {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     MoveTo(u32, u32),
+    Gather(ResourceKind),
     Consume(ResourceKind),
     ExploreArea(u32, u32),
     Wait,
@@ -47,6 +55,7 @@ impl Action {
     pub fn label(self) -> &'static str {
         match self {
             Self::MoveTo(_, _) => "Move to target",
+            Self::Gather(_) => "Gather resource",
             Self::Consume(_) => "Consume resource",
             Self::ExploreArea(_, _) => "Explore area",
             Self::Wait => "Wait",
@@ -58,7 +67,11 @@ impl Action {
     pub fn destination(self) -> Option<(u32, u32)> {
         match self {
             Self::MoveTo(x, y) | Self::ExploreArea(x, y) => Some((x, y)),
-            Self::Consume(_) | Self::Wait | Self::ApproachEntity(_) | Self::Interact(_) => None,
+            Self::Gather(_)
+            | Self::Consume(_)
+            | Self::Wait
+            | Self::ApproachEntity(_)
+            | Self::Interact(_) => None,
         }
     }
 
@@ -368,6 +381,7 @@ impl Memory {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct UtilityScores {
     pub eat: f32,
+    pub acquire_resource: f32,
     pub explore: f32,
     pub rest: f32,
     pub socialize: f32,
@@ -467,6 +481,29 @@ impl Mind {
                 known.kind == ResourceKind::Food
                     && known.estimated_amount > 0
                     && tick >= known.avoid_until_tick
+            })
+            .map(|known| {
+                let distance = manhattan(origin, (known.x, known.y));
+                let age = tick.saturating_sub(known.last_seen_tick);
+                Reverse((distance, age, (known.x, known.y)))
+            })
+            .collect();
+
+        BinaryHeap::from(targets)
+    }
+
+    pub fn remembered_resource_targets(
+        &self,
+        origin: (u32, u32),
+        tick: u64,
+        kind: ResourceKind,
+    ) -> RememberedFoodTargets {
+        let targets: Vec<_> = self
+            .memory
+            .known_resources
+            .iter()
+            .filter(|known| {
+                known.kind == kind && known.estimated_amount > 0 && tick >= known.avoid_until_tick
             })
             .map(|known| {
                 let distance = manhattan(origin, (known.x, known.y));

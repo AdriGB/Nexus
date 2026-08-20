@@ -36,12 +36,15 @@ fn entity_remembers_seen_food_and_interrupts_exploration_when_hungry() {
 
     simulation.entities[0].hunger = URGENT_HUNGER_THRESHOLD;
     simulation.step(&mut world);
-    assert_eq!(simulation.entities()[0].mind.current_goal, Some(Goal::Eat));
+    assert_eq!(
+        simulation.entities()[0].mind.current_goal,
+        Some(Goal::AcquireResource)
+    );
     assert!(simulation.entities()[0]
         .mind
         .current_plan
         .iter()
-        .any(|action| matches!(action, Action::Consume(ResourceKind::Food))));
+        .any(|action| matches!(action, Action::Gather(ResourceKind::Food))));
 }
 
 #[test]

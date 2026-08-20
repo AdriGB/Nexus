@@ -20,6 +20,7 @@ struct InventoryDto {
 #[derive(Serialize)]
 struct UtilityScoresDto {
     eat: f32,
+    acquire_resource: f32,
     explore: f32,
     rest: f32,
     socialize: f32,
@@ -73,6 +74,8 @@ struct EntityInfoDto {
     remaining_path: usize,
     goal: &'static str,
     action: &'static str,
+    action_progress_ticks: u32,
+    action_duration_ticks: Option<u32>,
     goal_age_ticks: u64,
     known_resources: usize,
     known_entities: usize,
@@ -119,6 +122,12 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         remaining_path: entity.remaining_path_len(),
         goal,
         action,
+        action_progress_ticks: entity.action_tick,
+        action_duration_ticks: matches!(
+            entity.mind.current_action(),
+            Some(simulation::Action::Gather(_))
+        )
+        .then_some(simulation::GATHER_DURATION_TICKS),
         goal_age_ticks,
         known_resources: entity.mind.memory.known_resources.len(),
         known_entities: entity.mind.memory.known_entities.len(),
@@ -126,6 +135,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         visible_entities: entity.mind.visible_entities.len(),
         utilities: UtilityScoresDto {
             eat: entity.mind.utility_scores.eat,
+            acquire_resource: entity.mind.utility_scores.acquire_resource,
             explore: entity.mind.utility_scores.explore,
             rest: entity.mind.utility_scores.rest,
             socialize: entity.mind.utility_scores.socialize,
