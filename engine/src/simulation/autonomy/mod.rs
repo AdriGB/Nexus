@@ -27,6 +27,7 @@ pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;
 pub(super) use self::action::ActionOutcome;
+pub(in crate::simulation) use self::action::FoodShareAttempt;
 pub(in crate::simulation) use self::decision::DecisionContext;
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
@@ -85,6 +86,7 @@ pub(super) fn update_entity(
 
     if entity.mind.current_action().is_none() {
         let current_goal = entity.mind.current_goal;
+        let visible_food_need = visible_food_need(&entity.mind, population);
 
         let goal = evaluate_goals(
             &mut entity.mind,
@@ -97,6 +99,7 @@ pub(super) fn update_entity(
                 tick,
                 origin: position,
                 food_in_inventory: entity.inventory.amount(ItemKind::Food),
+                visible_food_need,
             },
         );
         decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
@@ -107,4 +110,13 @@ pub(super) fn update_entity(
         discoveries,
         encounters,
     )
+}
+
+fn visible_food_need(mind: &Mind, population: &[EntitySnapshot]) -> f32 {
+    population
+        .iter()
+        .filter(|snapshot| mind.visible_entities.binary_search(&snapshot.id).is_ok())
+        .map(|snapshot| snapshot.hunger / super::config::MAX_HUNGER)
+        .max_by(f32::total_cmp)
+        .unwrap_or(0.0)
 }

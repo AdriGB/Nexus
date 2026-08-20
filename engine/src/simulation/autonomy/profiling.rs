@@ -22,6 +22,7 @@ type ProfileAutonomyResult = (
     Vec<ResourceDiscovery>,
     Vec<EntityEncounter>,
     Vec<super::SocialInteraction>,
+    Vec<super::FoodShareAttempt>,
 );
 
 #[derive(Clone, Debug, Default)]
@@ -111,6 +112,7 @@ fn profiled_update_entity(
 
         let start = Instant::now();
         let current_goal = entity.mind.current_goal;
+        let visible_food_need = super::visible_food_need(&entity.mind, population);
         let goal = evaluate_goals(
             &mut entity.mind,
             entity.hunger,
@@ -122,6 +124,7 @@ fn profiled_update_entity(
                 tick,
                 origin: position,
                 food_in_inventory: entity.inventory.amount(ItemKind::Food),
+                visible_food_need,
             },
         );
         plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
@@ -150,6 +153,7 @@ pub(crate) fn profile_autonomy(
     let mut consumer_ids = Vec::new();
     let mut discoveries = Vec::new();
     let mut encounters = Vec::new();
+    let mut food_share_attempts = Vec::new();
 
     for (index, entity) in entities
         .iter_mut()
@@ -186,6 +190,9 @@ pub(crate) fn profile_autonomy(
         }
         consumed += u64::from(result.food_consumed);
         world_changed |= result.world_changed;
+        if let Some(attempt) = result.food_share_attempt {
+            food_share_attempts.push(attempt);
+        }
     }
 
     let social_start = Instant::now();
@@ -200,5 +207,6 @@ pub(crate) fn profile_autonomy(
         discoveries,
         encounters,
         interactions,
+        food_share_attempts,
     )
 }

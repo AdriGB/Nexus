@@ -263,6 +263,29 @@ mod tests {
     }
 
     #[test]
+    fn food_share_event_json_identifies_both_entities_and_outcome() {
+        let events = [SimulationEvent {
+            id: EventId::new(15),
+            caused_by_event_id: None,
+            tick: 40,
+            location: crate::simulation::EventLocation { x: 2, y: 3 },
+            actor_id: 4,
+            target_id: Some(7),
+            related_entity_ids: vec![4, 7],
+            kind: SimulationEventKind::FoodShared,
+            cause: SimulationEventCause::FoodShared,
+            details: SimulationEventDetails::FoodShared { amount: 10 },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 40, Some(7))).unwrap();
+        assert_eq!(payload[0]["kind"], "food_shared");
+        assert_eq!(payload[0]["target_id"], 7);
+        assert_eq!(payload[0]["amount"], 10);
+        assert_eq!(payload[0]["refused"], false);
+    }
+
+    #[test]
     fn discovery_event_json_includes_resource_observation() {
         let events = [SimulationEvent {
             id: EventId::new(13),

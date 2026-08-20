@@ -570,8 +570,18 @@ mod tests {
         mind.memory.known_entities.push(remembered_entity(2, 245));
         mind.memory.known_entities.push(remembered_entity(3, 230));
         let population = vec![
-            EntitySnapshot { id: 2, x: 12, y: 0 },
-            EntitySnapshot { id: 3, x: 2, y: 0 },
+            EntitySnapshot {
+                id: 2,
+                x: 12,
+                y: 0,
+                hunger: 0.0,
+            },
+            EntitySnapshot {
+                id: 3,
+                x: 2,
+                y: 0,
+                hunger: 0.0,
+            },
         ];
         (mind, population)
     }

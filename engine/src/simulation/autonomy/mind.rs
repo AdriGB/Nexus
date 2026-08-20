@@ -25,6 +25,7 @@ pub enum Goal {
     Follow,
     Rest,
     Socialize,
+    ShareFood,
 }
 
 impl Goal {
@@ -36,6 +37,7 @@ impl Goal {
             Self::Follow => "Follow",
             Self::Rest => "Rest",
             Self::Socialize => "Socialize",
+            Self::ShareFood => "Share Food",
         }
     }
 }
@@ -49,6 +51,7 @@ pub enum Action {
     Wait,
     ApproachEntity(u32),
     Interact(u32),
+    ShareFood(u32),
 }
 
 impl Action {
@@ -61,6 +64,7 @@ impl Action {
             Self::Wait => "Wait",
             Self::ApproachEntity(_) => "Approach entity",
             Self::Interact(_) => "Interact",
+            Self::ShareFood(_) => "Share food",
         }
     }
 
@@ -71,14 +75,15 @@ impl Action {
             | Self::Consume(_)
             | Self::Wait
             | Self::ApproachEntity(_)
-            | Self::Interact(_) => None,
+            | Self::Interact(_)
+            | Self::ShareFood(_) => None,
         }
     }
 
     #[cfg(test)]
     pub fn target_entity_id(self) -> Option<u32> {
         match self {
-            Self::ApproachEntity(id) | Self::Interact(id) => Some(id),
+            Self::ApproachEntity(id) | Self::Interact(id) | Self::ShareFood(id) => Some(id),
             _ => None,
         }
     }
@@ -385,6 +390,7 @@ pub struct UtilityScores {
     pub explore: f32,
     pub rest: f32,
     pub socialize: f32,
+    pub share_food: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

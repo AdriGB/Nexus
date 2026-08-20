@@ -24,6 +24,7 @@ struct UtilityScoresDto {
     explore: f32,
     rest: f32,
     socialize: f32,
+    share_food: f32,
 }
 
 #[derive(Serialize)]
@@ -139,6 +140,7 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
             explore: entity.mind.utility_scores.explore,
             rest: entity.mind.utility_scores.rest,
             socialize: entity.mind.utility_scores.socialize,
+            share_food: entity.mind.utility_scores.share_food,
         },
         decision_explanation: entity.mind.decision_explanation.map(|explanation| {
             DecisionExplanationDto {

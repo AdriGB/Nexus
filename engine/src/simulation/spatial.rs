@@ -1,10 +1,11 @@
 const SPATIAL_CELL_SIZE: u32 = 8;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct EntitySnapshot {
     pub id: u32,
     pub x: u32,
     pub y: u32,
+    pub hunger: f32,
 }
 
 #[derive(Clone, Debug, Default)]

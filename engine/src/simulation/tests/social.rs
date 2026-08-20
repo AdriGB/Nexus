@@ -152,8 +152,18 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
 
     let mut entities = vec![a, b];
     let population = vec![
-        super::super::spatial::EntitySnapshot { id: 1, x: 2, y: 2 },
-        super::super::spatial::EntitySnapshot { id: 2, x: 2, y: 3 },
+        super::super::spatial::EntitySnapshot {
+            id: 1,
+            x: 2,
+            y: 2,
+            hunger: 0.0,
+        },
+        super::super::spatial::EntitySnapshot {
+            id: 2,
+            x: 2,
+            y: 3,
+            hunger: 0.0,
+        },
     ];
     let interactions =
         super::super::autonomy::process_social_interactions(&mut entities, &population, 100);
@@ -471,6 +481,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
     let score_no_affinity = mind.utility_scores.socialize;
@@ -518,6 +529,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
     let score_with_affinity = mind.utility_scores.socialize;
@@ -825,6 +837,7 @@ fn socialize_utility_is_zero_without_candidates() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
 
@@ -1039,6 +1052,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
 
@@ -1061,6 +1075,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
     let visible_score = mind.utility_scores.socialize;
@@ -1078,6 +1093,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
+            visible_food_need: 0.0,
         },
     );
     let memory_only_score = mind.utility_scores.socialize;

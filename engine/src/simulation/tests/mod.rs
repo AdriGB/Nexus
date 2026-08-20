@@ -3,6 +3,7 @@ mod biology;
 mod core;
 mod dependency;
 mod events;
+mod food_sharing;
 mod inventory_transfer;
 mod movement;
 mod parity;

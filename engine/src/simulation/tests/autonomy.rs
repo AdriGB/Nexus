@@ -151,7 +151,12 @@ fn spatial_perception_matches_linear_brute_force() {
     for i in 0..100u32 {
         let x = (i * 7) % 64;
         let y = (i * 11) % 64;
-        population.push(EntitySnapshot { id: i, x, y });
+        population.push(EntitySnapshot {
+            id: i,
+            x,
+            y,
+            hunger: 0.0,
+        });
     }
 
     let mut spatial = SpatialGrid::default();
