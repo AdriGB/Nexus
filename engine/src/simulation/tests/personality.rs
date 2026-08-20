@@ -83,6 +83,7 @@ fn curious_entity_explores_more() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 10,
         },
     );
     evaluate_goals(
@@ -95,6 +96,7 @@ fn curious_entity_explores_more() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 10,
         },
     );
 
@@ -141,6 +143,7 @@ fn cautious_entity_rests_more_and_explores_less() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 10,
         },
     );
     evaluate_goals(
@@ -153,6 +156,7 @@ fn cautious_entity_rests_more_and_explores_less() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 10,
         },
     );
 
@@ -189,6 +193,7 @@ fn neutral_personality_preserves_base_utilities() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 10,
         },
     );
 
@@ -238,6 +243,7 @@ fn personality_does_not_affect_eat_utility() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
     evaluate_goals(
@@ -250,6 +256,7 @@ fn personality_does_not_affect_eat_utility() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
 
@@ -295,7 +302,10 @@ fn persistence_changes_goal_switch_after_plan_completion() {
     sim_low.step(&mut world_low);
     sim_high.step(&mut world_high);
 
-    assert_eq!(sim_low.entities()[0].mind.current_goal, Some(Goal::Eat));
+    assert_eq!(
+        sim_low.entities()[0].mind.current_goal,
+        Some(Goal::AcquireResource)
+    );
     assert_eq!(
         sim_high.entities()[0].mind.current_goal,
         Some(Goal::Explore)

@@ -116,6 +116,8 @@ export interface EntityInfo {
   remaining_path: number;
   goal: "None" | "Eat" | "Explore" | "Follow" | "Rest" | "Socialize";
   action: string;
+  action_progress_ticks: number;
+  action_duration_ticks: number | null;
   goal_age_ticks: number;
   known_resources: number;
   known_entities: number;
@@ -134,6 +136,7 @@ export interface EntityInfo {
   };
   utilities: {
     eat: number;
+    acquire_resource: number;
     explore: number;
     rest: number;
     socialize: number;

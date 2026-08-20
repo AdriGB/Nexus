@@ -13,6 +13,7 @@ const MAX_SWITCH_MARGIN: f32 = 0.15;
 pub(in crate::simulation) struct DecisionContext {
     pub tick: u64,
     pub origin: (u32, u32),
+    pub food_in_inventory: u16,
 }
 
 /// Maps persistence [0.0, 1.0] to the score margin required to abandon
@@ -34,7 +35,11 @@ pub fn evaluate_goals(
     current_goal: Option<Goal>,
     context: DecisionContext,
 ) -> Goal {
-    let DecisionContext { tick, origin } = context;
+    let DecisionContext {
+        tick,
+        origin,
+        food_in_inventory,
+    } = context;
     let stage = LifeStage::from_age_ticks(age_ticks);
 
     if stage == LifeStage::Child {
@@ -46,23 +51,37 @@ pub fn evaluate_goals(
                 .any(|known| known.kind == ResourceKind::Food && known.estimated_amount > 0)
         {
             mind.utility_scores = super::mind::UtilityScores {
-                eat: 1.0,
+                eat: if food_in_inventory > 0 { 1.0 } else { 0.0 },
+                acquire_resource: if food_in_inventory > 0 { 0.0 } else { 1.0 },
                 explore: 0.0,
                 rest: 0.0,
                 socialize: 0.0,
             };
             mind.decision_explanation = Some(DecisionExplanation {
-                chosen_goal: Goal::Eat,
-                highest_utility_goal: Goal::Eat,
+                chosen_goal: if food_in_inventory > 0 {
+                    Goal::Eat
+                } else {
+                    Goal::AcquireResource
+                },
+                highest_utility_goal: if food_in_inventory > 0 {
+                    Goal::Eat
+                } else {
+                    Goal::AcquireResource
+                },
                 chosen_score: 1.0,
                 highest_score: 1.0,
                 switch_margin: 0.0,
                 reason: DecisionReason::DependentNeedsFood,
             });
-            return Goal::Eat;
+            return if food_in_inventory > 0 {
+                Goal::Eat
+            } else {
+                Goal::AcquireResource
+            };
         }
         mind.utility_scores = super::mind::UtilityScores {
             eat: 0.0,
+            acquire_resource: 0.0,
             explore: 0.0,
             rest: 0.5,
             socialize: 0.0,
@@ -95,8 +114,19 @@ pub fn evaluate_goals(
     let caution_explore_factor = 1.15 - personality.caution * 0.30;
     let caution_rest_factor = 0.85 + personality.caution * 0.30;
 
-    // Socialize: meaningful when there are visible candidates OR remembered
-    // entities with high positive affinity that could be sought out.
+    let has_food_in_inventory = food_in_inventory > 0;
+
+    let acquire_resource_confidence = if mind
+        .memory
+        .known_resources
+        .iter()
+        .any(|known| known.kind == ResourceKind::Food && known.estimated_amount > 0)
+    {
+        1.0
+    } else {
+        0.25
+    };
+
     let socialize = {
         let has_visible = !mind.visible_entities.is_empty();
 
@@ -114,19 +144,27 @@ pub fn evaluate_goals(
             best_remembered_score.map(|score| (score as f32 / 1_000.0).clamp(0.1, 1.0));
 
         if has_visible {
-            // Visible candidates present — full utility
             sated_factor * 0.6 * sociability_factor
         } else if let Some(relationship_strength) = relationship_strength {
-            // No visible candidates but good relationships in memory
-            // Utility is reduced since target must be sought first
             sated_factor * (0.15 + relationship_strength * 0.45) * sociability_factor * 0.9
         } else {
             0.0
         }
     };
 
+    let acquire_resource = if has_food_in_inventory {
+        0.0
+    } else {
+        hunger_ratio * (0.7 + 0.3 * acquire_resource_confidence)
+    };
+
     mind.utility_scores = super::mind::UtilityScores {
-        eat: hunger_ratio * (0.65 + 0.35 * food_confidence),
+        eat: if has_food_in_inventory {
+            hunger_ratio * (0.65 + 0.35 * food_confidence)
+        } else {
+            0.0
+        },
+        acquire_resource,
         explore: ((1.0 - hunger_ratio) * 0.55 + (1.0 - food_confidence) * 0.2)
             * curiosity_factor
             * caution_explore_factor,
@@ -136,6 +174,7 @@ pub fn evaluate_goals(
 
     let scores = [
         (mind.utility_scores.eat, Goal::Eat),
+        (mind.utility_scores.acquire_resource, Goal::AcquireResource),
         (mind.utility_scores.explore, Goal::Explore),
         (mind.utility_scores.rest, Goal::Rest),
         (mind.utility_scores.socialize, Goal::Socialize),
@@ -176,7 +215,18 @@ pub fn evaluate_goals(
 }
 
 pub(super) fn invalidate_obsolete_food_plan(entity: &mut Entity) {
-    if entity.mind.current_goal != Some(Goal::Eat) {
+    if entity.mind.current_goal == Some(Goal::Eat) {
+        if entity
+            .inventory
+            .amount(super::super::inventory::ItemKind::Food)
+            == 0
+        {
+            entity.mind.clear_goal();
+            entity.action_tick = 0;
+        }
+        return;
+    }
+    if entity.mind.current_goal != Some(Goal::AcquireResource) {
         return;
     }
     let Some(target) = entity
@@ -196,6 +246,7 @@ pub(super) fn invalidate_obsolete_food_plan(entity: &mut Entity) {
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
+        entity.action_tick = 0;
     }
 }
 
@@ -262,7 +313,16 @@ pub(super) fn plan_goal(
     let origin = (entity.x, entity.y);
     match goal {
         Goal::Eat => {
-            let mut targets = entity.mind.remembered_food_targets(origin, tick);
+            entity.path.clear();
+            entity.path_index = 0;
+            entity
+                .mind
+                .set_plan(Goal::Eat, vec![Action::Consume(ResourceKind::Food)], tick);
+            entity.activity = super::super::entity::EntityActivity::SeekingFood;
+        }
+        Goal::AcquireResource => {
+            let kind = ResourceKind::Food;
+            let mut targets = entity.mind.remembered_resource_targets(origin, tick, kind);
             while let Some(std::cmp::Reverse((_, _, target))) = targets.pop() {
                 if let Some(path) = pathfinding::find_path_with_workspace(
                     pathfinding_workspace,
@@ -276,8 +336,8 @@ pub(super) fn plan_goal(
                     if target != origin {
                         actions.push(Action::MoveTo(target.0, target.1));
                     }
-                    actions.push(Action::Consume(ResourceKind::Food));
-                    entity.mind.set_plan(Goal::Eat, actions, tick);
+                    actions.push(Action::Gather(kind));
+                    entity.mind.set_plan(Goal::AcquireResource, actions, tick);
                     entity.activity = super::super::entity::EntityActivity::SeekingFood;
                     return;
                 }
@@ -338,6 +398,7 @@ mod tests {
             DecisionContext {
                 tick: 0,
                 origin: (0, 0),
+                food_in_inventory: 10,
             },
         );
         assert_eq!(goal, Goal::Eat);
@@ -368,6 +429,7 @@ mod tests {
             DecisionContext {
                 tick: 0,
                 origin: (0, 0),
+                food_in_inventory: 0,
             },
         );
         assert_eq!(goal, Goal::Explore);
@@ -410,6 +472,7 @@ mod tests {
             DecisionContext {
                 tick: 0,
                 origin: (0, 0),
+                food_in_inventory: 0,
             },
         );
 
@@ -445,10 +508,11 @@ mod tests {
             DecisionContext {
                 tick: 0,
                 origin: (0, 0),
+                food_in_inventory: 0,
             },
         );
 
-        assert_eq!(goal, Goal::Eat);
+        assert_eq!(goal, Goal::AcquireResource);
         assert_eq!(
             mind.decision_explanation
                 .expect("decision explanation")
@@ -477,6 +541,7 @@ mod tests {
             DecisionContext {
                 tick: 0,
                 origin: (0, 0),
+                food_in_inventory: 0,
             },
         );
 

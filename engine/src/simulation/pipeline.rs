@@ -12,9 +12,9 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     simulation.tick = simulation.tick.saturating_add(1);
     physiology::advance(&mut simulation.entities);
     dependents::clear_graduated_caregivers(&mut simulation.entities);
-    let consumed_this_tick = simulation.update_autonomy(world);
+    let (consumed_this_tick, world_changed) = simulation.update_autonomy(world);
     physiology::resolve_starvation(&mut simulation.entities);
-    simulation.record_resource_changes(consumed_this_tick);
+    simulation.record_resource_changes(consumed_this_tick, world_changed);
     simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
@@ -40,7 +40,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let population_index_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
-    let (consumed_this_tick, consumer_ids, discoveries, encounters, interactions) =
+    let (consumed_this_tick, world_changed, consumer_ids, discoveries, encounters, interactions) =
         simulation.run_autonomy(world);
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
@@ -58,7 +58,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let starvation_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
-    simulation.record_resource_changes(consumed_this_tick);
+    simulation.record_resource_changes(consumed_this_tick, world_changed);
     let resource_changes_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
@@ -105,15 +105,22 @@ pub(super) fn run_profiled_autonomy_step(
     let spatial_grid = &simulation.spatial_grid;
     let pathfinding_workspace = &mut simulation.pathfinding_workspace;
 
-    let (consumed_this_tick, profile, consumer_ids, discoveries, encounters, interactions) =
-        autonomy::profile_autonomy(
-            &mut simulation.entities,
-            world,
-            tick,
-            population_cache,
-            spatial_grid,
-            pathfinding_workspace,
-        );
+    let (
+        consumed_this_tick,
+        world_changed,
+        profile,
+        consumer_ids,
+        discoveries,
+        encounters,
+        interactions,
+    ) = autonomy::profile_autonomy(
+        &mut simulation.entities,
+        world,
+        tick,
+        population_cache,
+        spatial_grid,
+        pathfinding_workspace,
+    );
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
@@ -125,7 +132,7 @@ pub(super) fn run_profiled_autonomy_step(
     }
 
     physiology::resolve_starvation(&mut simulation.entities);
-    simulation.record_resource_changes(consumed_this_tick);
+    simulation.record_resource_changes(consumed_this_tick, world_changed);
     simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);

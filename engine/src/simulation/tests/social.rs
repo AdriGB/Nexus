@@ -470,6 +470,7 @@ fn socialize_utility_increases_with_positive_affinity() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
     let score_no_affinity = mind.utility_scores.socialize;
@@ -516,6 +517,7 @@ fn socialize_utility_increases_with_positive_affinity() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
     let score_with_affinity = mind.utility_scores.socialize;
@@ -822,6 +824,7 @@ fn socialize_utility_is_zero_without_candidates() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
 
@@ -1035,6 +1038,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
 
@@ -1056,6 +1060,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
     let visible_score = mind.utility_scores.socialize;
@@ -1072,6 +1077,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
         DecisionContext {
             tick: 0,
             origin: (0, 0),
+            food_in_inventory: 0,
         },
     );
     let memory_only_score = mind.utility_scores.socialize;
@@ -1522,7 +1528,7 @@ fn urgent_hunger_still_prioritizes_eating() {
 
     assert_eq!(
         sim.entities()[0].mind.current_goal,
-        Some(Goal::Eat),
+        Some(Goal::AcquireResource),
         "urgent hunger must keep the survival priority unchanged"
     );
 }

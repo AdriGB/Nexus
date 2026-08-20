@@ -185,6 +185,14 @@ export function syncEntityInspector(): void {
     infoRow("Goal", entity.goal, "entity-goal"),
     infoRow("Decision", decisionExplanation(entity)),
     infoRow("Action", entity.action),
+    ...(entity.action_duration_ticks === null
+      ? []
+      : [
+          infoRow(
+            "Action progress",
+            `${entity.action_progress_ticks} / ${entity.action_duration_ticks} ticks`,
+          ),
+        ]),
     infoRow("Goal retained", `${entity.goal_age_ticks.toLocaleString()} ticks`),
     infoRow("Path remaining", entity.remaining_path.toString()),
     infoRow("Known resources", entity.known_resources.toString()),
@@ -192,6 +200,7 @@ export function syncEntityInspector(): void {
     infoRow("Known chunks", entity.known_chunks.toString()),
     infoRow("Visible entities", entity.visible_entities.toString()),
     infoRow("Utility: eat", entity.utilities.eat.toFixed(2)),
+    infoRow("Utility: acquire resource", entity.utilities.acquire_resource.toFixed(2)),
     infoRow("Utility: explore", entity.utilities.explore.toFixed(2)),
     infoRow("Utility: rest", entity.utilities.rest.toFixed(2)),
     infoRow("Utility: socialize", entity.utilities.socialize.toFixed(2)),

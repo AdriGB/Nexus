@@ -11,6 +11,7 @@ mod spatial;
 mod time;
 
 use self::autonomy::Mind;
+pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
 pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH, MAX_POPULATION};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
@@ -37,6 +38,7 @@ pub const INITIAL_POPULATION: u32 = 10;
 
 type AutonomyRunResult = (
     u64,
+    bool,
     Vec<(u32, u16)>,
     Vec<autonomy::ResourceDiscovery>,
     Vec<autonomy::EntityEncounter>,
@@ -317,14 +319,15 @@ impl Simulation {
             caregiver_id: None,
             personality: personality_for(self.seed, id),
             inventory: Inventory::default(),
+            action_tick: 0,
         });
         Some(id)
     }
 
-    fn update_autonomy(&mut self, world: &mut Grid) -> u64 {
+    fn update_autonomy(&mut self, world: &mut Grid) -> (u64, bool) {
         dependents::snap_infants_to_caregivers(&mut self.entities);
         self.rebuild_population_index(world);
-        let (consumed, consumer_ids, discoveries, encounters, interactions) =
+        let (consumed, world_changed, consumer_ids, discoveries, encounters, interactions) =
             self.run_autonomy(world);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
@@ -336,7 +339,7 @@ impl Simulation {
             dependents::feed_infants_of(&mut self.entities, id, amount);
         }
 
-        consumed
+        (consumed, world_changed)
     }
 
     fn run_autonomy(&mut self, world: &mut Grid) -> AutonomyRunResult {
@@ -346,6 +349,7 @@ impl Simulation {
         let pathfinding_workspace = &mut self.pathfinding_workspace;
 
         let mut consumed = 0u64;
+        let mut world_changed = false;
         let mut consumer_ids = Vec::new();
         let mut discoveries = Vec::new();
         let mut encounters = Vec::new();
@@ -363,10 +367,11 @@ impl Simulation {
             );
             discoveries.extend(entity_discoveries);
             encounters.extend(entity_encounters);
-            if result > 0 {
-                consumer_ids.push((entity.id, result));
+            if result.food_consumed > 0 {
+                consumer_ids.push((entity.id, result.food_consumed));
             }
-            consumed += u64::from(result);
+            consumed += u64::from(result.food_consumed);
+            world_changed |= result.world_changed;
         }
 
         let interactions = autonomy::process_social_interactions(
@@ -377,6 +382,7 @@ impl Simulation {
 
         (
             consumed,
+            world_changed,
             consumer_ids,
             discoveries,
             encounters,
@@ -585,9 +591,11 @@ impl Simulation {
         }
     }
 
-    fn record_resource_changes(&mut self, consumed_this_tick: u64) {
+    fn record_resource_changes(&mut self, consumed_this_tick: u64, world_changed: bool) {
         if consumed_this_tick > 0 {
             self.food_consumed = self.food_consumed.saturating_add(consumed_this_tick);
+        }
+        if world_changed {
             self.world_revision = self.world_revision.saturating_add(1);
         }
     }

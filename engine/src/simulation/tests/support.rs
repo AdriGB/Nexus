@@ -89,6 +89,7 @@ pub(super) fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         caregiver_id: None,
         personality: personality_for(0, id),
         inventory: super::super::Inventory::default(),
+        action_tick: 0,
     }
 }
 

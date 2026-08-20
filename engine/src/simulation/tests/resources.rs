@@ -1,6 +1,6 @@
 use super::super::config::{FOOD_SEARCH_THRESHOLD, MAX_HUNGER, STARVATION_DAMAGE_PER_TICK};
 use super::super::time::TICKS_PER_YEAR;
-use super::super::Simulation;
+use super::super::{ItemKind, Simulation};
 use super::super::{SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 use super::support::*;
 
@@ -16,7 +16,9 @@ fn competing_entities_consume_a_finite_deposit_once() {
     for entity in &mut simulation.entities {
         entity.age_ticks = 25 * TICKS_PER_YEAR;
     }
-    simulation.step(&mut world);
+    for _ in 0..11 {
+        simulation.step(&mut world);
+    }
 
     assert!(world.resources[0].is_none());
     assert_eq!(simulation.food_consumed, 10);
@@ -39,7 +41,7 @@ fn competing_entities_consume_a_finite_deposit_once() {
         .recent_events()
         .filter(|event| event.kind == SimulationEventKind::Discovery)
         .collect();
-    assert_eq!(discovery_events.len(), 1);
+    assert_eq!(discovery_events.len(), 2);
     assert_eq!(discovery_events[0].actor_id, 1);
     assert!(discovery_events.iter().all(|event| {
         event.cause == SimulationEventCause::ResourceFound
@@ -73,7 +75,9 @@ fn population_stats_report_pressure_and_consumption() {
     let mut world = grid_from_rows(&["F"]);
     let mut simulation = simulation_with_entity(0, 0, 60.0);
     simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
-    simulation.step(&mut world);
+    for _ in 0..11 {
+        simulation.step(&mut world);
+    }
     let stats = simulation.population_stats();
     assert_eq!(stats.population, 1);
     assert_eq!(stats.food_consumed, 10);
@@ -82,4 +86,51 @@ fn population_stats_report_pressure_and_consumption() {
         simulation.entities()[0].mind.memory.known_resources[0].estimated_amount,
         10
     );
+}
+
+#[test]
+fn gathering_takes_ten_ticks_before_moving_food_into_inventory() {
+    let mut world = grid_from_rows(&["F"]);
+    world.resources[0].as_mut().unwrap().amount = 20;
+    let mut simulation = simulation_with_entity(0, 0, 60.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+
+    for _ in 0..9 {
+        simulation.step(&mut world);
+    }
+    assert_eq!(world.resources[0].unwrap().amount, 20);
+    assert_eq!(simulation.entities()[0].inventory.amount(ItemKind::Food), 0);
+    assert_eq!(simulation.food_consumed, 0);
+
+    simulation.step(&mut world);
+    assert_eq!(world.resources[0].unwrap().amount, 10);
+    assert_eq!(
+        simulation.entities()[0].inventory.amount(ItemKind::Food),
+        10
+    );
+    assert_eq!(simulation.food_consumed, 0);
+    assert_eq!(simulation.world_revision(), 1);
+
+    simulation.step(&mut world);
+    assert_eq!(simulation.entities()[0].inventory.amount(ItemKind::Food), 0);
+    assert_eq!(simulation.food_consumed, 10);
+    assert_eq!(simulation.world_revision(), 1);
+}
+
+#[test]
+fn gathering_respects_remaining_inventory_capacity() {
+    let mut world = grid_from_rows(&["F"]);
+    world.resources[0].as_mut().unwrap().amount = 20;
+    let mut simulation = simulation_with_entity(0, 0, 60.0);
+    simulation.entities[0].age_ticks = 25 * TICKS_PER_YEAR;
+    simulation.entities[0].inventory.add(ItemKind::Stone, 45);
+
+    for _ in 0..10 {
+        simulation.step(&mut world);
+    }
+
+    assert_eq!(world.resources[0].unwrap().amount, 15);
+    assert_eq!(simulation.entities()[0].inventory.amount(ItemKind::Food), 5);
+    assert_eq!(simulation.entities()[0].inventory.used_capacity(), 50);
+    assert_eq!(simulation.food_consumed, 0);
 }

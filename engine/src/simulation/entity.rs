@@ -79,6 +79,7 @@ pub struct Entity {
     pub caregiver_id: Option<u32>,
     pub personality: Personality,
     pub inventory: Inventory,
+    pub action_tick: u32,
 }
 
 impl Entity {
