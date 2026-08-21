@@ -21,6 +21,96 @@ fn sharing_simulation(cooperativeness: f32) -> Simulation {
 }
 
 #[test]
+fn caregiver_feeds_own_dependent_before_a_hungrier_stranger() {
+    let mut world = grid_from_rows(&["P"]);
+    let mut caregiver = entity(1, 0, 0, 0.0);
+    caregiver.age_ticks = 25 * TICKS_PER_YEAR;
+    caregiver.personality.cooperativeness = 0.0;
+    caregiver.inventory.add(ItemKind::Food, 30);
+
+    let mut child = entity(2, 0, 0, 80.0);
+    child.age_ticks = 8 * TICKS_PER_YEAR;
+    child.caregiver_id = Some(1);
+
+    let mut stranger = entity(3, 0, 0, 100.0);
+    stranger.age_ticks = 25 * TICKS_PER_YEAR;
+
+    let mut simulation = Simulation {
+        entities: vec![caregiver, child, stranger],
+        next_entity_id: 4,
+        ..Simulation::default()
+    };
+
+    simulation.step(&mut world);
+
+    assert_eq!(simulation.entities[0].inventory.amount(ItemKind::Food), 20);
+    assert_eq!(simulation.entities[1].inventory.amount(ItemKind::Food), 10);
+    assert_eq!(simulation.entities[2].inventory.amount(ItemKind::Food), 0);
+    let event = simulation
+        .recent_events()
+        .find(|event| event.kind == SimulationEventKind::FoodShared)
+        .expect("dependent feeding event");
+    assert_eq!((event.actor_id, event.target_id), (1, Some(2)));
+}
+
+#[test]
+fn caregiver_breaks_equally_hungry_dependent_ties_by_entity_id() {
+    let mut world = grid_from_rows(&["P"]);
+    let mut caregiver = entity(1, 0, 0, 0.0);
+    caregiver.age_ticks = 25 * TICKS_PER_YEAR;
+    caregiver.inventory.add(ItemKind::Food, 30);
+
+    let mut first_child = entity(2, 0, 0, 80.0);
+    first_child.age_ticks = 8 * TICKS_PER_YEAR;
+    first_child.caregiver_id = Some(1);
+    let mut second_child = entity(3, 0, 0, 80.0);
+    second_child.age_ticks = 8 * TICKS_PER_YEAR;
+    second_child.caregiver_id = Some(1);
+
+    let mut simulation = Simulation {
+        entities: vec![caregiver, first_child, second_child],
+        next_entity_id: 4,
+        ..Simulation::default()
+    };
+
+    simulation.step(&mut world);
+
+    let event = simulation
+        .recent_events()
+        .find(|event| event.kind == SimulationEventKind::FoodShared)
+        .expect("dependent feeding event");
+    assert_eq!(event.target_id, Some(2));
+    assert_eq!(simulation.entities[1].inventory.amount(ItemKind::Food), 10);
+    assert_eq!(simulation.entities[2].inventory.amount(ItemKind::Food), 0);
+}
+
+#[test]
+fn infant_is_fed_by_caregiver_consumption_not_inventory_transfer() {
+    let mut world = grid_from_rows(&["P"]);
+    let mut caregiver = entity(1, 0, 0, 100.0);
+    caregiver.age_ticks = 25 * TICKS_PER_YEAR;
+    caregiver.inventory.add(ItemKind::Food, 30);
+
+    let mut infant = entity(2, 0, 0, 80.0);
+    infant.age_ticks = 0;
+    infant.caregiver_id = Some(1);
+
+    let mut simulation = Simulation {
+        entities: vec![caregiver, infant],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    simulation.step(&mut world);
+
+    assert_eq!(simulation.entities[1].inventory.amount(ItemKind::Food), 0);
+    assert!(simulation.entities[1].hunger < 80.0);
+    assert!(simulation
+        .recent_events()
+        .all(|event| event.kind != SimulationEventKind::FoodShared));
+}
+
+#[test]
 fn cooperative_entity_shares_food_without_changing_the_total() {
     let mut world = grid_from_rows(&["P"]);
     let mut simulation = sharing_simulation(1.0);

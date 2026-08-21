@@ -221,7 +221,7 @@ Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 * [x] Transportar comida
 * [x] Consumir desde el inventario
 * [x] Compartir comida
-* [ ] Alimentar dependientes
+* [x] Alimentar dependientes
 * [ ] Regeneración limitada de recursos renovables
 * [ ] Estacionalidad básica futura
 

@@ -464,12 +464,16 @@ impl Simulation {
 
             let willing = {
                 let actor = &self.entities[actor_index];
-                let affinity = actor
-                    .mind
-                    .memory
-                    .affinity_to(attempt.target_id)
-                    .unwrap_or(0);
-                food_share_willingness(actor.personality.cooperativeness, affinity)
+                let feeds_own_dependent =
+                    self.entities[target_index].caregiver_id == Some(attempt.actor_id);
+                feeds_own_dependent || {
+                    let affinity = actor
+                        .mind
+                        .memory
+                        .affinity_to(attempt.target_id)
+                        .unwrap_or(0);
+                    food_share_willingness(actor.personality.cooperativeness, affinity)
+                }
             };
 
             let moved = if willing {
@@ -705,6 +709,8 @@ impl Simulation {
                 x: entity.x,
                 y: entity.y,
                 hunger: entity.hunger,
+                caregiver_id: entity.caregiver_id,
+                is_child: LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Child,
             });
 
             self.spatial_grid.insert(snapshot_index, entity.x, entity.y);

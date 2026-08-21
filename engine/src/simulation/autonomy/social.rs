@@ -575,12 +575,16 @@ mod tests {
                 x: 12,
                 y: 0,
                 hunger: 0.0,
+                caregiver_id: None,
+                is_child: false,
             },
             EntitySnapshot {
                 id: 3,
                 x: 2,
                 y: 0,
                 hunger: 0.0,
+                caregiver_id: None,
+                is_child: false,
             },
         ];
         (mind, population)

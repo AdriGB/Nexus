@@ -165,6 +165,35 @@ fn profile_step_matches_food_sharing_relationship_effects() {
 }
 
 #[test]
+fn profile_step_matches_dependent_feeding() {
+    fn dependent_simulation() -> Simulation {
+        let mut caregiver = entity(1, 0, 0, 0.0);
+        caregiver.age_ticks = 25 * TICKS_PER_YEAR;
+        caregiver.personality.cooperativeness = 0.0;
+        caregiver.inventory.add(ItemKind::Food, 30);
+        let mut child = entity(2, 0, 0, 80.0);
+        child.age_ticks = 8 * TICKS_PER_YEAR;
+        child.caregiver_id = Some(1);
+        Simulation {
+            entities: vec![caregiver, child],
+            next_entity_id: 3,
+            ..Simulation::default()
+        }
+    }
+
+    let mut normal_world = grid_from_rows(&["P"]);
+    let mut profiled_world = grid_from_rows(&["P"]);
+    let mut normal = dependent_simulation();
+    let mut profiled = dependent_simulation();
+
+    normal.step(&mut normal_world);
+    profiled.profile_step(&mut profiled_world);
+
+    assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
+    assert_eq!(normal.entities[1].inventory.amount(ItemKind::Food), 10);
+}
+
+#[test]
 fn profile_step_matches_affinity_change_events_from_step() {
     let relationship = |id, x, y| KnownEntity {
         id,

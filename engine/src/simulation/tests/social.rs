@@ -157,12 +157,16 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
             x: 2,
             y: 2,
             hunger: 0.0,
+            caregiver_id: None,
+            is_child: false,
         },
         super::super::spatial::EntitySnapshot {
             id: 2,
             x: 2,
             y: 3,
             hunger: 0.0,
+            caregiver_id: None,
+            is_child: false,
         },
     ];
     let interactions =
