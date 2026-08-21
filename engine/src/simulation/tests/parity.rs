@@ -1,7 +1,7 @@
 use super::super::autonomy::KnownEntity;
 use super::super::entity::Personality;
 use super::super::time::TICKS_PER_YEAR;
-use super::super::{Simulation, SimulationEventKind};
+use super::super::{ItemKind, Simulation, SimulationEventKind};
 use super::support::*;
 use crate::world::Grid;
 
@@ -68,8 +68,20 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
         assert_eq!(a.mind.plan_index, b.mind.plan_index);
         assert_eq!(a.mind.goal_since_tick, b.mind.goal_since_tick);
         assert_eq!(a.mind.utility_scores.eat, b.mind.utility_scores.eat);
+        assert_eq!(
+            a.mind.utility_scores.acquire_resource,
+            b.mind.utility_scores.acquire_resource
+        );
         assert_eq!(a.mind.utility_scores.explore, b.mind.utility_scores.explore);
         assert_eq!(a.mind.utility_scores.rest, b.mind.utility_scores.rest);
+        assert_eq!(
+            a.mind.utility_scores.socialize,
+            b.mind.utility_scores.socialize
+        );
+        assert_eq!(
+            a.mind.utility_scores.share_food,
+            b.mind.utility_scores.share_food
+        );
         assert_eq!(a.mind.visible_entities, b.mind.visible_entities);
 
         // Memory state
@@ -123,6 +135,33 @@ fn profile_autonomy_step_matches_step() {
     run_parity(|simulation, world| {
         simulation.profile_autonomy_step(world);
     });
+}
+
+#[test]
+fn profile_step_matches_food_sharing_relationship_effects() {
+    fn sharing_simulation() -> Simulation {
+        let mut giver = entity(1, 0, 0, 0.0);
+        giver.age_ticks = 25 * TICKS_PER_YEAR;
+        giver.personality.cooperativeness = 1.0;
+        giver.inventory.add(ItemKind::Food, 30);
+        let mut recipient = entity(2, 0, 0, 90.0);
+        recipient.age_ticks = 25 * TICKS_PER_YEAR;
+        Simulation {
+            entities: vec![giver, recipient],
+            next_entity_id: 3,
+            ..Simulation::default()
+        }
+    }
+
+    let mut normal_world = grid_from_rows(&["P"]);
+    let mut profiled_world = grid_from_rows(&["P"]);
+    let mut normal = sharing_simulation();
+    let mut profiled = sharing_simulation();
+
+    normal.step(&mut normal_world);
+    profiled.profile_step(&mut profiled_world);
+
+    assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
 }
 
 #[test]

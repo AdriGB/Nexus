@@ -230,7 +230,7 @@ Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 * [x] Cooperación influida por personalidad
 * [x] Afinidad influye en el reparto
 * [x] Rechazo a compartir
-* [ ] Gratitud o resentimiento
+* [x] Gratitud o resentimiento
 * [x] Eventos de ayuda y abandono
 
 ### Vertical de validación

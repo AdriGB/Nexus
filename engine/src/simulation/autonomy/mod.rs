@@ -48,6 +48,19 @@ pub(super) fn process_social_interactions(
     social::process_social_interactions(entities, population, tick)
 }
 
+pub(in crate::simulation) fn record_directed_affinity(
+    entity: &mut Entity,
+    target_id: u32,
+    tick: u64,
+    delta: i16,
+) -> Option<AffinityChangeRecord> {
+    entity
+        .mind
+        .memory
+        .record_interaction(target_id, tick, delta)
+        .flatten()
+}
+
 pub(super) fn update_entity(
     entity: &mut Entity,
     world: &mut Grid,
