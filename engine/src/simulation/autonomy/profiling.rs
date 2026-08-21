@@ -112,7 +112,7 @@ fn profiled_update_entity(
 
         let start = Instant::now();
         let current_goal = entity.mind.current_goal;
-        let visible_food_need = super::visible_food_need(&entity.mind, population);
+        let visible_food_need = super::visible_food_need(entity.id, &entity.mind, population);
         let goal = evaluate_goals(
             &mut entity.mind,
             entity.hunger,

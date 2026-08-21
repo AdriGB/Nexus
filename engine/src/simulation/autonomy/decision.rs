@@ -326,7 +326,40 @@ fn plan_share_food(
     pathfinding_workspace: &mut PathfindingWorkspace,
     population: &[EntitySnapshot],
 ) {
-    let origin = (entity.x, entity.y);
+    let hungry_dependent = population
+        .iter()
+        .filter(|snapshot| snapshot.caregiver_id == Some(entity.id))
+        .filter(|snapshot| snapshot.is_child)
+        .filter(|snapshot| snapshot.hunger >= FOOD_SEARCH_THRESHOLD)
+        .filter(|snapshot| {
+            entity
+                .mind
+                .visible_entities
+                .binary_search(&snapshot.id)
+                .is_ok()
+        })
+        .reduce(|best, candidate| {
+            if candidate.hunger > best.hunger
+                || (candidate.hunger == best.hunger && candidate.id < best.id)
+            {
+                candidate
+            } else {
+                best
+            }
+        })
+        .map(|snapshot| (snapshot.id, (snapshot.x, snapshot.y)));
+
+    if let Some((target_id, target_pos)) = hungry_dependent {
+        plan_food_delivery(
+            entity,
+            world,
+            tick,
+            pathfinding_workspace,
+            target_id,
+            target_pos,
+        );
+        return;
+    }
 
     // Prefer visible entities with greater need and stronger non-hostile affinity.
     let mut best_target: Option<(f32, u32, (u32, u32))> = None;
@@ -371,6 +404,25 @@ fn plan_share_food(
         return;
     };
 
+    plan_food_delivery(
+        entity,
+        world,
+        tick,
+        pathfinding_workspace,
+        target_id,
+        target_pos,
+    );
+}
+
+fn plan_food_delivery(
+    entity: &mut Entity,
+    world: &Grid,
+    tick: u64,
+    pathfinding_workspace: &mut PathfindingWorkspace,
+    target_id: u32,
+    target_pos: (u32, u32),
+) {
+    let origin = (entity.x, entity.y);
     if target_pos == origin {
         entity
             .mind

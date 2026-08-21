@@ -99,7 +99,7 @@ pub(super) fn update_entity(
 
     if entity.mind.current_action().is_none() {
         let current_goal = entity.mind.current_goal;
-        let visible_food_need = visible_food_need(&entity.mind, population);
+        let visible_food_need = visible_food_need(entity.id, &entity.mind, population);
 
         let goal = evaluate_goals(
             &mut entity.mind,
@@ -125,7 +125,17 @@ pub(super) fn update_entity(
     )
 }
 
-fn visible_food_need(mind: &Mind, population: &[EntitySnapshot]) -> f32 {
+fn visible_food_need(entity_id: u32, mind: &Mind, population: &[EntitySnapshot]) -> f32 {
+    if population.iter().any(|snapshot| {
+        snapshot.caregiver_id == Some(entity_id)
+            && snapshot.is_child
+            && snapshot.hunger >= super::config::FOOD_SEARCH_THRESHOLD
+            && mind.visible_entities.binary_search(&snapshot.id).is_ok()
+    }) {
+        // Care responsibilities outrank personality-weighted optional goals.
+        return 2.0;
+    }
+
     population
         .iter()
         .filter(|snapshot| mind.visible_entities.binary_search(&snapshot.id).is_ok())
