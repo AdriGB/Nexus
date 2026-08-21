@@ -346,6 +346,7 @@ mod tests {
             region_ids: Vec::new(),
             regions: Vec::<Region>::new(),
             resources: vec![None; (width * height) as usize],
+            renewable_resources: Vec::new(),
         }
     }
 

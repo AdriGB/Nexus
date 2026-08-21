@@ -40,6 +40,7 @@ mod tests {
                 kind: ResourceKind::Timber,
                 amount: 840,
             })],
+            renewable_resources: Vec::new(),
         };
 
         assert_eq!(encode_resource_texture(&grid), vec![2, 72, 3, 255]);

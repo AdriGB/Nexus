@@ -3,6 +3,67 @@ use super::super::time::TICKS_PER_YEAR;
 use super::super::{ItemKind, Simulation};
 use super::super::{SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 use super::support::*;
+use crate::world::{ResourceDeposit, ResourceKind};
+
+#[test]
+fn renewable_food_regenerates_only_on_daily_boundaries() {
+    let mut world = grid_from_rows(&["F"]);
+    world.resources[0].as_mut().unwrap().amount = 10;
+    let mut simulation = Simulation::default();
+
+    for _ in 0..23 {
+        simulation.step(&mut world);
+    }
+    assert_eq!(world.resources[0].unwrap().amount, 10);
+    assert_eq!(simulation.world_revision(), 0);
+
+    simulation.step(&mut world);
+    assert_eq!(world.resources[0].unwrap().amount, 11);
+    assert_eq!(simulation.world_revision(), 1);
+}
+
+#[test]
+fn exhausted_renewable_food_deposit_reappears() {
+    let mut world = grid_from_rows(&["F"]);
+    world.resources[0] = None;
+    let mut simulation = Simulation::default();
+
+    for _ in 0..24 {
+        simulation.step(&mut world);
+    }
+
+    assert_eq!(
+        world.resources[0],
+        Some(ResourceDeposit {
+            kind: ResourceKind::Food,
+            amount: 1,
+        })
+    );
+    assert_eq!(simulation.world_revision(), 1);
+}
+
+#[test]
+fn renewal_stops_at_capacity_and_ignores_unregistered_resources() {
+    let mut full_world = grid_from_rows(&["F"]);
+    let mut full_simulation = Simulation::default();
+    for _ in 0..48 {
+        full_simulation.step(&mut full_world);
+    }
+    assert_eq!(full_world.resources[0].unwrap().amount, 20);
+    assert_eq!(full_simulation.world_revision(), 0);
+
+    let mut stone_world = grid_from_rows(&["P"]);
+    stone_world.resources[0] = Some(ResourceDeposit {
+        kind: ResourceKind::Stone,
+        amount: 5,
+    });
+    let mut stone_simulation = Simulation::default();
+    for _ in 0..48 {
+        stone_simulation.step(&mut stone_world);
+    }
+    assert_eq!(stone_world.resources[0].unwrap().amount, 5);
+    assert_eq!(stone_simulation.world_revision(), 0);
+}
 
 #[test]
 fn competing_entities_consume_a_finite_deposit_once() {

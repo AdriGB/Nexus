@@ -1,4 +1,4 @@
-use crate::world::{Grid, ResourceDeposit, ResourceKind, Terrain};
+use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain};
 
 const RESOURCE_SEED_SALT: u64 = 0x7265_736f_7572_6365;
 
@@ -11,6 +11,19 @@ pub fn generate_resources(world_seed: u32, grid: &mut Grid) {
         .map(|(index, tile)| {
             let sample = mix64(resource_seed ^ (index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
             deposit_for(tile.terrain, sample)
+        })
+        .collect();
+    grid.renewable_resources = grid
+        .resources
+        .iter()
+        .enumerate()
+        .filter_map(|(index, deposit)| {
+            let deposit = deposit.as_ref()?;
+            (deposit.kind == ResourceKind::Food).then_some(RenewableResource {
+                index,
+                kind: deposit.kind,
+                capacity: deposit.amount,
+            })
         })
         .collect();
 }
@@ -75,6 +88,7 @@ mod tests {
             region_ids: Vec::new(),
             regions: Vec::new(),
             resources: Vec::new(),
+            renewable_resources: Vec::new(),
         }
     }
 
@@ -137,5 +151,19 @@ mod tests {
         let mut grid = grid_of(Terrain::Plains, 4_096);
         generate_resources(42, &mut grid);
         assert_eq!(grid.resources.len(), grid.tiles.len());
+    }
+
+    #[test]
+    fn only_generated_food_deposits_are_registered_as_renewable() {
+        let mut grid = grid_of(Terrain::Grassland, 512);
+        generate_resources(42, &mut grid);
+
+        assert!(!grid.renewable_resources.is_empty());
+        for renewable in &grid.renewable_resources {
+            let deposit = grid.resources[renewable.index].unwrap();
+            assert_eq!(deposit.kind, ResourceKind::Food);
+            assert_eq!(renewable.kind, ResourceKind::Food);
+            assert_eq!(renewable.capacity, deposit.amount);
+        }
     }
 }

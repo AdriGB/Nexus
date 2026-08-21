@@ -7,6 +7,7 @@ mod inventory;
 mod lifecycle;
 mod physiology;
 mod pipeline;
+mod renewal;
 mod spatial;
 mod time;
 
@@ -186,6 +187,12 @@ impl Simulation {
 
     pub fn world_revision(&self) -> u64 {
         self.world_revision
+    }
+
+    fn regenerate_renewable_resources(&mut self, world: &mut Grid) {
+        if self.tick.is_multiple_of(time::TICKS_PER_DAY) && renewal::regenerate(world) {
+            self.world_revision = self.world_revision.saturating_add(1);
+        }
     }
 
     pub fn population_stats(&self) -> PopulationStats {

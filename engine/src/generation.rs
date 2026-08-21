@@ -48,6 +48,7 @@ pub fn generate_world(seed: u32, width: u32, height: u32, sea_level: f64) -> Gri
         region_ids: Vec::new(),
         regions: Vec::new(),
         resources: vec![None; tile_count],
+        renewable_resources: Vec::new(),
     }
 }
 
