@@ -26,6 +26,13 @@ pub struct ResourceDeposit {
     pub amount: u16,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RenewableResource {
+    pub index: usize,
+    pub kind: ResourceKind,
+    pub capacity: u16,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Serialize)]
 #[repr(u8)]
 pub enum Terrain {
@@ -120,6 +127,7 @@ pub struct Grid {
     pub region_ids: Vec<u32>,
     pub regions: Vec<Region>,
     pub resources: Vec<Option<ResourceDeposit>>,
+    pub renewable_resources: Vec<RenewableResource>,
 }
 
 impl Grid {
@@ -183,6 +191,7 @@ mod tests {
             region_ids: Vec::new(),
             regions: Vec::new(),
             resources: vec![None; (w * h) as usize],
+            renewable_resources: Vec::new(),
         }
     }
 

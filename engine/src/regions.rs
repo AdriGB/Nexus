@@ -130,6 +130,7 @@ mod tests {
             region_ids: vec![u32::MAX; tc],
             regions: Vec::new(),
             resources: vec![None; (width * height) as usize],
+            renewable_resources: Vec::new(),
         }
     }
 

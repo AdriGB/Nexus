@@ -56,6 +56,7 @@ mod tests {
                 kind: ResourceKind::Food,
                 amount: 20,
             })],
+            renewable_resources: Vec::new(),
         }
     }
 

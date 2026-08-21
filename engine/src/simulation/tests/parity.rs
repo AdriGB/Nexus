@@ -194,6 +194,34 @@ fn profile_step_matches_dependent_feeding() {
 }
 
 #[test]
+fn profiled_pipelines_match_renewable_resource_regeneration() {
+    let mut normal_world = grid_from_rows(&["F"]);
+    let mut profiled_world = grid_from_rows(&["F"]);
+    let mut autonomy_profiled_world = grid_from_rows(&["F"]);
+    normal_world.resources[0] = None;
+    profiled_world.resources[0] = None;
+    autonomy_profiled_world.resources[0] = None;
+    let mut normal = Simulation::default();
+    let mut profiled = Simulation::default();
+    let mut autonomy_profiled = Simulation::default();
+
+    for _ in 0..24 {
+        normal.step(&mut normal_world);
+        profiled.profile_step(&mut profiled_world);
+        autonomy_profiled.profile_autonomy_step(&mut autonomy_profiled_world);
+    }
+
+    assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
+    assert_equivalent(
+        &normal,
+        &normal_world,
+        &autonomy_profiled,
+        &autonomy_profiled_world,
+    );
+    assert_eq!(normal_world.resources[0].unwrap().amount, 1);
+}
+
+#[test]
 fn profile_step_matches_affinity_change_events_from_step() {
     let relationship = |id, x, y| KnownEntity {
         id,

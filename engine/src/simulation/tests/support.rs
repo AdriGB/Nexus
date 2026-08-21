@@ -5,7 +5,7 @@ use super::super::lifecycle::personality_for;
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::Simulation;
-use crate::world::{Grid, ResourceDeposit, ResourceKind, Terrain, Tile};
+use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 
 pub(super) fn linear_visible_entities(
     entity_id: u32,
@@ -53,6 +53,18 @@ pub(super) fn grid_from_rows(rows: &[&str]) -> Grid {
             })
         })
         .collect();
+    let renewable_resources = rows
+        .iter()
+        .flat_map(|row| row.chars())
+        .enumerate()
+        .filter_map(|(index, symbol)| {
+            (symbol == 'F').then_some(RenewableResource {
+                index,
+                kind: ResourceKind::Food,
+                capacity: 20,
+            })
+        })
+        .collect();
     Grid {
         width,
         height,
@@ -60,6 +72,7 @@ pub(super) fn grid_from_rows(rows: &[&str]) -> Grid {
         region_ids: Vec::new(),
         regions: Vec::new(),
         resources,
+        renewable_resources,
     }
 }
 

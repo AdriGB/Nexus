@@ -10,6 +10,7 @@ use web_time::Instant;
 
 pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     simulation.tick = simulation.tick.saturating_add(1);
+    simulation.regenerate_renewable_resources(world);
     physiology::advance(&mut simulation.entities);
     dependents::clear_graduated_caregivers(&mut simulation.entities);
     let (consumed_this_tick, world_changed) = simulation.update_autonomy(world);
@@ -27,6 +28,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let total_start = Instant::now();
 
     simulation.tick = simulation.tick.saturating_add(1);
+    simulation.regenerate_renewable_resources(world);
 
     let start = Instant::now();
     physiology::advance(&mut simulation.entities);
@@ -103,6 +105,7 @@ pub(super) fn run_profiled_autonomy_step(
     world: &mut Grid,
 ) -> AutonomyProfile {
     simulation.tick = simulation.tick.saturating_add(1);
+    simulation.regenerate_renewable_resources(world);
     physiology::advance(&mut simulation.entities);
     dependents::clear_graduated_caregivers(&mut simulation.entities);
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
