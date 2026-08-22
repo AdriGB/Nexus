@@ -7,6 +7,7 @@ import type {
   DeathEvent,
   EncounterEvent,
   EntityEventSummary,
+  PartnershipDissolvedEvent,
   InteractionEvent,
   PartnershipFormedEvent,
   ResourceDiscoveryEvent,
@@ -229,6 +230,7 @@ function summary(overrides: Partial<EntityEventSummary> = {}): EntityEventSummar
     interactions: 2,
     affinity_changes: 1,
     partnerships_formed: 0,
+    partnerships_dissolved: 0,
     ...overrides,
   };
 }
@@ -275,6 +277,48 @@ describe("interaction history", () => {
     expect(html).toContain("240 / 225");
     expect(html).toContain("87.5%");
     expect(html).toContain("Event #19");
+  });
+
+  it("renders partnership dissolution and its causal event", () => {
+    const event: PartnershipDissolvedEvent = {
+      id: "20",
+      caused_by_event_id: "19",
+      tick: "100",
+      relative_time: "just now",
+      location: { x: 3, y: 4 },
+      actor_id: 2,
+      target_id: 7,
+      related_entity_ids: [2, 7],
+      kind: "partnership_dissolved",
+      cause: "mutual_social_contact",
+      actor_affinity_delta: null,
+      target_affinity_delta: null,
+      child_id: null,
+      amount: null,
+      resource_kind: null,
+      previous_affinity: null,
+      new_affinity: null,
+      delta: null,
+      partnership_actor_affinity: 0,
+      partnership_target_affinity: 250,
+      compatibility_per_mille: null,
+    };
+
+    const html = renderInteractionHistory([event]);
+    expect(html).toContain("Partnership between");
+    expect(html).toContain("ended");
+    expect(html).toContain("0 / 250");
+    expect(html).toContain("Social interaction");
+    expect(html).toContain("Event #19");
+  });
+
+  it("includes ended partnerships in the entity summary", () => {
+    const html = renderEntityEventSummary(
+      summary({ partnerships_dissolved: 2 }),
+    );
+
+    expect(html).toContain("Partnerships ended");
+    expect(html).toContain("2");
   });
 
   it("renders explicit empty and single-tick summary states", () => {

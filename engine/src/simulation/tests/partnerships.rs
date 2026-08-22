@@ -109,6 +109,19 @@ fn daily_decay_to_zero_dissolves_without_an_affinity_change_event() {
     assert!(simulation
         .recent_events()
         .all(|event| event.kind != SimulationEventKind::AffinityChange));
+    let dissolution = simulation
+        .recent_events()
+        .find(|event| event.kind == SimulationEventKind::PartnershipDissolved)
+        .expect("decay dissolution event");
+    assert_eq!(dissolution.cause, SimulationEventCause::RelationshipDecay);
+    assert_eq!(dissolution.caused_by_event_id, None);
+    assert_eq!(
+        dissolution.details,
+        SimulationEventDetails::PartnershipDissolved {
+            actor_affinity: 0,
+            target_affinity: 249,
+        }
+    );
 }
 
 #[test]
@@ -136,6 +149,24 @@ fn social_interaction_dissolves_the_pair_before_attempting_formation() {
     assert!(simulation
         .recent_events()
         .all(|event| event.kind != SimulationEventKind::PartnershipFormed));
+    let events: Vec<_> = simulation.recent_events().collect();
+    let interaction_event = events
+        .iter()
+        .find(|event| event.kind == SimulationEventKind::Interaction)
+        .expect("interaction event");
+    let dissolution = events
+        .iter()
+        .find(|event| event.kind == SimulationEventKind::PartnershipDissolved)
+        .expect("dissolution event");
+    assert_eq!(dissolution.cause, SimulationEventCause::MutualSocialContact);
+    assert_eq!(dissolution.caused_by_event_id, Some(interaction_event.id));
+    assert_eq!(
+        dissolution.details,
+        SimulationEventDetails::PartnershipDissolved {
+            actor_affinity: 0,
+            target_affinity: 250,
+        }
+    );
 }
 
 #[test]
@@ -155,6 +186,24 @@ fn refusal_resentment_dissolves_from_the_receivers_perspective() {
         .entities
         .iter()
         .all(|entity| entity.partner_id.is_none()));
+    let events: Vec<_> = simulation.recent_events().collect();
+    let refusal = events
+        .iter()
+        .find(|event| event.kind == SimulationEventKind::FoodShareRefused)
+        .expect("food refusal event");
+    let dissolution = events
+        .iter()
+        .find(|event| event.kind == SimulationEventKind::PartnershipDissolved)
+        .expect("dissolution event");
+    assert_eq!(dissolution.cause, SimulationEventCause::FoodShareRefused);
+    assert_eq!(dissolution.caused_by_event_id, Some(refusal.id));
+    assert_eq!(
+        dissolution.details,
+        SimulationEventDetails::PartnershipDissolved {
+            actor_affinity: -5,
+            target_affinity: 250,
+        }
+    );
 }
 
 #[test]
@@ -225,5 +274,19 @@ fn death_clears_the_surviving_partners_reference_without_separation_event() {
     assert_eq!(simulation.entities[0].partner_id, None);
     assert!(simulation
         .recent_events()
-        .all(|event| event.kind != SimulationEventKind::PartnershipFormed));
+        .all(|event| event.kind != SimulationEventKind::PartnershipDissolved));
+}
+
+#[test]
+fn identical_breakups_produce_the_same_event_sequence() {
+    let mut first = partnered_simulation(0, 250);
+    let mut second = partnered_simulation(0, 250);
+
+    first.record_social_interactions(vec![interaction()]);
+    second.record_social_interactions(vec![interaction()]);
+
+    assert_eq!(
+        first.recent_events().cloned().collect::<Vec<_>>(),
+        second.recent_events().cloned().collect::<Vec<_>>()
+    );
 }
