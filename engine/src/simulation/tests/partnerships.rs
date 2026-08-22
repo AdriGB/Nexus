@@ -1,4 +1,6 @@
-use super::super::autonomy::{AffinityChangeRecord, KnownEntity, SocialInteraction};
+use super::super::autonomy::{
+    AffinityChangeRecord, FoodShareAttempt, KnownEntity, SocialInteraction,
+};
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{Simulation, SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 use super::support::{entity, grid_from_rows};
@@ -55,6 +57,104 @@ fn eligible_simulation(affinity: i16, interaction_count: u32) -> Simulation {
         next_entity_id: 3,
         ..Simulation::default()
     }
+}
+
+fn partnered_simulation(actor_affinity: i16, target_affinity: i16) -> Simulation {
+    let mut simulation = eligible_simulation(actor_affinity, 3);
+    simulation.entities[1].mind.memory.known_entities[0].affinity = target_affinity;
+    simulation.entities[0].partner_id = Some(2);
+    simulation.entities[1].partner_id = Some(1);
+    simulation
+}
+
+#[test]
+fn unilateral_non_positive_affinity_dissolves_and_reports_bilateral_evidence() {
+    let mut simulation = partnered_simulation(0, 250);
+
+    let dissolution = super::super::partnerships::try_dissolve(&mut simulation.entities, 1, 2)
+        .expect("partnership should dissolve");
+
+    assert_eq!(dissolution.actor_id, 1);
+    assert_eq!(dissolution.target_id, 2);
+    assert_eq!(dissolution.actor_affinity, 0);
+    assert_eq!(dissolution.target_affinity, 250);
+    assert!(simulation
+        .entities
+        .iter()
+        .all(|entity| entity.partner_id.is_none()));
+}
+
+#[test]
+fn bilateral_positive_affinity_keeps_the_partnership() {
+    let mut simulation = partnered_simulation(1, 250);
+
+    assert!(super::super::partnerships::try_dissolve(&mut simulation.entities, 1, 2).is_none());
+    assert_eq!(simulation.entities[0].partner_id, Some(2));
+    assert_eq!(simulation.entities[1].partner_id, Some(1));
+}
+
+#[test]
+fn daily_decay_to_zero_dissolves_without_an_affinity_change_event() {
+    let mut simulation = partnered_simulation(1, 250);
+    simulation.tick = super::super::autonomy::RELATIONSHIP_DECAY_START_TICKS;
+    simulation.entities[0].mind.memory.known_entities[0].last_interaction_tick = 0;
+    simulation.entities[1].mind.memory.known_entities[0].last_interaction_tick = 0;
+
+    simulation.run_daily_relationship_decay();
+
+    assert!(simulation
+        .entities
+        .iter()
+        .all(|entity| entity.partner_id.is_none()));
+    assert!(simulation
+        .recent_events()
+        .all(|event| event.kind != SimulationEventKind::AffinityChange));
+}
+
+#[test]
+fn unrelated_affinity_change_does_not_dissolve_an_existing_pair() {
+    let mut simulation = partnered_simulation(250, 250);
+    let mut third = entity(3, 0, 0, 0.0);
+    third.age_ticks = 25 * TICKS_PER_YEAR;
+    simulation.entities.push(third);
+
+    assert!(super::super::partnerships::try_dissolve(&mut simulation.entities, 1, 3).is_none());
+    assert_eq!(simulation.entities[0].partner_id, Some(2));
+    assert_eq!(simulation.entities[1].partner_id, Some(1));
+}
+
+#[test]
+fn social_interaction_dissolves_the_pair_before_attempting_formation() {
+    let mut simulation = partnered_simulation(0, 250);
+
+    simulation.record_social_interactions(vec![interaction()]);
+
+    assert!(simulation
+        .entities
+        .iter()
+        .all(|entity| entity.partner_id.is_none()));
+    assert!(simulation
+        .recent_events()
+        .all(|event| event.kind != SimulationEventKind::PartnershipFormed));
+}
+
+#[test]
+fn refusal_resentment_dissolves_from_the_receivers_perspective() {
+    let mut simulation = partnered_simulation(250, 10);
+    simulation.entities[0].personality.cooperativeness = 0.0;
+
+    simulation.process_food_share_attempts(vec![FoodShareAttempt {
+        actor_id: 1,
+        target_id: 2,
+        actor_location: (0, 0),
+        amount: 10,
+    }]);
+
+    assert_eq!(simulation.entities[1].mind.memory.affinity_to(1), Some(-5));
+    assert!(simulation
+        .entities
+        .iter()
+        .all(|entity| entity.partner_id.is_none()));
 }
 
 #[test]
