@@ -316,6 +316,37 @@ mod tests {
     }
 
     #[test]
+    fn partnership_dissolution_json_preserves_cause_and_affinities() {
+        let events = [SimulationEvent {
+            id: EventId::new(20),
+            caused_by_event_id: Some(EventId::new(19)),
+            tick: 45,
+            location: crate::simulation::EventLocation { x: 2, y: 3 },
+            actor_id: 4,
+            target_id: Some(7),
+            related_entity_ids: vec![4, 7],
+            kind: SimulationEventKind::PartnershipDissolved,
+            cause: SimulationEventCause::MutualSocialContact,
+            details: SimulationEventDetails::PartnershipDissolved {
+                actor_affinity: 0,
+                target_affinity: 225,
+            },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 45, Some(7))).unwrap();
+        assert_eq!(payload[0]["kind"], "partnership_dissolved");
+        assert_eq!(payload[0]["cause"], "mutual_social_contact");
+        assert_eq!(payload[0]["caused_by_event_id"], "19");
+        assert_eq!(payload[0]["partnership_actor_affinity"], 0);
+        assert_eq!(payload[0]["partnership_target_affinity"], 225);
+        assert_eq!(
+            payload[0]["compatibility_per_mille"],
+            serde_json::Value::Null
+        );
+    }
+
+    #[test]
     fn discovery_event_json_includes_resource_observation() {
         let events = [SimulationEvent {
             id: EventId::new(13),
