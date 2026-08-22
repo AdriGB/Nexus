@@ -450,6 +450,11 @@ impl Simulation {
                     Some(interaction_event_id),
                 );
             }
+            let _ = partnerships::try_dissolve(
+                &mut self.entities,
+                interaction.actor_id,
+                interaction.target_id,
+            );
             if let Some(formation) = partnerships::try_form(
                 &mut self.entities,
                 interaction.actor_id,
@@ -582,6 +587,11 @@ impl Simulation {
                         Some(event_id),
                     );
                 }
+                let _ = partnerships::try_dissolve(
+                    &mut self.entities,
+                    attempt.target_id,
+                    attempt.actor_id,
+                );
             }
         }
     }
@@ -854,6 +864,7 @@ impl Simulation {
                 None,
             );
         }
+        let _ = partnerships::dissolve_unhealthy(&mut self.entities);
     }
 
     fn try_daily_conceptions(&mut self) {

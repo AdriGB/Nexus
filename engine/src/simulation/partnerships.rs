@@ -1,4 +1,4 @@
-//! Persistent partnership formation and invariants.
+//! Persistent partnership formation, dissolution, and invariants.
 
 use super::autonomy::personality_compatibility;
 use super::{Entity, LifeStage};
@@ -6,6 +6,7 @@ use super::{Entity, LifeStage};
 const MIN_INTERACTIONS: u32 = 3;
 const BASE_AFFINITY_THRESHOLD: i16 = 300;
 const MAX_COMPATIBILITY_DISCOUNT: i16 = 100;
+pub(super) const DISSOLUTION_AFFINITY_THRESHOLD: i16 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PartnershipFormation {
@@ -14,6 +15,76 @@ pub(super) struct PartnershipFormation {
     pub actor_affinity: i16,
     pub target_affinity: i16,
     pub compatibility_per_mille: u16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PartnershipDissolution {
+    pub actor_id: u32,
+    pub target_id: u32,
+    pub actor_affinity: i16,
+    pub target_affinity: i16,
+}
+
+pub(super) fn try_dissolve(
+    entities: &mut [Entity],
+    actor_id: u32,
+    target_id: u32,
+) -> Option<PartnershipDissolution> {
+    let actor_index = entities
+        .binary_search_by_key(&actor_id, |entity| entity.id)
+        .ok()?;
+    let target_index = entities
+        .binary_search_by_key(&target_id, |entity| entity.id)
+        .ok()?;
+    if actor_index == target_index {
+        return None;
+    }
+
+    let (actor, target) = if actor_index < target_index {
+        let (left, right) = entities.split_at_mut(target_index);
+        (&mut left[actor_index], &mut right[0])
+    } else {
+        let (left, right) = entities.split_at_mut(actor_index);
+        (&mut right[0], &mut left[target_index])
+    };
+
+    if actor.partner_id != Some(target_id) || target.partner_id != Some(actor_id) {
+        return None;
+    }
+
+    let actor_affinity = actor.mind.memory.affinity_to(target_id)?;
+    let target_affinity = target.mind.memory.affinity_to(actor_id)?;
+    if actor_affinity > DISSOLUTION_AFFINITY_THRESHOLD
+        && target_affinity > DISSOLUTION_AFFINITY_THRESHOLD
+    {
+        return None;
+    }
+
+    actor.partner_id = None;
+    target.partner_id = None;
+    Some(PartnershipDissolution {
+        actor_id,
+        target_id,
+        actor_affinity,
+        target_affinity,
+    })
+}
+
+pub(super) fn dissolve_unhealthy(entities: &mut [Entity]) -> Vec<PartnershipDissolution> {
+    let pairs: Vec<_> = entities
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .partner_id
+                .filter(|partner_id| entity.id < *partner_id)
+                .map(|partner_id| (entity.id, partner_id))
+        })
+        .collect();
+
+    pairs
+        .into_iter()
+        .filter_map(|(actor_id, target_id)| try_dissolve(entities, actor_id, target_id))
+        .collect()
 }
 
 pub(super) fn try_form(
