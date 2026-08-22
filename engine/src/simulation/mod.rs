@@ -5,6 +5,7 @@ mod entity;
 mod events;
 mod inventory;
 mod lifecycle;
+mod partnerships;
 mod physiology;
 mod pipeline;
 mod renewal;
@@ -325,6 +326,7 @@ impl Simulation {
             postpartum_until_tick: 0,
             movement_credit: 0.0,
             caregiver_id: None,
+            partner_id: None,
             personality: personality_for(self.seed, id),
             inventory: Inventory::default(),
             action_tick: 0,
@@ -447,6 +449,30 @@ impl Simulation {
                     SimulationEventCause::MutualSocialContact,
                     Some(interaction_event_id),
                 );
+            }
+            if let Some(formation) = partnerships::try_form(
+                &mut self.entities,
+                interaction.actor_id,
+                interaction.target_id,
+            ) {
+                self.push_event(PendingSimulationEvent {
+                    caused_by_event_id: Some(interaction_event_id),
+                    tick: self.tick,
+                    location: EventLocation {
+                        x: interaction.location.0,
+                        y: interaction.location.1,
+                    },
+                    actor_id: formation.actor_id,
+                    target_id: Some(formation.target_id),
+                    related_entity_ids: vec![formation.actor_id, formation.target_id],
+                    kind: SimulationEventKind::PartnershipFormed,
+                    cause: SimulationEventCause::MutualCommitment,
+                    details: SimulationEventDetails::PartnershipFormed {
+                        actor_affinity: formation.actor_affinity,
+                        target_affinity: formation.target_affinity,
+                        compatibility_per_mille: formation.compatibility_per_mille,
+                    },
+                });
             }
         }
     }
@@ -762,6 +788,7 @@ impl Simulation {
         }
         let population_before_deaths = self.entities.len();
         self.entities.retain(|entity| entity.health > 0.0);
+        partnerships::clear_missing_partners(&mut self.entities);
         self.deaths = self
             .deaths
             .saturating_add((population_before_deaths - self.entities.len()) as u64);

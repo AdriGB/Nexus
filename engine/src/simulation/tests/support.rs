@@ -100,6 +100,7 @@ pub(super) fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         postpartum_until_tick: 0,
         movement_credit: 0.0,
         caregiver_id: None,
+        partner_id: None,
         personality: personality_for(0, id),
         inventory: super::super::Inventory::default(),
         action_tick: 0,

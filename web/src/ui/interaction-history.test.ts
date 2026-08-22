@@ -8,6 +8,7 @@ import type {
   EncounterEvent,
   EntityEventSummary,
   InteractionEvent,
+  PartnershipFormedEvent,
   ResourceDiscoveryEvent,
 } from "../types";
 import {
@@ -227,6 +228,7 @@ function summary(overrides: Partial<EntityEventSummary> = {}): EntityEventSummar
     encounters: 1,
     interactions: 2,
     affinity_changes: 1,
+    partnerships_formed: 0,
     ...overrides,
   };
 }
@@ -241,6 +243,38 @@ describe("interaction history", () => {
     expect(html).toContain("Interactions");
     expect(html).toContain("Meals");
     expect(html).not.toContain("Birth events");
+  });
+
+  it("renders partnership formation and its causal interaction", () => {
+    const event: PartnershipFormedEvent = {
+      id: "20",
+      caused_by_event_id: "19",
+      tick: "100",
+      relative_time: "just now",
+      location: { x: 3, y: 4 },
+      actor_id: 2,
+      target_id: 7,
+      related_entity_ids: [2, 7],
+      kind: "partnership_formed",
+      cause: "mutual_commitment",
+      actor_affinity_delta: null,
+      target_affinity_delta: null,
+      child_id: null,
+      amount: null,
+      resource_kind: null,
+      previous_affinity: null,
+      new_affinity: null,
+      delta: null,
+      partnership_actor_affinity: 240,
+      partnership_target_affinity: 225,
+      compatibility_per_mille: 875,
+    };
+
+    const html = renderInteractionHistory([event]);
+    expect(html).toContain("formed a partnership");
+    expect(html).toContain("240 / 225");
+    expect(html).toContain("87.5%");
+    expect(html).toContain("Event #19");
   });
 
   it("renders explicit empty and single-tick summary states", () => {

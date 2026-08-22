@@ -127,6 +127,7 @@ export interface EntityInfo {
   life_stage: string;
   stage_movement_factor: number;
   caregiver_id: number | null;
+  partner_id: number | null;
   personality: {
     curiosity: number;
     sociability: number;
@@ -188,6 +189,9 @@ interface SimulationEventBase {
   target_id: number | null;
   related_entity_ids: number[];
   refused?: boolean | null;
+  partnership_actor_affinity?: number | null;
+  partnership_target_affinity?: number | null;
+  compatibility_per_mille?: number | null;
 }
 
 export interface InteractionEvent extends SimulationEventBase {
@@ -309,6 +313,23 @@ export interface FoodShareRefusedEvent extends FoodShareEventBase {
   refused: true;
 }
 
+export interface PartnershipFormedEvent extends SimulationEventBase {
+  kind: "partnership_formed";
+  cause: "mutual_commitment";
+  target_id: number;
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: null;
+  resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
+  partnership_actor_affinity: number;
+  partnership_target_affinity: number;
+  compatibility_per_mille: number;
+}
+
 export type SimulationEvent =
   | InteractionEvent
   | BirthEvent
@@ -318,7 +339,8 @@ export type SimulationEvent =
   | EncounterEvent
   | AffinityChangeEvent
   | FoodSharedEvent
-  | FoodShareRefusedEvent;
+  | FoodShareRefusedEvent
+  | PartnershipFormedEvent;
 
 export interface EntityEventSummary {
   entity_id: number;
@@ -332,6 +354,7 @@ export interface EntityEventSummary {
   encounters: number;
   interactions: number;
   affinity_changes: number;
+  partnerships_formed: number;
 }
 
 export interface PopulationStats {

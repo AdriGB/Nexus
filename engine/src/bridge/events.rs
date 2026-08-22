@@ -34,6 +34,9 @@ struct SimulationEventDto {
     new_affinity: Option<i16>,
     delta: Option<i16>,
     refused: Option<bool>,
+    partnership_actor_affinity: Option<i16>,
+    partnership_target_affinity: Option<i16>,
+    compatibility_per_mille: Option<u16>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +52,7 @@ struct EntityEventSummaryDto {
     encounters: u32,
     interactions: u32,
     affinity_changes: u32,
+    partnerships_formed: u32,
 }
 
 impl From<EntityEventSummary> for EntityEventSummaryDto {
@@ -65,6 +69,7 @@ impl From<EntityEventSummary> for EntityEventSummaryDto {
             encounters: summary.encounters,
             interactions: summary.interactions,
             affinity_changes: summary.affinity_changes,
+            partnerships_formed: summary.partnerships_formed,
         }
     }
 }
@@ -110,6 +115,7 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventKind::AffinityChange => "affinity_change",
                 SimulationEventKind::FoodShared => "food_shared",
                 SimulationEventKind::FoodShareRefused => "food_share_refused",
+                SimulationEventKind::PartnershipFormed => "partnership_formed",
             };
             let cause = match event.cause {
                 SimulationEventCause::MutualSocialContact => "mutual_social_contact",
@@ -122,6 +128,7 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventCause::RelationshipDecay => "relationship_decay",
                 SimulationEventCause::FoodShared => "food_shared",
                 SimulationEventCause::FoodShareRefused => "food_share_refused",
+                SimulationEventCause::MutualCommitment => "mutual_commitment",
             };
             let (
                 actor_affinity_delta,
@@ -213,7 +220,23 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventDetails::FoodShareRefused => {
                     (None, None, None, None, None, None, None, None, Some(true))
                 }
+                SimulationEventDetails::PartnershipFormed { .. } => {
+                    (None, None, None, None, None, None, None, None, None)
+                }
             };
+            let (partnership_actor_affinity, partnership_target_affinity, compatibility_per_mille) =
+                match event.details {
+                    SimulationEventDetails::PartnershipFormed {
+                        actor_affinity,
+                        target_affinity,
+                        compatibility_per_mille,
+                    } => (
+                        Some(actor_affinity),
+                        Some(target_affinity),
+                        Some(compatibility_per_mille),
+                    ),
+                    _ => (None, None, None),
+                };
 
             SimulationEventDto {
                 id: event.id.to_string(),
@@ -238,6 +261,9 @@ pub(super) fn simulation_events_json<'a>(
                 new_affinity,
                 delta,
                 refused,
+                partnership_actor_affinity,
+                partnership_target_affinity,
+                compatibility_per_mille,
             }
         })
         .collect();

@@ -80,7 +80,7 @@ pub(super) fn interaction_interval(a: &Personality, b: &Personality) -> u64 {
     MAX_INTERACTION_INTERVAL - (span * sociability).round() as u64
 }
 
-fn personality_compatibility(a: &Personality, b: &Personality) -> f32 {
+pub(in crate::simulation) fn personality_compatibility(a: &Personality, b: &Personality) -> f32 {
     let curiosity = (a.curiosity - b.curiosity).abs();
     let caution = (a.caution - b.caution).abs();
     let sociability = (a.sociability - b.sociability).abs();

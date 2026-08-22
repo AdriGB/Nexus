@@ -56,6 +56,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
         assert_eq!(a.path_index, b.path_index);
         assert_eq!(a.movement_credit, b.movement_credit);
         assert_eq!(a.caregiver_id, b.caregiver_id);
+        assert_eq!(a.partner_id, b.partner_id);
         assert_eq!(a.pregnancy, b.pregnancy);
         assert_eq!(a.postpartum_until_tick, b.postpartum_until_tick);
         assert_eq!(a.personality, b.personality);
@@ -191,6 +192,49 @@ fn profile_step_matches_dependent_feeding() {
 
     assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
     assert_eq!(normal.entities[1].inventory.amount(ItemKind::Food), 10);
+}
+
+#[test]
+fn profile_step_matches_partnership_formation() {
+    fn partnership_simulation() -> Simulation {
+        let known = |id| KnownEntity {
+            id,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 0,
+            last_seen_y: 0,
+            observed_ticks: 1,
+            affinity: 210,
+            last_interaction_tick: 0,
+            interaction_count: 2,
+            seek_retry_after_tick: None,
+        };
+        let mut first = entity(1, 0, 0, 0.0);
+        let mut second = entity(2, 0, 0, 0.0);
+        for entity in [&mut first, &mut second] {
+            entity.age_ticks = 25 * TICKS_PER_YEAR;
+        }
+        second.personality = first.personality;
+        first.mind.memory.known_entities.push(known(2));
+        second.mind.memory.known_entities.push(known(1));
+        Simulation {
+            entities: vec![first, second],
+            next_entity_id: 3,
+            ..Simulation::default()
+        }
+    }
+
+    let mut normal_world = grid_from_rows(&["P"]);
+    let mut profiled_world = grid_from_rows(&["P"]);
+    let mut normal = partnership_simulation();
+    let mut profiled = partnership_simulation();
+
+    normal.step(&mut normal_world);
+    profiled.profile_step(&mut profiled_world);
+
+    assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
+    assert_eq!(normal.entities[0].partner_id, Some(2));
+    assert_eq!(normal.entities[1].partner_id, Some(1));
 }
 
 #[test]
