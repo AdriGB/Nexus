@@ -32,6 +32,7 @@ pub(in crate::simulation) use self::decision::DecisionContext;
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
+pub(in crate::simulation) use self::social::personality_compatibility;
 pub(in crate::simulation) use self::social::SocialInteraction;
 
 use super::entity::Entity;

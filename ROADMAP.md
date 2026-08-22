@@ -179,7 +179,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
   * [x] encuentro
   * [x] interacción
   * [x] cambio significativo de afinidad
-  * [ ] formación de pareja
+  * [x] formación de pareja
   * [ ] separación
 * [x] Buffer circular de eventos recientes
 * [x] Historial resumido por entidad
@@ -248,7 +248,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [ ] Madre y padre persistentes
 * [ ] Hijos
 * [ ] Hermanos
-* [ ] Parejas
+* [x] Parejas
 * [ ] Árbol familiar
 * [ ] Relaciones de parentesco derivadas
 

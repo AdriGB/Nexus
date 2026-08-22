@@ -7,6 +7,7 @@ mod food_sharing;
 mod inventory_transfer;
 mod movement;
 mod parity;
+mod partnerships;
 mod personality;
 mod resources;
 mod social;

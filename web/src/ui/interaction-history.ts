@@ -99,6 +99,14 @@ function eventDetails(event: SimulationEvent): string {
       <div class="interaction-event-row">${entityButton(event.target_id!, "Target")}${affinityDelta(event.target_affinity_delta)}</div>
       <div class="interaction-event-row"><span>Mutual social contact</span><span>(${event.location.x}, ${event.location.y})</span></div>`;
   }
+  if (event.kind === "partnership_formed") {
+    const compatibility = (event.compatibility_per_mille / 10).toFixed(1);
+    const causalLink = event.caused_by_event_id
+      ? `<div class="interaction-event-row"><span>Caused by</span><button class="interaction-entity-link" type="button" data-event-target-id="${event.caused_by_event_id}">Event #${event.caused_by_event_id}</button></div>`
+      : "";
+    return `<div class="interaction-event-row">${entityButton(event.actor_id, "Partner")}<span>formed a partnership with</span>${entityButton(event.target_id, "Partner")}</div>
+      <div class="interaction-event-row"><span>Mutual affinity: ${event.partnership_actor_affinity} / ${event.partnership_target_affinity}</span><span>Compatibility ${compatibility}%</span></div>${causalLink}`;
+  }
   if (event.kind === "birth") {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Mother")}<span>gave birth</span></div>
       <div class="interaction-event-row">${entityButton(event.child_id, "Newborn")}<span>born at (${event.location.x}, ${event.location.y})</span></div>`;
@@ -178,6 +186,7 @@ export function renderEntityEventSummary(summary: EntityEventSummary): string {
     ["Encounters", summary.encounters],
     ["Interactions", summary.interactions],
     ["Affinity changes", summary.affinity_changes],
+    ["Partnerships formed", summary.partnerships_formed],
     ["Discoveries", summary.discoveries],
     ["Meals", summary.consumptions],
     ["Birth events", summary.births],

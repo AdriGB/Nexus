@@ -154,6 +154,7 @@ export function syncEntityInspector(): void {
       `${(entity.stage_movement_factor * 100).toFixed(0)}%`,
     ),
     infoRow("Caregiver", entity.caregiver_id?.toString() ?? "—"),
+    infoRow("Partner", entity.partner_id?.toString() ?? "—"),
     infoSectionTitle("Personality"),
     infoRow(
       "Curiosity",

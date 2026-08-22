@@ -110,17 +110,28 @@ pub(super) fn select_reproduction_partner(
 ) -> Option<u32> {
     let female_position = (female.x, female.y);
 
+    let eligible = |candidate: &&Entity| {
+        male_is_fertile(candidate, max_health)
+            && manhattan(female_position, (candidate.x, candidate.y)) <= REPRODUCTION_MAX_DISTANCE
+            && female.mind.memory.affinity_to(candidate.id).unwrap_or(0)
+                >= REPRODUCTION_MIN_AFFINITY
+            && candidate.mind.memory.affinity_to(female.id).unwrap_or(0)
+                >= REPRODUCTION_MIN_AFFINITY
+    };
+
+    if let Some(partner_id) = female.partner_id {
+        if let Some(partner) = entities
+            .iter()
+            .find(|candidate| candidate.id == partner_id)
+            .filter(eligible)
+        {
+            return Some(partner.id);
+        }
+    }
+
     entities
         .iter()
-        .filter(|candidate| male_is_fertile(candidate, max_health))
-        .filter(|candidate| {
-            manhattan(female_position, (candidate.x, candidate.y)) <= REPRODUCTION_MAX_DISTANCE
-        })
-        .filter(|candidate| {
-            let mother = female.mind.memory.affinity_to(candidate.id).unwrap_or(0);
-            let father = candidate.mind.memory.affinity_to(female.id).unwrap_or(0);
-            mother >= REPRODUCTION_MIN_AFFINITY && father >= REPRODUCTION_MIN_AFFINITY
-        })
+        .filter(eligible)
         .max_by_key(|candidate| {
             use std::cmp::Reverse;
 

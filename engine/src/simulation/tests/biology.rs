@@ -380,6 +380,33 @@ fn positive_relationship_beats_closer_unknown_partner() {
 }
 
 #[test]
+fn persistent_partner_is_preferred_over_a_higher_affinity_candidate() {
+    let mut female = fertile_entity(1, Sex::Female, 0, 0);
+    let mut partner = fertile_entity(2, Sex::Male, 2, 0);
+    let mut alternative = fertile_entity(3, Sex::Male, 1, 0);
+    female.partner_id = Some(2);
+    partner.partner_id = Some(1);
+    female.mind.memory.known_entities.push(known_entity(2, 100));
+    female.mind.memory.known_entities.push(known_entity(3, 800));
+    partner
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, 100));
+    alternative
+        .mind
+        .memory
+        .known_entities
+        .push(known_entity(1, 800));
+    let entities = vec![female, partner, alternative];
+
+    assert_eq!(
+        lifecycle::select_reproduction_partner(&entities[0], &entities, MAX_HEALTH),
+        Some(2)
+    );
+}
+
+#[test]
 fn strong_negative_relationship_prevents_pairing() {
     let mut female = fertile_entity(1, Sex::Female, 0, 0);
     let negative_close = fertile_entity(2, Sex::Male, 1, 0);

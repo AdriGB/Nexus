@@ -287,6 +287,35 @@ mod tests {
     }
 
     #[test]
+    fn partnership_event_json_preserves_causal_relationship_evidence() {
+        let events = [SimulationEvent {
+            id: EventId::new(17),
+            caused_by_event_id: Some(EventId::new(16)),
+            tick: 44,
+            location: crate::simulation::EventLocation { x: 2, y: 3 },
+            actor_id: 4,
+            target_id: Some(7),
+            related_entity_ids: vec![4, 7],
+            kind: SimulationEventKind::PartnershipFormed,
+            cause: SimulationEventCause::MutualCommitment,
+            details: SimulationEventDetails::PartnershipFormed {
+                actor_affinity: 240,
+                target_affinity: 225,
+                compatibility_per_mille: 875,
+            },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 44, Some(7))).unwrap();
+        assert_eq!(payload[0]["kind"], "partnership_formed");
+        assert_eq!(payload[0]["cause"], "mutual_commitment");
+        assert_eq!(payload[0]["caused_by_event_id"], "16");
+        assert_eq!(payload[0]["partnership_actor_affinity"], 240);
+        assert_eq!(payload[0]["partnership_target_affinity"], 225);
+        assert_eq!(payload[0]["compatibility_per_mille"], 875);
+    }
+
+    #[test]
     fn discovery_event_json_includes_resource_observation() {
         let events = [SimulationEvent {
             id: EventId::new(13),
@@ -390,6 +419,7 @@ mod tests {
             "life_stage",
             "stage_movement_factor",
             "caregiver_id",
+            "partner_id",
             "personality",
             "known_resources",
             "known_entities",

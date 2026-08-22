@@ -65,6 +65,7 @@ pub enum SimulationEventKind {
     AffinityChange,
     FoodShared,
     FoodShareRefused,
+    PartnershipFormed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +80,7 @@ pub enum SimulationEventCause {
     RelationshipDecay,
     FoodShared,
     FoodShareRefused,
+    MutualCommitment,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,6 +110,11 @@ pub enum SimulationEventDetails {
         amount: u16,
     },
     FoodShareRefused,
+    PartnershipFormed {
+        actor_affinity: i16,
+        target_affinity: i16,
+        compatibility_per_mille: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,6 +144,7 @@ pub(crate) struct EntityEventSummary {
     pub encounters: u32,
     pub interactions: u32,
     pub affinity_changes: u32,
+    pub partnerships_formed: u32,
 }
 
 pub(super) struct PendingSimulationEvent {
@@ -241,6 +249,7 @@ impl RecentEventHistory {
                 SimulationEventKind::FoodShared | SimulationEventKind::FoodShareRefused => {
                     &mut summary.interactions
                 }
+                SimulationEventKind::PartnershipFormed => &mut summary.partnerships_formed,
             };
             *counter = counter.saturating_add(1);
         }

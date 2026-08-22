@@ -77,6 +77,7 @@ pub struct Entity {
     pub postpartum_until_tick: u64,
     pub movement_credit: f32,
     pub caregiver_id: Option<u32>,
+    pub partner_id: Option<u32>,
     pub personality: Personality,
     pub inventory: Inventory,
     pub action_tick: u32,
