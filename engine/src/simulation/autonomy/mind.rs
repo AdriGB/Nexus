@@ -52,6 +52,7 @@ pub enum Action {
     ApproachEntity(u32),
     Interact(u32),
     ShareFood(u32),
+    DepositHouseholdFood(u16),
 }
 
 impl Action {
@@ -65,6 +66,7 @@ impl Action {
             Self::ApproachEntity(_) => "Approach entity",
             Self::Interact(_) => "Interact",
             Self::ShareFood(_) => "Share food",
+            Self::DepositHouseholdFood(_) => "Deposit household food",
         }
     }
 
@@ -77,6 +79,7 @@ impl Action {
             | Self::ApproachEntity(_)
             | Self::Interact(_)
             | Self::ShareFood(_) => None,
+            Self::DepositHouseholdFood(_) => None,
         }
     }
 

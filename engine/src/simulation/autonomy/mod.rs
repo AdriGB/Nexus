@@ -28,6 +28,7 @@ pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 pub(super) use self::action::effective_movement_speed;
 pub(super) use self::action::ActionOutcome;
 pub(in crate::simulation) use self::action::FoodShareAttempt;
+pub(in crate::simulation) use self::action::HouseholdDepositAttempt;
 pub(in crate::simulation) use self::decision::DecisionContext;
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
@@ -40,6 +41,14 @@ use super::inventory::ItemKind;
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
+
+pub(crate) const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HouseholdAutonomyContext {
+    pub residence: (u32, u32),
+    pub storage_remaining_capacity: u16,
+}
 
 pub(super) fn process_social_interactions(
     entities: &mut [Entity],
@@ -69,7 +78,7 @@ pub(super) fn update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-    home_position: Option<(u32, u32)>,
+    household_context: Option<HouseholdAutonomyContext>,
 ) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
     let position = (entity.x, entity.y);
     let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
@@ -124,7 +133,7 @@ pub(super) fn update_entity(
             goal,
             pathfinding_workspace,
             population,
-            home_position,
+            household_context,
         );
     }
 

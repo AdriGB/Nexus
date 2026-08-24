@@ -23,6 +23,7 @@ type ProfileAutonomyResult = (
     Vec<EntityEncounter>,
     Vec<super::SocialInteraction>,
     Vec<super::FoodShareAttempt>,
+    Vec<super::HouseholdDepositAttempt>,
 );
 
 #[derive(Clone, Debug, Default)]
@@ -45,7 +46,7 @@ pub(crate) struct AutonomyProfile {
 
 struct ProfiledUpdateContext<'a> {
     profile: &'a mut AutonomyProfile,
-    home_position: Option<(u32, u32)>,
+    household_context: Option<super::HouseholdAutonomyContext>,
 }
 
 fn profiled_update_entity(
@@ -63,7 +64,7 @@ fn profiled_update_entity(
 ) {
     let ProfiledUpdateContext {
         profile,
-        home_position,
+        household_context,
     } = context;
     let position = (entity.x, entity.y);
 
@@ -143,7 +144,7 @@ fn profiled_update_entity(
             goal,
             pathfinding_workspace,
             population,
-            home_position,
+            household_context,
         );
         profile.planning_us += start.elapsed().as_micros() as u64;
     }
@@ -163,7 +164,7 @@ pub(crate) fn profile_autonomy(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-    home_positions: &[Option<(u32, u32)>],
+    household_contexts: &[Option<super::HouseholdAutonomyContext>],
 ) -> ProfileAutonomyResult {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
@@ -172,10 +173,11 @@ pub(crate) fn profile_autonomy(
     let mut discoveries = Vec::new();
     let mut encounters = Vec::new();
     let mut food_share_attempts = Vec::new();
+    let mut household_deposit_attempts = Vec::new();
 
-    for (index, (entity, home_position)) in entities
+    for (index, (entity, household_context)) in entities
         .iter_mut()
-        .zip(home_positions.iter().copied())
+        .zip(household_contexts.iter().copied())
         .filter(|(entity, _)| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
         })
@@ -191,7 +193,7 @@ pub(crate) fn profile_autonomy(
                 pathfinding_workspace,
                 ProfiledUpdateContext {
                     profile: &mut profile,
-                    home_position,
+                    household_context,
                 },
             )
         } else {
@@ -202,7 +204,7 @@ pub(crate) fn profile_autonomy(
                 population,
                 spatial_grid,
                 pathfinding_workspace,
-                home_position,
+                household_context,
             )
         };
         discoveries.extend(entity_discoveries);
@@ -215,6 +217,9 @@ pub(crate) fn profile_autonomy(
         world_changed |= result.world_changed;
         if let Some(attempt) = result.food_share_attempt {
             food_share_attempts.push(attempt);
+        }
+        if let Some(attempt) = result.household_deposit_attempt {
+            household_deposit_attempts.push(attempt);
         }
     }
 
@@ -231,5 +236,6 @@ pub(crate) fn profile_autonomy(
         encounters,
         interactions,
         food_share_attempts,
+        household_deposit_attempts,
     )
 }
