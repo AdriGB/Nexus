@@ -80,6 +80,7 @@ pub struct Entity {
     pub father_id: Option<u32>,
     pub caregiver_id: Option<u32>,
     pub partner_id: Option<u32>,
+    pub household_id: Option<u32>,
     pub personality: Personality,
     pub inventory: Inventory,
     pub action_tick: u32,

@@ -216,6 +216,9 @@ fn third_positive_interaction_forms_a_symmetric_causal_partnership() {
 
     assert_eq!(simulation.entities[0].partner_id, Some(2));
     assert_eq!(simulation.entities[1].partner_id, Some(1));
+    assert_eq!(simulation.entities[0].household_id, Some(1));
+    assert_eq!(simulation.entities[1].household_id, Some(1));
+    assert_eq!(simulation.households.len(), 1);
     let events: Vec<_> = simulation.recent_events().collect();
     let interaction_event = events
         .iter()

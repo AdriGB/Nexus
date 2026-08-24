@@ -5,6 +5,7 @@ mod dependency;
 mod events;
 mod food_sharing;
 mod genealogy;
+mod households;
 mod inventory_transfer;
 mod kinship;
 mod movement;

@@ -254,9 +254,9 @@ Objetivo: crear la primera estructura social superior al individuo.
 
 ## Households
 
-* [ ] Formación de hogares
+* [x] Formación de hogares
 * [ ] Residencia compartida
-* [ ] Miembros del hogar
+* [x] Miembros del hogar
 * [ ] Almacén común
 * [ ] Reparto de recursos
 * [ ] Responsabilidad por dependientes

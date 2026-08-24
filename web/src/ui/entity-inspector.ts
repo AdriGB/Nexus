@@ -1,5 +1,5 @@
 import { state } from "../state";
-import type { EntityInfo, EntityKinship, KnownRelationshipInfo } from "../types";
+import type { EntityHousehold, EntityInfo, EntityKinship, KnownRelationshipInfo } from "../types";
 
 function infoRow(key: string, value: string, valueClass?: string): string {
   const cls = valueClass ? `info-val ${valueClass}` : "info-val";
@@ -75,6 +75,19 @@ export function renderInventorySection(
   );
 }
 
+export function renderHouseholdSection(household: EntityHousehold): string {
+  return (
+    infoSectionTitle("Household") +
+    infoRow("Household", household.household_id === null ? "—" : `#${household.household_id}`) +
+    infoRow(
+      "Members",
+      household.member_ids.length === 0
+        ? "—"
+        : household.member_ids.map((id) => `#${id}`).join(", "),
+    )
+  );
+}
+
 function relationshipsSection(
   relationships: KnownRelationshipInfo[],
   tick: number,
@@ -134,6 +147,7 @@ export function syncEntityInspector(): void {
     state.world.first_entity_relationships(),
   ) as KnownRelationshipInfo[];
   const kinship = JSON.parse(state.world.first_entity_kinship()) as EntityKinship;
+  const household = JSON.parse(state.world.first_entity_household()) as EntityHousehold;
   const simulationTick = Number(state.world.simulation_tick());
   const relationshipsHtml = relationshipsSection(relationships, simulationTick);
   const dueInHours =
@@ -172,6 +186,7 @@ export function syncEntityInspector(): void {
     `<span class="info-key"></span><button class="btn-secondary family-tree-open" type="button" data-family-tree-id="${entity.id}">View Family Tree</button>`,
     infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
     infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
+    renderHouseholdSection(household),
     infoSectionTitle("Personality"),
     infoRow(
       "Curiosity",

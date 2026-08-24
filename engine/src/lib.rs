@@ -190,6 +190,13 @@ impl WorldBridge {
         )
     }
 
+    pub fn first_entity_household(&self) -> String {
+        self.simulation.entities().first().map_or_else(
+            || "{}".to_string(),
+            |entity| bridge::entity_household_json(&self.simulation, entity.id),
+        )
+    }
+
     pub fn recent_interaction_events(&self, entity_id: Option<u32>) -> String {
         bridge::recent_interaction_events_json(&self.simulation, entity_id)
     }
@@ -215,6 +222,10 @@ impl WorldBridge {
 
     pub fn entity_kinship(&self, id: u32) -> String {
         bridge::entity_kinship_json(&self.simulation, id)
+    }
+
+    pub fn entity_household(&self, id: u32) -> String {
+        bridge::entity_household_json(&self.simulation, id)
     }
 
     pub fn entity_relationship(&self, first_id: u32, second_id: u32) -> String {

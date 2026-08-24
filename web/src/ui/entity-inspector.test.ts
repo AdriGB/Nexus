@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderInventorySection } from "./entity-inspector";
+import { renderHouseholdSection, renderInventorySection } from "./entity-inspector";
 
 describe("inventory inspector", () => {
   it("renders an empty bounded inventory", () => {
@@ -29,5 +29,29 @@ describe("inventory inspector", () => {
 
     expect(html).toContain("12 / 50");
     expect(html).toContain("Food: 7 · Stone: 5");
+  });
+});
+
+describe("household inspector", () => {
+  it("renders persistent identity and deterministically ordered members", () => {
+    const html = renderHouseholdSection({
+      household_id: 4,
+      member_ids: [12, 19],
+      formed_tick: 5821,
+    });
+
+    expect(html).toContain("Household");
+    expect(html).toContain("#4");
+    expect(html).toContain("#12, #19");
+  });
+
+  it("renders an unassigned entity compactly", () => {
+    const html = renderHouseholdSection({
+      household_id: null,
+      member_ids: [],
+      formed_tick: null,
+    });
+
+    expect(html).toContain("—");
   });
 });
