@@ -44,6 +44,51 @@ enum KinshipRelationDto {
     Unrelated,
 }
 
+#[derive(Serialize)]
+struct FamilyTreeNodeDto {
+    entity_id: u32,
+    generation: i16,
+    alive: bool,
+}
+
+#[derive(Serialize)]
+struct FamilyTreeEdgeDto {
+    parent_id: u32,
+    child_id: u32,
+}
+
+#[derive(Serialize)]
+struct FamilyTreeDto {
+    focal_id: u32,
+    nodes: Vec<FamilyTreeNodeDto>,
+    edges: Vec<FamilyTreeEdgeDto>,
+}
+
+impl From<simulation::FamilyTree> for FamilyTreeDto {
+    fn from(tree: simulation::FamilyTree) -> Self {
+        Self {
+            focal_id: tree.focal_id,
+            nodes: tree
+                .nodes
+                .into_iter()
+                .map(|node| FamilyTreeNodeDto {
+                    entity_id: node.entity_id,
+                    generation: node.generation,
+                    alive: node.alive,
+                })
+                .collect(),
+            edges: tree
+                .edges
+                .into_iter()
+                .map(|edge| FamilyTreeEdgeDto {
+                    parent_id: edge.parent_id,
+                    child_id: edge.child_id,
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<simulation::KinshipRelation> for KinshipRelationDto {
     fn from(relation: simulation::KinshipRelation) -> Self {
         match relation {
@@ -109,6 +154,21 @@ pub(crate) fn entity_relationship_json(
         simulation.genealogy(),
         first_id,
         second_id,
+    )))
+}
+
+pub(crate) fn entity_family_tree_json(
+    simulation: &Simulation,
+    entity_id: u32,
+    ancestor_depth: u16,
+    descendant_depth: u16,
+) -> String {
+    to_json(&FamilyTreeDto::from(simulation::family_tree_of(
+        simulation.genealogy(),
+        simulation.entities(),
+        entity_id,
+        ancestor_depth,
+        descendant_depth,
     )))
 }
 

@@ -1,7 +1,7 @@
 use super::super::genealogy::Genealogy;
 use super::super::kinship::{
-    ancestors_of, children_of, descendants_of, relationship_between, siblings_of,
-    KinshipGeneration, KinshipRelation,
+    ancestors_of, children_of, descendants_of, family_tree_of, relationship_between, siblings_of,
+    FamilyTreeEdge, FamilyTreeNode, KinshipGeneration, KinshipRelation,
 };
 use super::support::entity;
 
@@ -455,5 +455,143 @@ fn multiple_common_ancestors_use_distance_then_id_tiebreakers() {
             degree: 1,
             removed: 1,
         }
+    );
+}
+
+#[test]
+fn family_tree_contains_focal_parents_and_children_with_liveness() {
+    let dead_parent = biological_child(1, None, None);
+    let focal = biological_child(2, Some(1), None);
+    let child = biological_child(3, Some(2), None);
+    let genealogy = genealogy(vec![dead_parent, focal.clone(), child.clone()]);
+
+    let tree = family_tree_of(&genealogy, &[focal, child], 2, 2, 2);
+
+    assert_eq!(tree.focal_id, 2);
+    assert_eq!(
+        tree.nodes,
+        vec![
+            FamilyTreeNode {
+                entity_id: 1,
+                generation: -1,
+                alive: false
+            },
+            FamilyTreeNode {
+                entity_id: 2,
+                generation: 0,
+                alive: true
+            },
+            FamilyTreeNode {
+                entity_id: 3,
+                generation: 1,
+                alive: true
+            },
+        ]
+    );
+    assert_eq!(
+        tree.edges,
+        vec![
+            FamilyTreeEdge {
+                parent_id: 1,
+                child_id: 2
+            },
+            FamilyTreeEdge {
+                parent_id: 2,
+                child_id: 3
+            },
+        ]
+    );
+}
+
+#[test]
+fn family_tree_respects_bounded_generation_depth() {
+    let first = biological_child(1, None, None);
+    let second = biological_child(2, Some(1), None);
+    let third = biological_child(3, Some(2), None);
+    let focal = biological_child(4, Some(3), None);
+    let child = biological_child(5, Some(4), None);
+    let grandchild = biological_child(6, Some(5), None);
+    let great_grandchild = biological_child(7, Some(6), None);
+    let genealogy = genealogy(vec![
+        first,
+        second,
+        third,
+        focal,
+        child,
+        grandchild,
+        great_grandchild,
+    ]);
+
+    let tree = family_tree_of(&genealogy, &[], 4, 2, 2);
+    assert_eq!(
+        tree.nodes
+            .iter()
+            .map(|node| (node.entity_id, node.generation))
+            .collect::<Vec<_>>(),
+        vec![(2, -2), (3, -1), (4, 0), (5, 1), (6, 2)]
+    );
+}
+
+#[test]
+fn family_tree_deduplicates_converging_branches_and_orders_output() {
+    let root = biological_child(1, None, None);
+    let left = biological_child(2, Some(1), None);
+    let right = biological_child(3, Some(1), None);
+    let focal = biological_child(4, Some(2), Some(3));
+    let genealogy = genealogy(vec![focal, right, root, left]);
+
+    let tree = family_tree_of(&genealogy, &[], 4, 2, 0);
+    assert_eq!(
+        tree.nodes.iter().filter(|node| node.entity_id == 1).count(),
+        1
+    );
+    assert_eq!(
+        tree.nodes
+            .iter()
+            .map(|node| node.entity_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3, 4]
+    );
+    assert_eq!(
+        tree.edges,
+        vec![
+            FamilyTreeEdge {
+                parent_id: 1,
+                child_id: 2
+            },
+            FamilyTreeEdge {
+                parent_id: 1,
+                child_id: 3
+            },
+            FamilyTreeEdge {
+                parent_id: 2,
+                child_id: 4
+            },
+            FamilyTreeEdge {
+                parent_id: 3,
+                child_id: 4
+            },
+        ]
+    );
+}
+
+#[test]
+fn unknown_and_malformed_family_trees_are_safe() {
+    let first = biological_child(1, Some(2), None);
+    let second = biological_child(2, Some(1), None);
+    let genealogy = genealogy(vec![first, second]);
+
+    let unknown = family_tree_of(&genealogy, &[], 99, 2, 2);
+    assert!(unknown.nodes.is_empty() && unknown.edges.is_empty());
+
+    let cyclic = family_tree_of(&genealogy, &[], 1, 10, 10);
+    assert_eq!(cyclic.nodes.len(), 2);
+    assert_eq!(
+        cyclic
+            .nodes
+            .iter()
+            .filter(|node| node.entity_id == 1)
+            .count(),
+        1
     );
 }

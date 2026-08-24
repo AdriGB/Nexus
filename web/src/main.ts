@@ -40,6 +40,7 @@ import {
 } from "./simulation";
 import { installPerformanceDebug } from "./simulation-debug";
 import { bindInteractionHistory } from "./ui/interaction-history";
+import { bindFamilyTree } from "./ui/family-tree";
 
 /* ── World generation ─────────────────────── */
 
@@ -119,6 +120,7 @@ async function boot(): Promise<void> {
   bindSaveControls(generateWorld);
   bindSimulationControls();
   bindInteractionHistory();
+  bindFamilyTree();
   installPerformanceDebug();
 
   inputLayer.addEventListener("mousemove", (e) => {

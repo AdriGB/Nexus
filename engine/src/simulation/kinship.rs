@@ -1,7 +1,7 @@
 //! Biological kinship derived from persistent parentage.
 
-use super::genealogy::Genealogy;
-use std::collections::{HashSet, VecDeque};
+use super::{genealogy::Genealogy, Entity};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct KinshipGeneration {
@@ -22,6 +22,26 @@ pub(crate) enum KinshipRelation {
     NieceNephew { generations_removed: u16 },
     Cousin { degree: u16, removed: u16 },
     Unrelated,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FamilyTreeNode {
+    pub entity_id: u32,
+    pub generation: i16,
+    pub alive: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct FamilyTreeEdge {
+    pub parent_id: u32,
+    pub child_id: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FamilyTree {
+    pub focal_id: u32,
+    pub nodes: Vec<FamilyTreeNode>,
+    pub edges: Vec<FamilyTreeEdge>,
 }
 
 pub(crate) fn children_of(genealogy: &Genealogy, parent_id: u32) -> Vec<u32> {
@@ -173,4 +193,74 @@ fn generation_of(relatives: Vec<KinshipGeneration>, entity_id: u32) -> Option<u1
         .into_iter()
         .find(|relative| relative.entity_id == entity_id)
         .map(|relative| relative.generation)
+}
+
+pub(crate) fn family_tree_of(
+    genealogy: &Genealogy,
+    living_entities: &[Entity],
+    entity_id: u32,
+    ancestor_depth: u16,
+    descendant_depth: u16,
+) -> FamilyTree {
+    if genealogy.get(entity_id).is_none() {
+        return FamilyTree {
+            focal_id: entity_id,
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        };
+    }
+
+    let mut generations = BTreeMap::from([(entity_id, 0i16)]);
+    for relative in ancestors_of(genealogy, entity_id)
+        .into_iter()
+        .filter(|relative| relative.generation <= ancestor_depth)
+    {
+        generations
+            .entry(relative.entity_id)
+            .or_insert_with(|| -i16::try_from(relative.generation).unwrap_or(i16::MAX));
+    }
+    for relative in descendants_of(genealogy, entity_id)
+        .into_iter()
+        .filter(|relative| relative.generation <= descendant_depth)
+    {
+        generations
+            .entry(relative.entity_id)
+            .or_insert_with(|| i16::try_from(relative.generation).unwrap_or(i16::MAX));
+    }
+
+    let mut nodes: Vec<_> = generations
+        .iter()
+        .map(|(&relative_id, &generation)| FamilyTreeNode {
+            entity_id: relative_id,
+            generation,
+            alive: living_entities
+                .binary_search_by_key(&relative_id, |entity| entity.id)
+                .is_ok(),
+        })
+        .collect();
+    nodes.sort_unstable_by_key(|node| (node.generation, node.entity_id));
+
+    let included: HashSet<_> = generations.keys().copied().collect();
+    let mut edges = Vec::new();
+    for record in genealogy.records() {
+        if !included.contains(&record.entity_id) {
+            continue;
+        }
+        for parent_id in [record.mother_id, record.father_id].into_iter().flatten() {
+            if included.contains(&parent_id) {
+                edges.push(FamilyTreeEdge {
+                    parent_id,
+                    child_id: record.entity_id,
+                });
+            }
+        }
+    }
+    edges.sort_unstable();
+    edges.dedup();
+
+    FamilyTree {
+        focal_id: entity_id,
+        nodes,
+        edges,
+    }
 }
