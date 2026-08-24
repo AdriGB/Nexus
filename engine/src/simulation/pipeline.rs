@@ -4,7 +4,9 @@
 //! domain modules own their rules. Keeping orchestration here makes additions
 //! to the tick lifecycle visible without turning `Simulation` into a scheduler.
 
-use super::{autonomy, dependents, physiology, AutonomyProfile, PhaseProfile, Simulation};
+use super::{
+    autonomy, dependents, households, physiology, AutonomyProfile, PhaseProfile, Simulation,
+};
 use crate::world::Grid;
 use web_time::Instant;
 
@@ -19,6 +21,7 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
+    households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     simulation.run_daily_relationship_decay();
     simulation.try_daily_conceptions();
@@ -82,6 +85,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let start = Instant::now();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
+    households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     let pregnancies_us = start.elapsed().as_micros() as u64;
 
@@ -178,6 +182,7 @@ pub(super) fn run_profiled_autonomy_step(
     simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
+    households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
     // Covers both newly reassigned infants and newborns assigned to their mother.
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     simulation.run_daily_relationship_decay();
