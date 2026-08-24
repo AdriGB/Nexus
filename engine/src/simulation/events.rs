@@ -66,6 +66,7 @@ pub enum SimulationEventKind {
     FoodShared,
     FoodShareRefused,
     PartnershipFormed,
+    PartnershipDissolved,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +116,10 @@ pub enum SimulationEventDetails {
         target_affinity: i16,
         compatibility_per_mille: u16,
     },
+    PartnershipDissolved {
+        actor_affinity: i16,
+        target_affinity: i16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,6 +150,7 @@ pub(crate) struct EntityEventSummary {
     pub interactions: u32,
     pub affinity_changes: u32,
     pub partnerships_formed: u32,
+    pub partnerships_dissolved: u32,
 }
 
 pub(super) struct PendingSimulationEvent {
@@ -250,6 +256,7 @@ impl RecentEventHistory {
                     &mut summary.interactions
                 }
                 SimulationEventKind::PartnershipFormed => &mut summary.partnerships_formed,
+                SimulationEventKind::PartnershipDissolved => &mut summary.partnerships_dissolved,
             };
             *counter = counter.saturating_add(1);
         }
@@ -311,15 +318,23 @@ mod summary_tests {
             vec![2, 3],
             SimulationEventKind::Death,
         ));
+        history.push(event(
+            12,
+            1,
+            Some(4),
+            vec![1, 4],
+            SimulationEventKind::PartnershipDissolved,
+        ));
 
         let summary = history.summary_for(1);
         assert_eq!(summary.entity_id, 1);
-        assert_eq!(summary.total_events, 2);
+        assert_eq!(summary.total_events, 3);
         assert_eq!(summary.first_event_tick, Some(5));
-        assert_eq!(summary.latest_event_tick, Some(8));
+        assert_eq!(summary.latest_event_tick, Some(12));
         assert_eq!(summary.interactions, 1);
         assert_eq!(summary.discoveries, 1);
         assert_eq!(summary.deaths, 0);
+        assert_eq!(summary.partnerships_dissolved, 1);
     }
 
     #[test]

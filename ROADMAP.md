@@ -161,7 +161,7 @@ Dos individuos se conocen, recuerdan sus encuentros, desarrollan afinidad y comi
 
 ---
 
-# Phase 2.8 — Events and Causality
+# Phase 2.8 — Events and Causality ✅
 
 Objetivo: registrar por qué sucede cada acontecimiento importante.
 
@@ -170,7 +170,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
 * [x] Actor, objetivo y entidades relacionadas
 * [x] Tipo de evento
 * [x] Causa inmediata
-* [ ] Eventos de:
+* [x] Eventos de:
 
   * [x] nacimiento
   * [x] muerte
@@ -180,7 +180,7 @@ Objetivo: registrar por qué sucede cada acontecimiento importante.
   * [x] interacción
   * [x] cambio significativo de afinidad
   * [x] formación de pareja
-  * [ ] separación
+  * [x] separación
 * [x] Buffer circular de eventos recientes
 * [x] Historial resumido por entidad
 * [x] Panel cronológico filtrable

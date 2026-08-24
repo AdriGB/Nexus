@@ -53,6 +53,7 @@ struct EntityEventSummaryDto {
     interactions: u32,
     affinity_changes: u32,
     partnerships_formed: u32,
+    partnerships_dissolved: u32,
 }
 
 impl From<EntityEventSummary> for EntityEventSummaryDto {
@@ -70,6 +71,7 @@ impl From<EntityEventSummary> for EntityEventSummaryDto {
             interactions: summary.interactions,
             affinity_changes: summary.affinity_changes,
             partnerships_formed: summary.partnerships_formed,
+            partnerships_dissolved: summary.partnerships_dissolved,
         }
     }
 }
@@ -116,6 +118,7 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventKind::FoodShared => "food_shared",
                 SimulationEventKind::FoodShareRefused => "food_share_refused",
                 SimulationEventKind::PartnershipFormed => "partnership_formed",
+                SimulationEventKind::PartnershipDissolved => "partnership_dissolved",
             };
             let cause = match event.cause {
                 SimulationEventCause::MutualSocialContact => "mutual_social_contact",
@@ -223,6 +226,9 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventDetails::PartnershipFormed { .. } => {
                     (None, None, None, None, None, None, None, None, None)
                 }
+                SimulationEventDetails::PartnershipDissolved { .. } => {
+                    (None, None, None, None, None, None, None, None, None)
+                }
             };
             let (partnership_actor_affinity, partnership_target_affinity, compatibility_per_mille) =
                 match event.details {
@@ -235,6 +241,10 @@ pub(super) fn simulation_events_json<'a>(
                         Some(target_affinity),
                         Some(compatibility_per_mille),
                     ),
+                    SimulationEventDetails::PartnershipDissolved {
+                        actor_affinity,
+                        target_affinity,
+                    } => (Some(actor_affinity), Some(target_affinity), None),
                     _ => (None, None, None),
                 };
 

@@ -107,6 +107,19 @@ function eventDetails(event: SimulationEvent): string {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Partner")}<span>formed a partnership with</span>${entityButton(event.target_id, "Partner")}</div>
       <div class="interaction-event-row"><span>Mutual affinity: ${event.partnership_actor_affinity} / ${event.partnership_target_affinity}</span><span>Compatibility ${compatibility}%</span></div>${causalLink}`;
   }
+  if (event.kind === "partnership_dissolved") {
+    const cause =
+      event.cause === "mutual_social_contact"
+        ? "Social interaction"
+        : event.cause === "food_share_refused"
+          ? "Food sharing refusal"
+          : "Relationship decay";
+    const causalLink = event.caused_by_event_id
+      ? `<div class="interaction-event-row"><span>Caused by</span><button class="interaction-entity-link" type="button" data-event-target-id="${event.caused_by_event_id}">Event #${event.caused_by_event_id}</button></div>`
+      : "";
+    return `<div class="interaction-event-row"><span>Partnership between</span>${entityButton(event.actor_id, "Partner")}<span>and</span>${entityButton(event.target_id, "Partner")}<span>ended</span></div>
+      <div class="interaction-event-row"><span>Mutual affinity: ${event.partnership_actor_affinity} / ${event.partnership_target_affinity}</span><span>Cause: ${cause}</span></div>${causalLink}`;
+  }
   if (event.kind === "birth") {
     return `<div class="interaction-event-row">${entityButton(event.actor_id, "Mother")}<span>gave birth</span></div>
       <div class="interaction-event-row">${entityButton(event.child_id, "Newborn")}<span>born at (${event.location.x}, ${event.location.y})</span></div>`;
@@ -187,6 +200,7 @@ export function renderEntityEventSummary(summary: EntityEventSummary): string {
     ["Interactions", summary.interactions],
     ["Affinity changes", summary.affinity_changes],
     ["Partnerships formed", summary.partnerships_formed],
+    ["Partnerships ended", summary.partnerships_dissolved],
     ["Discoveries", summary.discoveries],
     ["Meals", summary.consumptions],
     ["Birth events", summary.births],

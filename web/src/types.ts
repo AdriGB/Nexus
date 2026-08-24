@@ -330,6 +330,23 @@ export interface PartnershipFormedEvent extends SimulationEventBase {
   compatibility_per_mille: number;
 }
 
+export interface PartnershipDissolvedEvent extends SimulationEventBase {
+  kind: "partnership_dissolved";
+  cause: "mutual_social_contact" | "food_share_refused" | "relationship_decay";
+  target_id: number;
+  actor_affinity_delta: null;
+  target_affinity_delta: null;
+  child_id: null;
+  amount: null;
+  resource_kind: null;
+  previous_affinity: null;
+  new_affinity: null;
+  delta: null;
+  partnership_actor_affinity: number;
+  partnership_target_affinity: number;
+  compatibility_per_mille: null;
+}
+
 export type SimulationEvent =
   | InteractionEvent
   | BirthEvent
@@ -340,7 +357,8 @@ export type SimulationEvent =
   | AffinityChangeEvent
   | FoodSharedEvent
   | FoodShareRefusedEvent
-  | PartnershipFormedEvent;
+  | PartnershipFormedEvent
+  | PartnershipDissolvedEvent;
 
 export interface EntityEventSummary {
   entity_id: number;
@@ -355,6 +373,7 @@ export interface EntityEventSummary {
   interactions: number;
   affinity_changes: number;
   partnerships_formed: number;
+  partnerships_dissolved: number;
 }
 
 export interface PopulationStats {

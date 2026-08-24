@@ -450,12 +450,18 @@ impl Simulation {
                     Some(interaction_event_id),
                 );
             }
-            let _ = partnerships::try_dissolve(
+            if let Some(dissolution) = partnerships::try_dissolve(
                 &mut self.entities,
                 interaction.actor_id,
                 interaction.target_id,
-            );
-            if let Some(formation) = partnerships::try_form(
+            ) {
+                self.record_partnership_dissolution(
+                    dissolution,
+                    interaction.location,
+                    SimulationEventCause::MutualSocialContact,
+                    Some(interaction_event_id),
+                );
+            } else if let Some(formation) = partnerships::try_form(
                 &mut self.entities,
                 interaction.actor_id,
                 interaction.target_id,
@@ -587,13 +593,46 @@ impl Simulation {
                         Some(event_id),
                     );
                 }
-                let _ = partnerships::try_dissolve(
+                if let Some(dissolution) = partnerships::try_dissolve(
                     &mut self.entities,
                     attempt.target_id,
                     attempt.actor_id,
-                );
+                ) {
+                    self.record_partnership_dissolution(
+                        dissolution,
+                        target_location,
+                        SimulationEventCause::FoodShareRefused,
+                        Some(event_id),
+                    );
+                }
             }
         }
+    }
+
+    fn record_partnership_dissolution(
+        &mut self,
+        dissolution: partnerships::PartnershipDissolution,
+        location: (u32, u32),
+        cause: SimulationEventCause,
+        caused_by_event_id: Option<EventId>,
+    ) {
+        self.push_event(PendingSimulationEvent {
+            caused_by_event_id,
+            tick: self.tick,
+            location: EventLocation {
+                x: location.0,
+                y: location.1,
+            },
+            actor_id: dissolution.actor_id,
+            target_id: Some(dissolution.target_id),
+            related_entity_ids: vec![dissolution.actor_id, dissolution.target_id],
+            kind: SimulationEventKind::PartnershipDissolved,
+            cause,
+            details: SimulationEventDetails::PartnershipDissolved {
+                actor_affinity: dissolution.actor_affinity,
+                target_affinity: dissolution.target_affinity,
+            },
+        });
     }
 
     fn record_affinity_change(
@@ -864,7 +903,21 @@ impl Simulation {
                 None,
             );
         }
-        let _ = partnerships::dissolve_unhealthy(&mut self.entities);
+        let dissolutions = partnerships::dissolve_unhealthy(&mut self.entities);
+        for dissolution in dissolutions {
+            let location = self
+                .entities
+                .binary_search_by_key(&dissolution.actor_id, |entity| entity.id)
+                .ok()
+                .map(|index| (self.entities[index].x, self.entities[index].y))
+                .unwrap_or((0, 0));
+            self.record_partnership_dissolution(
+                dissolution,
+                location,
+                SimulationEventCause::RelationshipDecay,
+                None,
+            );
+        }
     }
 
     fn try_daily_conceptions(&mut self) {
