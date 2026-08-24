@@ -1,9 +1,10 @@
-use super::super::config::{FOOD_SEARCH_THRESHOLD, MAX_HUNGER};
+use super::super::config::{FOOD_CONSUMED_PER_MEAL, FOOD_SEARCH_THRESHOLD, MAX_HUNGER};
 use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::inventory::ItemKind;
 use super::super::spatial::EntitySnapshot;
 use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
 use super::social::remembered_social_score;
+use super::URGENT_HUNGER_THRESHOLD;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
@@ -21,6 +22,62 @@ pub(in crate::simulation) struct DecisionContext {
 pub(super) struct HouseholdDecisionContext {
     pub decision: DecisionContext,
     pub household_food_available: bool,
+    pub dependent_food_need: DependentFoodNeed,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum DependentFoodNeed {
+    #[default]
+    None,
+    Infant,
+    Child,
+}
+
+impl DependentFoodNeed {
+    fn required_food(self) -> u16 {
+        match self {
+            Self::None => 0,
+            Self::Infant => FOOD_CONSUMED_PER_MEAL,
+            Self::Child => super::action::SHARE_FOOD_AMOUNT,
+        }
+    }
+}
+
+pub(super) fn dependent_food_need(
+    caregiver_id: u32,
+    mind: &Mind,
+    population: &[EntitySnapshot],
+) -> DependentFoodNeed {
+    let mut hungry_child = false;
+    for snapshot in population.iter().filter(|snapshot| {
+        snapshot.caregiver_id == Some(caregiver_id) && snapshot.hunger >= FOOD_SEARCH_THRESHOLD
+    }) {
+        if snapshot.is_infant {
+            return DependentFoodNeed::Infant;
+        }
+        if snapshot.is_child && mind.visible_entities.binary_search(&snapshot.id).is_ok() {
+            hungry_child = true;
+        }
+    }
+    if hungry_child {
+        DependentFoodNeed::Child
+    } else {
+        DependentFoodNeed::None
+    }
+}
+
+pub(super) fn dependent_provisioning_goal(
+    need: DependentFoodNeed,
+    personal_food: u16,
+) -> Option<Goal> {
+    match need {
+        DependentFoodNeed::None => None,
+        DependentFoodNeed::Infant if personal_food >= FOOD_CONSUMED_PER_MEAL => Some(Goal::Eat),
+        DependentFoodNeed::Child if personal_food >= super::action::SHARE_FOOD_AMOUNT => {
+            Some(Goal::ShareFood)
+        }
+        DependentFoodNeed::Infant | DependentFoodNeed::Child => Some(Goal::AcquireResource),
+    }
 }
 
 /// Maps persistence [0.0, 1.0] to the score margin required to abandon
@@ -53,6 +110,7 @@ pub fn evaluate_goals(
         HouseholdDecisionContext {
             decision: context,
             household_food_available: false,
+            dependent_food_need: DependentFoodNeed::None,
         },
     )
 }
@@ -69,6 +127,7 @@ pub(super) fn evaluate_goals_with_household(
     let HouseholdDecisionContext {
         decision: context,
         household_food_available,
+        dependent_food_need,
     } = context;
     let DecisionContext {
         tick,
@@ -133,6 +192,28 @@ pub(super) fn evaluate_goals_with_household(
             reason: DecisionReason::DependentFollowsCaregiver,
         });
         return Goal::Follow;
+    }
+
+    if matches!(stage, LifeStage::Adult | LifeStage::Elder) && hunger < URGENT_HUNGER_THRESHOLD {
+        if let Some(goal) = dependent_provisioning_goal(dependent_food_need, food_in_inventory) {
+            mind.utility_scores = super::mind::UtilityScores {
+                eat: (goal == Goal::Eat) as u8 as f32,
+                acquire_resource: (goal == Goal::AcquireResource) as u8 as f32,
+                explore: 0.0,
+                rest: 0.0,
+                socialize: 0.0,
+                share_food: (goal == Goal::ShareFood) as u8 as f32,
+            };
+            mind.decision_explanation = Some(DecisionExplanation {
+                chosen_goal: goal,
+                highest_utility_goal: goal,
+                chosen_score: 1.0,
+                highest_score: 1.0,
+                switch_margin: 0.0,
+                reason: DecisionReason::DependentProvisioning,
+            });
+            return goal;
+        }
     }
 
     let food_confidence = if mind
@@ -513,13 +594,26 @@ pub(super) fn plan_goal(
         }
         Goal::AcquireResource => {
             let kind = ResourceKind::Food;
-            if LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Adult
-                && entity.inventory.amount(ItemKind::Food) == 0
-            {
+            let stage = LifeStage::from_age_ticks(entity.age_ticks);
+            let personal_food = entity.inventory.amount(ItemKind::Food);
+            let provisioning_need = (entity.hunger < URGENT_HUNGER_THRESHOLD
+                && matches!(stage, LifeStage::Adult | LifeStage::Elder))
+            .then(|| dependent_food_need(entity.id, &entity.mind, population))
+            .filter(|need| *need != DependentFoodNeed::None);
+            let requested = provisioning_need
+                .map(|need| need.required_food().saturating_sub(personal_food))
+                .unwrap_or_else(|| {
+                    if stage == LifeStage::Adult && personal_food == 0 {
+                        FOOD_CONSUMED_PER_MEAL
+                    } else {
+                        0
+                    }
+                });
+            if requested > 0 {
                 if let Some(context) = household_context.filter(|context| {
                     context.storage_food_amount > 0 && entity.inventory.remaining_capacity() > 0
                 }) {
-                    let amount = super::super::config::FOOD_CONSUMED_PER_MEAL
+                    let amount = requested
                         .min(context.storage_food_amount)
                         .min(entity.inventory.remaining_capacity());
                     let home = context.residence;

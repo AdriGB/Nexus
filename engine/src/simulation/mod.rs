@@ -961,13 +961,15 @@ impl Simulation {
         for entity in &self.entities {
             let snapshot_index = self.population_cache.len();
 
+            let life_stage = LifeStage::from_age_ticks(entity.age_ticks);
             self.population_cache.push(EntitySnapshot {
                 id: entity.id,
                 x: entity.x,
                 y: entity.y,
                 hunger: entity.hunger,
                 caregiver_id: entity.caregiver_id,
-                is_child: LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Child,
+                is_child: life_stage == LifeStage::Child,
+                is_infant: life_stage == LifeStage::Infant,
             });
 
             self.spatial_grid.insert(snapshot_index, entity.x, entity.y);

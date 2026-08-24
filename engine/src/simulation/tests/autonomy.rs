@@ -158,6 +158,7 @@ fn spatial_perception_matches_linear_brute_force() {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         });
     }
 

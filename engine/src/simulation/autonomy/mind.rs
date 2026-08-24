@@ -405,6 +405,7 @@ pub enum DecisionReason {
     GoalPersistence,
     DependentNeedsFood,
     DependentFollowsCaregiver,
+    DependentProvisioning,
 }
 
 impl DecisionReason {
@@ -414,6 +415,7 @@ impl DecisionReason {
             Self::GoalPersistence => "goal_persistence",
             Self::DependentNeedsFood => "dependent_needs_food",
             Self::DependentFollowsCaregiver => "dependent_follows_caregiver",
+            Self::DependentProvisioning => "dependent_provisioning",
         }
     }
 }
