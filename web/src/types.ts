@@ -188,6 +188,8 @@ export interface EntityHousehold {
   household_id: number | null;
   member_ids: number[];
   formed_tick: number | null;
+  residence_x: number | null;
+  residence_y: number | null;
 }
 
 export interface KinshipGeneration {

@@ -84,6 +84,18 @@ export function renderHouseholdSection(household: EntityHousehold): string {
       household.member_ids.length === 0
         ? "—"
         : household.member_ids.map((id) => `#${id}`).join(", "),
+    ) +
+    infoRow(
+      "Residence",
+      household.residence_x === null || household.residence_y === null
+        ? "—"
+        : `(${household.residence_x}, ${household.residence_y})`,
+    ) +
+    infoRow(
+      "Formed",
+      household.formed_tick === null
+        ? "—"
+        : `${household.formed_tick.toLocaleString()} ticks`,
     )
   );
 }
