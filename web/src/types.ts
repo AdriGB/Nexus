@@ -20,11 +20,13 @@ export interface IWorldBridge {
   first_entity_info(): string;
   first_entity_relationships(): string;
   first_entity_kinship(): string;
+  first_entity_household(): string;
   recent_interaction_events(entityId?: number): string;
   recent_events(entityId?: number): string;
   entity_event_summary(entityId: number): string;
   entity_info(id: number): string;
   entity_kinship(id: number): string;
+  entity_household(id: number): string;
   entity_relationship(firstId: number, secondId: number): string;
   entity_family_tree(entityId: number, ancestorDepth: number, descendantDepth: number): string;
   get_tile_data(
@@ -132,6 +134,7 @@ export interface EntityInfo {
   stage_movement_factor: number;
   caregiver_id: number | null;
   partner_id: number | null;
+  household_id: number | null;
   mother_id: number | null;
   father_id: number | null;
   personality: {
@@ -179,6 +182,12 @@ export interface EntityKinship {
   sibling_ids: number[];
   ancestors: KinshipGeneration[];
   descendants: KinshipGeneration[];
+}
+
+export interface EntityHousehold {
+  household_id: number | null;
+  member_ids: number[];
+  formed_tick: number | null;
 }
 
 export interface KinshipGeneration {

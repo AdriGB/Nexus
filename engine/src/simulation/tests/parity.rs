@@ -57,6 +57,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
         assert_eq!(a.movement_credit, b.movement_credit);
         assert_eq!(a.caregiver_id, b.caregiver_id);
         assert_eq!(a.partner_id, b.partner_id);
+        assert_eq!(a.household_id, b.household_id);
         assert_eq!(a.mother_id, b.mother_id);
         assert_eq!(a.father_id, b.father_id);
         assert_eq!(a.pregnancy, b.pregnancy);
@@ -103,6 +104,8 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
             }
         }
     }
+    assert_eq!(sim_a.households, sim_b.households);
+    assert_eq!(sim_a.next_household_id, sim_b.next_household_id);
     assert_eq!(sim_a.genealogy, sim_b.genealogy);
 
     // World resources

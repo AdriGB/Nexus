@@ -4,6 +4,7 @@ mod dependents;
 mod entity;
 mod events;
 mod genealogy;
+mod households;
 mod inventory;
 mod kinship;
 mod lifecycle;
@@ -27,6 +28,7 @@ pub use self::events::{
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
 use self::genealogy::Genealogy;
+pub(crate) use self::households::{members_of, Household};
 pub use self::inventory::{Inventory, ItemKind};
 pub(crate) use self::kinship::{
     ancestors_of, children_of, descendants_of, family_tree_of, relationship_between, siblings_of,
@@ -98,6 +100,8 @@ pub struct Simulation {
     seed: u64,
     recent_events: RecentEventHistory,
     genealogy: Genealogy,
+    households: Vec<Household>,
+    next_household_id: u32,
 }
 
 impl Default for Simulation {
@@ -117,6 +121,8 @@ impl Default for Simulation {
             seed: 0,
             recent_events: RecentEventHistory::default(),
             genealogy: Genealogy::default(),
+            households: Vec::new(),
+            next_household_id: 1,
         }
     }
 }
@@ -145,6 +151,10 @@ impl Simulation {
 
     pub(crate) fn genealogy(&self) -> &Genealogy {
         &self.genealogy
+    }
+
+    pub(crate) fn households(&self) -> &[Household] {
+        &self.households
     }
 
     pub fn transfer_item(
@@ -348,6 +358,7 @@ impl Simulation {
             father_id,
             caregiver_id: None,
             partner_id: None,
+            household_id: None,
             personality: personality_for(self.seed, id),
             inventory: Inventory::default(),
             action_tick: 0,
@@ -488,6 +499,14 @@ impl Simulation {
                 interaction.actor_id,
                 interaction.target_id,
             ) {
+                households::form_for_partnership(
+                    &mut self.entities,
+                    &mut self.households,
+                    &mut self.next_household_id,
+                    formation.actor_id,
+                    formation.target_id,
+                    self.tick,
+                );
                 self.push_event(PendingSimulationEvent {
                     caused_by_event_id: Some(interaction_event_id),
                     tick: self.tick,
