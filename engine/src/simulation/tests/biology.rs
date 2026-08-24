@@ -234,12 +234,114 @@ fn birth_occurs_exactly_at_due_tick_and_sets_postpartum() {
     simulation.step(&mut world);
     assert_eq!(simulation.entities().len(), 3);
     assert_eq!(simulation.entities()[2].age_ticks, 0);
+    assert_eq!(simulation.entities()[2].mother_id, Some(1));
+    assert_eq!(simulation.entities()[2].father_id, Some(2));
+    assert_eq!(simulation.entities()[2].caregiver_id, Some(1));
+    assert_eq!(simulation.entities()[0].mother_id, None);
+    assert_eq!(simulation.entities()[0].father_id, None);
+    assert_eq!(simulation.entities()[1].mother_id, None);
+    assert_eq!(simulation.entities()[1].father_id, None);
     assert!(simulation.entities()[0].pregnancy.is_none());
     assert_eq!(
         simulation.entities()[0].postpartum_until_tick,
         GESTATION_TICKS + POSTPARTUM_TICKS
     );
     assert_eq!(simulation.population_stats().births, 1);
+}
+
+#[test]
+fn biological_parentage_survives_parent_death_and_partnership_dissolution() {
+    let world = plain_grid(4, 4);
+    let mut mother = fertile_entity(1, Sex::Female, 1, 1);
+    let mut father = fertile_entity(2, Sex::Male, 2, 1);
+    mother.partner_id = Some(2);
+    father.partner_id = Some(1);
+    mother.mind.memory.known_entities.push(known_entity(2, 0));
+    father.mind.memory.known_entities.push(known_entity(1, 250));
+    mother.pregnancy = Some(Pregnancy {
+        father_id: 2,
+        conceived_tick: 0,
+        due_tick: 1,
+    });
+    let mut simulation = Simulation {
+        tick: 1,
+        entities: vec![mother, father],
+        next_entity_id: 3,
+        seed: 42,
+        ..Simulation::default()
+    };
+
+    simulation.update_pregnancies(&world);
+    super::super::partnerships::try_dissolve(&mut simulation.entities, 1, 2)
+        .expect("partnership dissolves");
+    assert_eq!(simulation.entities[2].mother_id, Some(1));
+    assert_eq!(simulation.entities[2].father_id, Some(2));
+
+    simulation.entities[1].health = 0.0;
+    simulation.remove_dead_entities();
+    let child = simulation
+        .entities()
+        .iter()
+        .find(|entity| entity.id == 3)
+        .expect("child survives");
+    assert_eq!(child.mother_id, Some(1));
+    assert_eq!(child.father_id, Some(2));
+}
+
+#[test]
+fn founders_have_no_biological_parents() {
+    let simulation = Simulation {
+        entities: vec![
+            fertile_entity(1, Sex::Female, 0, 0),
+            fertile_entity(2, Sex::Male, 1, 0),
+        ],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    assert!(simulation
+        .entities()
+        .iter()
+        .all(|entity| entity.mother_id.is_none() && entity.father_id.is_none()));
+}
+
+#[test]
+fn caregiver_and_biological_parentage_are_independent() {
+    let mut child = fertile_entity(3, Sex::Female, 0, 0);
+    child.age_ticks = 0;
+    child.mother_id = Some(1);
+    child.father_id = Some(2);
+    child.caregiver_id = Some(4);
+
+    assert_eq!(child.mother_id, Some(1));
+    assert_eq!(child.father_id, Some(2));
+    assert_eq!(child.caregiver_id, Some(4));
+}
+
+#[test]
+fn identical_births_produce_identical_parentage() {
+    fn simulation() -> Simulation {
+        let mut mother = fertile_entity(1, Sex::Female, 1, 1);
+        mother.pregnancy = Some(Pregnancy {
+            father_id: 2,
+            conceived_tick: 0,
+            due_tick: 1,
+        });
+        Simulation {
+            entities: vec![mother, fertile_entity(2, Sex::Male, 2, 1)],
+            next_entity_id: 3,
+            seed: 42,
+            ..Simulation::default()
+        }
+    }
+
+    let mut first = simulation();
+    let mut second = simulation();
+    first.step(&mut plain_grid(4, 4));
+    second.step(&mut plain_grid(4, 4));
+
+    assert_eq!(first.entities[2].mother_id, second.entities[2].mother_id);
+    assert_eq!(first.entities[2].father_id, second.entities[2].father_id);
 }
 
 #[test]

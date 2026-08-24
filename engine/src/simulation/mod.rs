@@ -325,6 +325,8 @@ impl Simulation {
             pregnancy: None,
             postpartum_until_tick: 0,
             movement_credit: 0.0,
+            mother_id: None,
+            father_id: None,
             caregiver_id: None,
             partner_id: None,
             personality: personality_for(self.seed, id),
@@ -846,22 +848,24 @@ impl Simulation {
     fn update_pregnancies(&mut self, world: &Grid) {
         let capacity = MAX_POPULATION.saturating_sub(self.entities.len());
         let births = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
-        for (position, mother_id) in births {
-            if let Some(child_id) = self.push_newborn(position) {
+        for birth in births {
+            if let Some(child_id) = self.push_newborn(birth.position) {
                 if let Some(child) = self.entities.last_mut() {
-                    child.caregiver_id = Some(mother_id);
+                    child.mother_id = Some(birth.mother_id);
+                    child.father_id = Some(birth.father_id);
+                    child.caregiver_id = Some(birth.mother_id);
                 }
                 self.births = self.births.saturating_add(1);
                 self.push_event(PendingSimulationEvent {
                     caused_by_event_id: None,
                     tick: self.tick,
                     location: EventLocation {
-                        x: position.0,
-                        y: position.1,
+                        x: birth.position.0,
+                        y: birth.position.1,
                     },
-                    actor_id: mother_id,
+                    actor_id: birth.mother_id,
                     target_id: None,
-                    related_entity_ids: vec![mother_id, child_id],
+                    related_entity_ids: vec![birth.mother_id, child_id],
                     kind: SimulationEventKind::Birth,
                     cause: SimulationEventCause::Born,
                     details: SimulationEventDetails::Birth { child_id },

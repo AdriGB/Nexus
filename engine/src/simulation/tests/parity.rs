@@ -57,6 +57,8 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
         assert_eq!(a.movement_credit, b.movement_credit);
         assert_eq!(a.caregiver_id, b.caregiver_id);
         assert_eq!(a.partner_id, b.partner_id);
+        assert_eq!(a.mother_id, b.mother_id);
+        assert_eq!(a.father_id, b.father_id);
         assert_eq!(a.pregnancy, b.pregnancy);
         assert_eq!(a.postpartum_until_tick, b.postpartum_until_tick);
         assert_eq!(a.personality, b.personality);

@@ -99,6 +99,8 @@ pub(super) fn entity(id: u32, x: u32, y: u32, hunger: f32) -> Entity {
         pregnancy: None,
         postpartum_until_tick: 0,
         movement_credit: 0.0,
+        mother_id: None,
+        father_id: None,
         caregiver_id: None,
         partner_id: None,
         personality: personality_for(0, id),

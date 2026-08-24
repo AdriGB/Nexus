@@ -128,6 +128,8 @@ export interface EntityInfo {
   stage_movement_factor: number;
   caregiver_id: number | null;
   partner_id: number | null;
+  mother_id: number | null;
+  father_id: number | null;
   personality: {
     curiosity: number;
     sociability: number;
