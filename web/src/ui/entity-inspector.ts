@@ -76,6 +76,9 @@ export function renderInventorySection(
 }
 
 export function renderHouseholdSection(household: EntityHousehold): string {
+  const storageContents = household.storage?.items.length
+    ? household.storage.items.map((item) => `${item.kind}: ${item.amount}`).join(" · ")
+    : "Empty";
   return (
     infoSectionTitle("Household") +
     infoRow("Household", household.household_id === null ? "—" : `#${household.household_id}`) +
@@ -85,6 +88,13 @@ export function renderHouseholdSection(household: EntityHousehold): string {
         ? "—"
         : household.member_ids.map((id) => `#${id}`).join(", "),
     ) +
+    infoRow(
+      "Storage",
+      household.storage === null
+        ? "—"
+        : `${household.storage.used_capacity} / ${household.storage.capacity}`,
+    ) +
+    infoRow("Contents", household.storage === null ? "—" : storageContents) +
     infoRow(
       "Residence",
       household.residence_x === null || household.residence_y === null

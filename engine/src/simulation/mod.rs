@@ -201,6 +201,77 @@ impl Simulation {
         moved
     }
 
+    pub(crate) fn deposit_to_household(
+        &mut self,
+        entity_id: u32,
+        kind: ItemKind,
+        quantity: u16,
+    ) -> u16 {
+        let Some((entity_index, household_index)) =
+            self.household_storage_access(entity_id, quantity)
+        else {
+            return 0;
+        };
+        let moved = quantity
+            .min(self.entities[entity_index].inventory.amount(kind))
+            .min(
+                self.households[household_index]
+                    .storage
+                    .remaining_capacity(),
+            );
+        if moved == 0 {
+            return 0;
+        }
+        let removed = self.entities[entity_index].inventory.remove(kind, moved);
+        let accepted = self.households[household_index].storage.add(kind, moved);
+        debug_assert_eq!(removed, moved);
+        debug_assert_eq!(accepted, moved);
+        moved
+    }
+
+    pub(crate) fn withdraw_from_household(
+        &mut self,
+        entity_id: u32,
+        kind: ItemKind,
+        quantity: u16,
+    ) -> u16 {
+        let Some((entity_index, household_index)) =
+            self.household_storage_access(entity_id, quantity)
+        else {
+            return 0;
+        };
+        let moved = quantity
+            .min(self.households[household_index].storage.amount(kind))
+            .min(self.entities[entity_index].inventory.remaining_capacity());
+        if moved == 0 {
+            return 0;
+        }
+        let removed = self.households[household_index].storage.remove(kind, moved);
+        let accepted = self.entities[entity_index].inventory.add(kind, moved);
+        debug_assert_eq!(removed, moved);
+        debug_assert_eq!(accepted, moved);
+        moved
+    }
+
+    fn household_storage_access(&self, entity_id: u32, quantity: u16) -> Option<(usize, usize)> {
+        if quantity == 0 {
+            return None;
+        }
+        let entity_index = self
+            .entities
+            .binary_search_by_key(&entity_id, |entity| entity.id)
+            .ok()?;
+        let household_id = self.entities[entity_index].household_id?;
+        let household_index = self
+            .households
+            .binary_search_by_key(&household_id, |household| household.id)
+            .ok()?;
+        let household = &self.households[household_index];
+        ((self.entities[entity_index].x, self.entities[entity_index].y)
+            == (household.residence_x, household.residence_y))
+            .then_some((entity_index, household_index))
+    }
+
     pub(crate) fn recent_events(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.recent_events.iter()
     }
@@ -415,7 +486,7 @@ impl Simulation {
                     .binary_search_by_key(&household_id, |household| household.id)
                     .ok()
                     .map(|index| {
-                        let household = households[index];
+                        let household = &households[index];
                         (household.residence_x, household.residence_y)
                     })
             });

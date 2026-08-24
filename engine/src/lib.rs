@@ -165,6 +165,20 @@ impl WorldBridge {
         })
     }
 
+    pub fn deposit_household_item(&mut self, entity_id: u32, kind: &str, quantity: u16) -> u16 {
+        simulation::ItemKind::from_slug(kind).map_or(0, |kind| {
+            self.simulation
+                .deposit_to_household(entity_id, kind, quantity)
+        })
+    }
+
+    pub fn withdraw_household_item(&mut self, entity_id: u32, kind: &str, quantity: u16) -> u16 {
+        simulation::ItemKind::from_slug(kind).map_or(0, |kind| {
+            self.simulation
+                .withdraw_from_household(entity_id, kind, quantity)
+        })
+    }
+
     pub fn population_stats(&self) -> String {
         bridge::population_stats_json(self.simulation.population_stats())
     }

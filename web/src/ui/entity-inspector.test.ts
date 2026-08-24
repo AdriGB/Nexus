@@ -40,12 +40,23 @@ describe("household inspector", () => {
       formed_tick: 5821,
       residence_x: 15,
       residence_y: 9,
+      storage: {
+        capacity: 200,
+        used_capacity: 35,
+        remaining_capacity: 165,
+        items: [
+          { kind: "Food", amount: 30 },
+          { kind: "Timber", amount: 5 },
+        ],
+      },
     });
 
     expect(html).toContain("Household");
     expect(html).toContain("#4");
     expect(html).toContain("#12, #19");
     expect(html).toContain("(15, 9)");
+    expect(html).toContain("35 / 200");
+    expect(html).toContain("Food: 30 · Timber: 5");
     expect(html).toContain("5,821 ticks");
   });
 
@@ -56,6 +67,7 @@ describe("household inspector", () => {
       formed_tick: null,
       residence_x: null,
       residence_y: null,
+      storage: null,
     });
 
     expect(html).toContain("—");

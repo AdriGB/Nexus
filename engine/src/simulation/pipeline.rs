@@ -125,7 +125,7 @@ pub(super) fn run_profiled_autonomy_step(
                     .binary_search_by_key(&household_id, |household| household.id)
                     .ok()
                     .map(|index| {
-                        let household = simulation.households[index];
+                        let household = &simulation.households[index];
                         (household.residence_x, household.residence_y)
                     })
             })

@@ -6,6 +6,7 @@ mod events;
 mod food_sharing;
 mod genealogy;
 mod household_rest;
+mod household_storage;
 mod households;
 mod inventory_transfer;
 mod kinship;

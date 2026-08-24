@@ -1,13 +1,16 @@
 //! Persistent household identity with membership derived from living entities.
 
-use super::Entity;
+use super::{Entity, Inventory};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub const DEFAULT_HOUSEHOLD_STORAGE_CAPACITY: u16 = 200;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Household {
     pub id: u32,
     pub formed_tick: u64,
     pub residence_x: u32,
     pub residence_y: u32,
+    pub storage: Inventory,
 }
 
 pub(crate) fn members_of(entities: &[Entity], household_id: u32) -> Vec<u32> {
@@ -72,6 +75,7 @@ pub(super) fn form_for_partnership(
         formed_tick: tick,
         residence_x,
         residence_y,
+        storage: Inventory::new(DEFAULT_HOUSEHOLD_STORAGE_CAPACITY),
     });
     Some(id)
 }
