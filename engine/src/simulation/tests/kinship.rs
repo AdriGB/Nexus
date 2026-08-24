@@ -1,6 +1,7 @@
 use super::super::genealogy::Genealogy;
 use super::super::kinship::{
-    ancestors_of, children_of, descendants_of, siblings_of, KinshipGeneration,
+    ancestors_of, children_of, descendants_of, relationship_between, siblings_of,
+    KinshipGeneration, KinshipRelation,
 };
 use super::support::entity;
 
@@ -264,5 +265,195 @@ fn malformed_cycle_terminates_without_returning_the_focal_entity() {
             entity_id: 2,
             generation: 1,
         }]
+    );
+}
+
+#[test]
+fn direct_and_multigeneration_relations_are_directional() {
+    let grandparent = biological_child(1, None, None);
+    let parent = biological_child(2, Some(1), None);
+    let child = biological_child(3, Some(2), None);
+    let great_grandchild = biological_child(4, Some(3), None);
+    let genealogy = genealogy(vec![grandparent, parent, child, great_grandchild]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 2, 3),
+        KinshipRelation::Parent
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 3, 2),
+        KinshipRelation::Child
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 1, 3),
+        KinshipRelation::Ancestor { generations: 2 }
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 4, 1),
+        KinshipRelation::Descendant { generations: 3 }
+    );
+}
+
+#[test]
+fn full_and_half_siblings_are_distinguished() {
+    let first = biological_child(10, Some(1), Some(2));
+    let full = biological_child(11, Some(1), Some(2));
+    let half = biological_child(12, Some(1), Some(3));
+    let genealogy = genealogy(vec![first, full, half]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 10, 11),
+        KinshipRelation::FullSibling
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 10, 12),
+        KinshipRelation::HalfSibling
+    );
+}
+
+#[test]
+fn aunt_uncle_and_niece_nephew_are_directional() {
+    let root = biological_child(1, None, None);
+    let aunt = biological_child(2, Some(1), None);
+    let parent = biological_child(3, Some(1), None);
+    let child = biological_child(4, Some(3), None);
+    let grandchild = biological_child(5, Some(4), None);
+    let genealogy = genealogy(vec![root, aunt, parent, child, grandchild]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 2, 4),
+        KinshipRelation::AuntUncle {
+            generations_removed: 0
+        }
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 4, 2),
+        KinshipRelation::NieceNephew {
+            generations_removed: 0
+        }
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 2, 5),
+        KinshipRelation::AuntUncle {
+            generations_removed: 1
+        }
+    );
+}
+
+#[test]
+fn cousin_degree_and_removal_are_derived() {
+    let root = biological_child(1, None, None);
+    let left = biological_child(2, Some(1), None);
+    let right = biological_child(3, Some(1), None);
+    let first_cousin = biological_child(5, Some(3), None);
+    let left_child = biological_child(4, Some(2), None);
+    let left_grandchild = biological_child(6, Some(4), None);
+    let right_grandchild = biological_child(7, Some(5), None);
+    let right_great_grandchild = biological_child(8, Some(7), None);
+    let genealogy = genealogy(vec![
+        root,
+        left,
+        right,
+        left_child,
+        first_cousin,
+        left_grandchild,
+        right_grandchild,
+        right_great_grandchild,
+    ]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 4, 5),
+        KinshipRelation::Cousin {
+            degree: 1,
+            removed: 0
+        }
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 6, 7),
+        KinshipRelation::Cousin {
+            degree: 2,
+            removed: 0
+        }
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 6, 8),
+        KinshipRelation::Cousin {
+            degree: 2,
+            removed: 1
+        }
+    );
+}
+
+#[test]
+fn same_unrelated_and_incomplete_entities_are_safe() {
+    let founder = biological_child(1, None, None);
+    let unrelated = biological_child(2, None, None);
+    let incomplete = biological_child(3, Some(99), None);
+    let genealogy = genealogy(vec![founder, unrelated, incomplete]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 1, 1),
+        KinshipRelation::SamePerson
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 1, 2),
+        KinshipRelation::Unrelated
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 1, 3),
+        KinshipRelation::Unrelated
+    );
+    assert_eq!(
+        relationship_between(&genealogy, 99, 3),
+        KinshipRelation::Parent
+    );
+}
+
+#[test]
+fn malformed_cycles_terminate_during_classification() {
+    let first = biological_child(1, Some(2), None);
+    let second = biological_child(2, Some(1), None);
+    let unrelated = biological_child(3, None, None);
+    let genealogy = genealogy(vec![first, second, unrelated]);
+
+    assert_eq!(
+        relationship_between(&genealogy, 1, 3),
+        KinshipRelation::Unrelated
+    );
+}
+
+#[test]
+fn multiple_common_ancestors_use_distance_then_id_tiebreakers() {
+    let first_common = biological_child(1, None, None);
+    let second_common = biological_child(2, None, None);
+    let first_parent = biological_child(10, Some(1), None);
+    let first = biological_child(100, Some(10), Some(2));
+    let second_path_a_2 = biological_child(31, Some(1), None);
+    let second_path_a_1 = biological_child(30, Some(31), None);
+    let second_path_b_3 = biological_child(42, Some(2), None);
+    let second_path_b_2 = biological_child(41, Some(42), None);
+    let second_path_b_1 = biological_child(40, Some(41), None);
+    let second = biological_child(200, Some(30), Some(40));
+    let genealogy = genealogy(vec![
+        first_common,
+        second_common,
+        first_parent,
+        first,
+        second_path_a_2,
+        second_path_a_1,
+        second_path_b_3,
+        second_path_b_2,
+        second_path_b_1,
+        second,
+    ]);
+
+    // Both common ancestors have total distance five. Ancestor #1 wins because
+    // its maximum branch distance is three instead of four.
+    assert_eq!(
+        relationship_between(&genealogy, 100, 200),
+        KinshipRelation::Cousin {
+            degree: 1,
+            removed: 1,
+        }
     );
 }

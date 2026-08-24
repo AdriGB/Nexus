@@ -29,7 +29,8 @@ use self::events::{PendingSimulationEvent, RecentEventHistory};
 use self::genealogy::Genealogy;
 pub use self::inventory::{Inventory, ItemKind};
 pub(crate) use self::kinship::{
-    ancestors_of, children_of, descendants_of, siblings_of, KinshipGeneration,
+    ancestors_of, children_of, descendants_of, relationship_between, siblings_of,
+    KinshipGeneration, KinshipRelation,
 };
 use self::lifecycle::{
     founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,

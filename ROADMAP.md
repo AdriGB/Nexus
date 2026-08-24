@@ -250,7 +250,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [x] Hermanos
 * [x] Parejas
 * [ ] Árbol familiar
-* [ ] Relaciones de parentesco derivadas
+* [x] Relaciones de parentesco derivadas
 
 ## Households
 

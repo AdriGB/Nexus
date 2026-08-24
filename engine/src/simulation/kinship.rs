@@ -9,6 +9,21 @@ pub(crate) struct KinshipGeneration {
     pub generation: u16,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KinshipRelation {
+    SamePerson,
+    Parent,
+    Child,
+    FullSibling,
+    HalfSibling,
+    Ancestor { generations: u16 },
+    Descendant { generations: u16 },
+    AuntUncle { generations_removed: u16 },
+    NieceNephew { generations_removed: u16 },
+    Cousin { degree: u16, removed: u16 },
+    Unrelated,
+}
+
 pub(crate) fn children_of(genealogy: &Genealogy, parent_id: u32) -> Vec<u32> {
     genealogy
         .records()
@@ -81,4 +96,81 @@ pub(crate) fn descendants_of(genealogy: &Genealogy, entity_id: u32) -> Vec<Kinsh
 
     descendants.sort_unstable_by_key(|relative| (relative.generation, relative.entity_id));
     descendants
+}
+
+pub(crate) fn relationship_between(
+    genealogy: &Genealogy,
+    first_id: u32,
+    second_id: u32,
+) -> KinshipRelation {
+    if first_id == second_id {
+        return KinshipRelation::SamePerson;
+    }
+
+    if let Some(generations) = generation_of(descendants_of(genealogy, first_id), second_id) {
+        return if generations == 1 {
+            KinshipRelation::Parent
+        } else {
+            KinshipRelation::Ancestor { generations }
+        };
+    }
+    if let Some(generations) = generation_of(ancestors_of(genealogy, first_id), second_id) {
+        return if generations == 1 {
+            KinshipRelation::Child
+        } else {
+            KinshipRelation::Descendant { generations }
+        };
+    }
+
+    if let (Some(first), Some(second)) = (genealogy.get(first_id), genealogy.get(second_id)) {
+        let same_mother = first.mother_id.is_some() && first.mother_id == second.mother_id;
+        let same_father = first.father_id.is_some() && first.father_id == second.father_id;
+        if same_mother && same_father {
+            return KinshipRelation::FullSibling;
+        }
+        if same_mother || same_father {
+            return KinshipRelation::HalfSibling;
+        }
+    }
+
+    let first_ancestors = ancestors_of(genealogy, first_id);
+    let second_ancestors = ancestors_of(genealogy, second_id);
+    let nearest_common = first_ancestors
+        .iter()
+        .filter_map(|first| {
+            second_ancestors
+                .iter()
+                .find(|second| second.entity_id == first.entity_id)
+                .map(|second| (first, second))
+        })
+        .min_by_key(|(first, second)| {
+            (
+                first.generation.saturating_add(second.generation),
+                first.generation.max(second.generation),
+                first.entity_id,
+            )
+        });
+
+    let Some((first, second)) = nearest_common else {
+        return KinshipRelation::Unrelated;
+    };
+    match (first.generation, second.generation) {
+        (1, second_distance) => KinshipRelation::AuntUncle {
+            generations_removed: second_distance.saturating_sub(2),
+        },
+        (first_distance, 1) => KinshipRelation::NieceNephew {
+            generations_removed: first_distance.saturating_sub(2),
+        },
+        (first_distance, second_distance) => KinshipRelation::Cousin {
+            degree: first_distance.min(second_distance).saturating_sub(1),
+            removed: first_distance.abs_diff(second_distance),
+        },
+    }
+}
+
+fn generation_of(relatives: Vec<KinshipGeneration>, entity_id: u32) -> Option<u16> {
+    relatives
+        .into_iter()
+        .find(|relative| relative.entity_id == entity_id)
+        .map(|relative| relative.generation)
 }
