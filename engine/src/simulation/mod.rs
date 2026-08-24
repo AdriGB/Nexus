@@ -398,6 +398,7 @@ impl Simulation {
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
+        let households = &self.households;
 
         let mut consumed = 0u64;
         let mut world_changed = false;
@@ -409,6 +410,15 @@ impl Simulation {
         for entity in self.entities.iter_mut().filter(|entity| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
         }) {
+            let home_position = entity.household_id.and_then(|household_id| {
+                households
+                    .binary_search_by_key(&household_id, |household| household.id)
+                    .ok()
+                    .map(|index| {
+                        let household = households[index];
+                        (household.residence_x, household.residence_y)
+                    })
+            });
             let (result, entity_discoveries, entity_encounters) = autonomy::update_entity(
                 entity,
                 world,
@@ -416,6 +426,7 @@ impl Simulation {
                 population_cache,
                 spatial_grid,
                 pathfinding_workspace,
+                home_position,
             );
             discoveries.extend(entity_discoveries);
             encounters.extend(entity_encounters);

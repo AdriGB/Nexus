@@ -43,6 +43,11 @@ pub(crate) struct AutonomyProfile {
     pub social_us: u64,
 }
 
+struct ProfiledUpdateContext<'a> {
+    profile: &'a mut AutonomyProfile,
+    home_position: Option<(u32, u32)>,
+}
+
 fn profiled_update_entity(
     entity: &mut Entity,
     world: &mut Grid,
@@ -50,12 +55,16 @@ fn profiled_update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-    profile: &mut AutonomyProfile,
+    context: ProfiledUpdateContext<'_>,
 ) -> (
     super::ActionOutcome,
     Vec<ResourceDiscovery>,
     Vec<EntityEncounter>,
 ) {
+    let ProfiledUpdateContext {
+        profile,
+        home_position,
+    } = context;
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
@@ -127,7 +136,15 @@ fn profiled_update_entity(
                 visible_food_need,
             },
         );
-        plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
+        plan_goal(
+            entity,
+            world,
+            tick,
+            goal,
+            pathfinding_workspace,
+            population,
+            home_position,
+        );
         profile.planning_us += start.elapsed().as_micros() as u64;
     }
 
@@ -146,6 +163,7 @@ pub(crate) fn profile_autonomy(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
+    home_positions: &[Option<(u32, u32)>],
 ) -> ProfileAutonomyResult {
     let mut profile = AutonomyProfile::default();
     let mut consumed = 0u64;
@@ -155,9 +173,10 @@ pub(crate) fn profile_autonomy(
     let mut encounters = Vec::new();
     let mut food_share_attempts = Vec::new();
 
-    for (index, entity) in entities
+    for (index, (entity, home_position)) in entities
         .iter_mut()
-        .filter(|entity| {
+        .zip(home_positions.iter().copied())
+        .filter(|(entity, _)| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
         })
         .enumerate()
@@ -170,7 +189,10 @@ pub(crate) fn profile_autonomy(
                 population,
                 spatial_grid,
                 pathfinding_workspace,
-                &mut profile,
+                ProfiledUpdateContext {
+                    profile: &mut profile,
+                    home_position,
+                },
             )
         } else {
             super::update_entity(
@@ -180,6 +202,7 @@ pub(crate) fn profile_autonomy(
                 population,
                 spatial_grid,
                 pathfinding_workspace,
+                home_position,
             )
         };
         discoveries.extend(entity_discoveries);

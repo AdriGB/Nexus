@@ -69,6 +69,7 @@ pub(super) fn update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
+    home_position: Option<(u32, u32)>,
 ) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
     let position = (entity.x, entity.y);
     let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
@@ -116,7 +117,15 @@ pub(super) fn update_entity(
                 visible_food_need,
             },
         );
-        decision::plan_goal(entity, world, tick, goal, pathfinding_workspace, population);
+        decision::plan_goal(
+            entity,
+            world,
+            tick,
+            goal,
+            pathfinding_workspace,
+            population,
+            home_position,
+        );
     }
 
     (
