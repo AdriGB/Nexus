@@ -1,5 +1,7 @@
 use super::super::genealogy::Genealogy;
-use super::super::kinship::{children_of, siblings_of};
+use super::super::kinship::{
+    ancestors_of, children_of, descendants_of, siblings_of, KinshipGeneration,
+};
 use super::support::entity;
 
 fn genealogy(mut entities: Vec<super::super::Entity>) -> Genealogy {
@@ -141,5 +143,126 @@ fn siblings_are_returned_in_deterministic_id_order() {
     assert_eq!(
         siblings_of(&genealogy(vec![later, focal, earlier]), 10),
         vec![12, 19]
+    );
+}
+
+#[test]
+fn ancestors_preserve_parent_grandparent_and_great_grandparent_distance() {
+    let great_grandparent = biological_child(1, None, None);
+    let grandparent = biological_child(2, None, Some(1));
+    let parent = biological_child(3, None, Some(2));
+    let focal = biological_child(4, None, Some(3));
+    let genealogy = genealogy(vec![focal, parent, great_grandparent, grandparent]);
+
+    assert_eq!(
+        ancestors_of(&genealogy, 4),
+        vec![
+            KinshipGeneration {
+                entity_id: 3,
+                generation: 1,
+            },
+            KinshipGeneration {
+                entity_id: 2,
+                generation: 2,
+            },
+            KinshipGeneration {
+                entity_id: 1,
+                generation: 3,
+            },
+        ]
+    );
+}
+
+#[test]
+fn descendants_preserve_child_grandchild_and_great_grandchild_distance() {
+    let root = biological_child(1, None, None);
+    let child = biological_child(2, None, Some(1));
+    let grandchild = biological_child(3, None, Some(2));
+    let great_grandchild = biological_child(4, None, Some(3));
+    let genealogy = genealogy(vec![great_grandchild, grandchild, child, root]);
+
+    assert_eq!(
+        descendants_of(&genealogy, 1),
+        vec![
+            KinshipGeneration {
+                entity_id: 2,
+                generation: 1,
+            },
+            KinshipGeneration {
+                entity_id: 3,
+                generation: 2,
+            },
+            KinshipGeneration {
+                entity_id: 4,
+                generation: 3,
+            },
+        ]
+    );
+}
+
+#[test]
+fn founders_and_childless_entities_have_no_extended_kinship() {
+    let founder = biological_child(1, None, None);
+    let genealogy = genealogy(vec![founder]);
+
+    assert!(ancestors_of(&genealogy, 1).is_empty());
+    assert!(descendants_of(&genealogy, 1).is_empty());
+}
+
+#[test]
+fn converging_ancestor_paths_are_deduplicated_at_minimum_distance() {
+    let root = biological_child(1, None, None);
+    let left = biological_child(2, Some(1), None);
+    let right = biological_child(3, None, Some(1));
+    let focal = biological_child(4, Some(2), Some(3));
+    let genealogy = genealogy(vec![focal, right, root, left]);
+
+    let ancestors = ancestors_of(&genealogy, 4);
+    assert_eq!(
+        ancestors
+            .iter()
+            .filter(|relative| relative.entity_id == 1)
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![KinshipGeneration {
+            entity_id: 1,
+            generation: 2,
+        }]
+    );
+}
+
+#[test]
+fn incomplete_parentage_keeps_known_ancestors_and_stops_cleanly() {
+    let focal = biological_child(2, None, Some(99));
+    let genealogy = genealogy(vec![focal]);
+
+    assert_eq!(
+        ancestors_of(&genealogy, 2),
+        vec![KinshipGeneration {
+            entity_id: 99,
+            generation: 1,
+        }]
+    );
+}
+
+#[test]
+fn malformed_cycle_terminates_without_returning_the_focal_entity() {
+    let first = biological_child(1, None, Some(2));
+    let second = biological_child(2, None, Some(1));
+    let genealogy = genealogy(vec![first, second]);
+
+    assert_eq!(
+        ancestors_of(&genealogy, 1),
+        vec![KinshipGeneration {
+            entity_id: 2,
+            generation: 1,
+        }]
+    );
+    assert_eq!(
+        descendants_of(&genealogy, 1),
+        vec![KinshipGeneration {
+            entity_id: 2,
+            generation: 1,
+        }]
     );
 }

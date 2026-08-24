@@ -175,6 +175,13 @@ export interface EntityKinship {
   father_id: number | null;
   children_ids: number[];
   sibling_ids: number[];
+  ancestors: KinshipGeneration[];
+  descendants: KinshipGeneration[];
+}
+
+export interface KinshipGeneration {
+  entity_id: number;
+  generation: number;
 }
 
 export interface KnownRelationshipInfo {

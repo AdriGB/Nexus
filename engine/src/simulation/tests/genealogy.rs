@@ -1,6 +1,7 @@
 use super::super::entity::{Pregnancy, Sex};
 use super::super::genealogy::Genealogy;
-use super::super::{children_of, siblings_of, Simulation};
+use super::super::kinship::KinshipGeneration;
+use super::super::{ancestors_of, children_of, siblings_of, Simulation};
 use super::support::{entity, plain_grid};
 
 #[test]
@@ -86,6 +87,37 @@ fn three_generation_lineage_survives_intermediate_death() {
 
     assert_eq!(parent, Some(2));
     assert_eq!(grandparent, Some(1));
+}
+
+#[test]
+fn deceased_intermediate_relative_does_not_break_ancestor_traversal() {
+    let mut intermediate = entity(2, 0, 0, 0.0);
+    intermediate.health = 0.0;
+    let focal = entity(3, 0, 0, 0.0);
+    let mut simulation = Simulation {
+        entities: vec![intermediate, focal],
+        next_entity_id: 4,
+        ..Simulation::default()
+    };
+    simulation.genealogy.register(1, None, None);
+    simulation.genealogy.register(2, None, Some(1));
+    simulation.genealogy.register(3, None, Some(2));
+
+    simulation.remove_dead_entities();
+
+    assert_eq!(
+        ancestors_of(simulation.genealogy(), 3),
+        vec![
+            KinshipGeneration {
+                entity_id: 2,
+                generation: 1,
+            },
+            KinshipGeneration {
+                entity_id: 1,
+                generation: 2,
+            },
+        ]
+    );
 }
 
 #[test]
