@@ -18,6 +18,11 @@ pub(in crate::simulation) struct DecisionContext {
     pub visible_food_need: f32,
 }
 
+pub(super) struct HouseholdDecisionContext {
+    pub decision: DecisionContext,
+    pub household_food_available: bool,
+}
+
 /// Maps persistence [0.0, 1.0] to the score margin required to abandon
 /// the current goal for an alternative.
 ///
@@ -28,6 +33,7 @@ pub(super) fn switch_margin(persistence: f32) -> f32 {
     MIN_SWITCH_MARGIN + (MAX_SWITCH_MARGIN - MIN_SWITCH_MARGIN) * persistence * persistence
 }
 
+#[cfg(test)]
 pub fn evaluate_goals(
     mind: &mut Mind,
     hunger: f32,
@@ -37,6 +43,33 @@ pub fn evaluate_goals(
     current_goal: Option<Goal>,
     context: DecisionContext,
 ) -> Goal {
+    evaluate_goals_with_household(
+        mind,
+        hunger,
+        health,
+        age_ticks,
+        personality,
+        current_goal,
+        HouseholdDecisionContext {
+            decision: context,
+            household_food_available: false,
+        },
+    )
+}
+
+pub(super) fn evaluate_goals_with_household(
+    mind: &mut Mind,
+    hunger: f32,
+    health: f32,
+    age_ticks: u64,
+    personality: &Personality,
+    current_goal: Option<Goal>,
+    context: HouseholdDecisionContext,
+) -> Goal {
+    let HouseholdDecisionContext {
+        decision: context,
+        household_food_available,
+    } = context;
     let DecisionContext {
         tick,
         origin,
@@ -121,11 +154,12 @@ pub fn evaluate_goals(
 
     let has_food_in_inventory = food_in_inventory > 0;
 
-    let acquire_resource_confidence = if mind
-        .memory
-        .known_resources
-        .iter()
-        .any(|known| known.kind == ResourceKind::Food && known.estimated_amount > 0)
+    let acquire_resource_confidence = if household_food_available
+        || mind
+            .memory
+            .known_resources
+            .iter()
+            .any(|known| known.kind == ResourceKind::Food && known.estimated_amount > 0)
     {
         1.0
     } else {
@@ -245,6 +279,14 @@ pub(super) fn invalidate_obsolete_food_plan(entity: &mut Entity) {
         return;
     }
     if entity.mind.current_goal != Some(Goal::AcquireResource) {
+        return;
+    }
+    if entity
+        .mind
+        .current_plan
+        .iter()
+        .any(|action| matches!(action, Action::WithdrawHouseholdFood(_)))
+    {
         return;
     }
     let Some(target) = entity
@@ -471,6 +513,46 @@ pub(super) fn plan_goal(
         }
         Goal::AcquireResource => {
             let kind = ResourceKind::Food;
+            if LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Adult
+                && entity.inventory.amount(ItemKind::Food) == 0
+            {
+                if let Some(context) = household_context.filter(|context| {
+                    context.storage_food_amount > 0 && entity.inventory.remaining_capacity() > 0
+                }) {
+                    let amount = super::super::config::FOOD_CONSUMED_PER_MEAL
+                        .min(context.storage_food_amount)
+                        .min(entity.inventory.remaining_capacity());
+                    let home = context.residence;
+                    if home == origin {
+                        entity.mind.set_plan(
+                            Goal::AcquireResource,
+                            vec![Action::WithdrawHouseholdFood(amount)],
+                            tick,
+                        );
+                        entity.activity = super::super::entity::EntityActivity::SeekingFood;
+                        return;
+                    }
+                    if let Some(path) = pathfinding::find_path_with_workspace(
+                        pathfinding_workspace,
+                        world,
+                        origin,
+                        home,
+                    ) {
+                        entity.path = path.into_iter().skip(1).collect();
+                        entity.path_index = 0;
+                        entity.mind.set_plan(
+                            Goal::AcquireResource,
+                            vec![
+                                Action::MoveTo(home.0, home.1),
+                                Action::WithdrawHouseholdFood(amount),
+                            ],
+                            tick,
+                        );
+                        entity.activity = super::super::entity::EntityActivity::SeekingFood;
+                        return;
+                    }
+                }
+            }
             let mut targets = entity.mind.remembered_resource_targets(origin, tick, kind);
             while let Some(std::cmp::Reverse((_, _, target))) = targets.pop() {
                 if let Some(path) = pathfinding::find_path_with_workspace(

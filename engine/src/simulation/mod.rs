@@ -56,6 +56,7 @@ type AutonomyRunResult = (
     Vec<autonomy::SocialInteraction>,
     Vec<autonomy::FoodShareAttempt>,
     Vec<autonomy::HouseholdDepositAttempt>,
+    Vec<autonomy::HouseholdWithdrawAttempt>,
 );
 
 #[derive(Clone, Copy, Debug)]
@@ -451,6 +452,7 @@ impl Simulation {
             interactions,
             food_share_attempts,
             household_deposit_attempts,
+            household_withdraw_attempts,
         ) = self.run_autonomy(world);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
@@ -458,6 +460,7 @@ impl Simulation {
         self.record_social_interactions(interactions);
         self.process_food_share_attempts(food_share_attempts);
         self.process_household_deposit_attempts(household_deposit_attempts);
+        self.process_household_withdraw_attempts(household_withdraw_attempts);
         dependents::snap_infants_to_caregivers(&mut self.entities);
 
         for (id, amount) in consumer_ids {
@@ -481,6 +484,7 @@ impl Simulation {
         let mut encounters = Vec::new();
         let mut food_share_attempts = Vec::new();
         let mut household_deposit_attempts = Vec::new();
+        let mut household_withdraw_attempts = Vec::new();
 
         for entity in self.entities.iter_mut().filter(|entity| {
             entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
@@ -494,6 +498,7 @@ impl Simulation {
                         autonomy::HouseholdAutonomyContext {
                             residence: (household.residence_x, household.residence_y),
                             storage_remaining_capacity: household.storage.remaining_capacity(),
+                            storage_food_amount: household.storage.amount(ItemKind::Food),
                         }
                     })
             });
@@ -519,6 +524,9 @@ impl Simulation {
             if let Some(attempt) = result.household_deposit_attempt {
                 household_deposit_attempts.push(attempt);
             }
+            if let Some(attempt) = result.household_withdraw_attempt {
+                household_withdraw_attempts.push(attempt);
+            }
         }
 
         let interactions = autonomy::process_social_interactions(
@@ -536,6 +544,7 @@ impl Simulation {
             interactions,
             food_share_attempts,
             household_deposit_attempts,
+            household_withdraw_attempts,
         )
     }
 
@@ -552,6 +561,22 @@ impl Simulation {
                 Some(attempt.actor_location)
             );
             self.deposit_to_household(attempt.actor_id, ItemKind::Food, attempt.amount);
+        }
+    }
+
+    fn process_household_withdraw_attempts(
+        &mut self,
+        attempts: Vec<autonomy::HouseholdWithdrawAttempt>,
+    ) {
+        for attempt in attempts {
+            debug_assert_eq!(
+                self.entities
+                    .binary_search_by_key(&attempt.actor_id, |entity| entity.id)
+                    .ok()
+                    .map(|index| (self.entities[index].x, self.entities[index].y)),
+                Some(attempt.actor_location)
+            );
+            self.withdraw_from_household(attempt.actor_id, ItemKind::Food, attempt.amount);
         }
     }
 

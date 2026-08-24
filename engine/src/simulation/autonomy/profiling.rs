@@ -2,7 +2,10 @@ use super::super::entity::{Entity, LifeStage};
 use super::super::inventory::ItemKind;
 use super::super::spatial::{EntitySnapshot, SpatialGrid};
 use super::action::execute_current_action;
-use super::decision::{evaluate_goals, invalidate_obsolete_food_plan, plan_goal, DecisionContext};
+use super::decision::{
+    evaluate_goals_with_household, invalidate_obsolete_food_plan, plan_goal, DecisionContext,
+    HouseholdDecisionContext,
+};
 use super::mind::{Goal, URGENT_HUNGER_THRESHOLD};
 use super::perception::{
     perceive_entities, reconcile_resource_memory, scan_visible_resources, EntityEncounter,
@@ -24,6 +27,7 @@ type ProfileAutonomyResult = (
     Vec<super::SocialInteraction>,
     Vec<super::FoodShareAttempt>,
     Vec<super::HouseholdDepositAttempt>,
+    Vec<super::HouseholdWithdrawAttempt>,
 );
 
 #[derive(Clone, Debug, Default)]
@@ -123,18 +127,23 @@ fn profiled_update_entity(
         let start = Instant::now();
         let current_goal = entity.mind.current_goal;
         let visible_food_need = super::visible_food_need(entity.id, &entity.mind, population);
-        let goal = evaluate_goals(
+        let household_food_available =
+            household_context.is_some_and(|context| context.storage_food_amount > 0);
+        let goal = evaluate_goals_with_household(
             &mut entity.mind,
             entity.hunger,
             entity.health,
             entity.age_ticks,
             &entity.personality,
             current_goal,
-            DecisionContext {
-                tick,
-                origin: position,
-                food_in_inventory: entity.inventory.amount(ItemKind::Food),
-                visible_food_need,
+            HouseholdDecisionContext {
+                decision: DecisionContext {
+                    tick,
+                    origin: position,
+                    food_in_inventory: entity.inventory.amount(ItemKind::Food),
+                    visible_food_need,
+                },
+                household_food_available,
             },
         );
         plan_goal(
@@ -174,6 +183,7 @@ pub(crate) fn profile_autonomy(
     let mut encounters = Vec::new();
     let mut food_share_attempts = Vec::new();
     let mut household_deposit_attempts = Vec::new();
+    let mut household_withdraw_attempts = Vec::new();
 
     for (index, (entity, household_context)) in entities
         .iter_mut()
@@ -221,6 +231,9 @@ pub(crate) fn profile_autonomy(
         if let Some(attempt) = result.household_deposit_attempt {
             household_deposit_attempts.push(attempt);
         }
+        if let Some(attempt) = result.household_withdraw_attempt {
+            household_withdraw_attempts.push(attempt);
+        }
     }
 
     let social_start = Instant::now();
@@ -237,5 +250,6 @@ pub(crate) fn profile_autonomy(
         interactions,
         food_share_attempts,
         household_deposit_attempts,
+        household_withdraw_attempts,
     )
 }

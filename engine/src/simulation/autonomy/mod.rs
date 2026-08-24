@@ -6,6 +6,7 @@ mod perception;
 mod profiling;
 mod social;
 
+#[cfg(test)]
 pub use self::decision::evaluate_goals;
 #[cfg(test)]
 pub use self::exploration::exploration_target;
@@ -29,7 +30,9 @@ pub(super) use self::action::effective_movement_speed;
 pub(super) use self::action::ActionOutcome;
 pub(in crate::simulation) use self::action::FoodShareAttempt;
 pub(in crate::simulation) use self::action::HouseholdDepositAttempt;
+pub(in crate::simulation) use self::action::HouseholdWithdrawAttempt;
 pub(in crate::simulation) use self::decision::DecisionContext;
+use self::decision::HouseholdDecisionContext;
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
@@ -48,6 +51,7 @@ pub(crate) const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
 pub(crate) struct HouseholdAutonomyContext {
     pub residence: (u32, u32),
     pub storage_remaining_capacity: u16,
+    pub storage_food_amount: u16,
 }
 
 pub(super) fn process_social_interactions(
@@ -112,18 +116,23 @@ pub(super) fn update_entity(
         let current_goal = entity.mind.current_goal;
         let visible_food_need = visible_food_need(entity.id, &entity.mind, population);
 
-        let goal = evaluate_goals(
+        let household_food_available =
+            household_context.is_some_and(|context| context.storage_food_amount > 0);
+        let goal = decision::evaluate_goals_with_household(
             &mut entity.mind,
             entity.hunger,
             entity.health,
             entity.age_ticks,
             &entity.personality,
             current_goal,
-            DecisionContext {
-                tick,
-                origin: position,
-                food_in_inventory: entity.inventory.amount(ItemKind::Food),
-                visible_food_need,
+            HouseholdDecisionContext {
+                decision: DecisionContext {
+                    tick,
+                    origin: position,
+                    food_in_inventory: entity.inventory.amount(ItemKind::Food),
+                    visible_food_need,
+                },
+                household_food_available,
             },
         );
         decision::plan_goal(

@@ -53,6 +53,7 @@ pub enum Action {
     Interact(u32),
     ShareFood(u32),
     DepositHouseholdFood(u16),
+    WithdrawHouseholdFood(u16),
 }
 
 impl Action {
@@ -67,6 +68,7 @@ impl Action {
             Self::Interact(_) => "Interact",
             Self::ShareFood(_) => "Share food",
             Self::DepositHouseholdFood(_) => "Deposit household food",
+            Self::WithdrawHouseholdFood(_) => "Withdraw household food",
         }
     }
 
@@ -80,6 +82,7 @@ impl Action {
             | Self::Interact(_)
             | Self::ShareFood(_) => None,
             Self::DepositHouseholdFood(_) => None,
+            Self::WithdrawHouseholdFood(_) => None,
         }
     }
 

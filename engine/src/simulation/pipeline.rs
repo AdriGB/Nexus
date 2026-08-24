@@ -51,6 +51,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
         interactions,
         food_share_attempts,
         household_deposit_attempts,
+        household_withdraw_attempts,
     ) = simulation.run_autonomy(world);
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
@@ -58,6 +59,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     simulation.record_social_interactions(interactions);
     simulation.process_food_share_attempts(food_share_attempts);
     simulation.process_household_deposit_attempts(household_deposit_attempts);
+    simulation.process_household_withdraw_attempts(household_withdraw_attempts);
     let autonomy_us = start.elapsed().as_micros() as u64;
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -131,6 +133,7 @@ pub(super) fn run_profiled_autonomy_step(
                         autonomy::HouseholdAutonomyContext {
                             residence: (household.residence_x, household.residence_y),
                             storage_remaining_capacity: household.storage.remaining_capacity(),
+                            storage_food_amount: household.storage.amount(super::ItemKind::Food),
                         }
                     })
             })
@@ -147,6 +150,7 @@ pub(super) fn run_profiled_autonomy_step(
         interactions,
         food_share_attempts,
         household_deposit_attempts,
+        household_withdraw_attempts,
     ) = autonomy::profile_autonomy(
         &mut simulation.entities,
         world,
@@ -162,6 +166,7 @@ pub(super) fn run_profiled_autonomy_step(
     simulation.record_social_interactions(interactions);
     simulation.process_food_share_attempts(food_share_attempts);
     simulation.process_household_deposit_attempts(household_deposit_attempts);
+    simulation.process_household_withdraw_attempts(household_withdraw_attempts);
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     for (id, amount) in consumer_ids {
