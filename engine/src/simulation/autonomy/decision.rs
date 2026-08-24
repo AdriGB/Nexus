@@ -1,5 +1,6 @@
 use super::super::config::{FOOD_SEARCH_THRESHOLD, MAX_HUNGER};
 use super::super::entity::{Entity, LifeStage, Personality};
+use super::super::inventory::ItemKind;
 use super::super::spatial::EntitySnapshot;
 use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
 use super::social::remembered_social_score;
@@ -456,7 +457,7 @@ pub(super) fn plan_goal(
     goal: Goal,
     pathfinding_workspace: &mut PathfindingWorkspace,
     population: &[EntitySnapshot],
-    home_position: Option<(u32, u32)>,
+    household_context: Option<super::HouseholdAutonomyContext>,
 ) {
     let origin = (entity.x, entity.y);
     match goal {
@@ -504,7 +505,22 @@ pub(super) fn plan_goal(
         Goal::Rest => {
             entity.path.clear();
             entity.path_index = 0;
-            if let Some(home) = home_position.filter(|home| *home != origin) {
+            let deposit_amount = household_context
+                .filter(|_| LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Adult)
+                .map(|context| {
+                    entity
+                        .inventory
+                        .amount(ItemKind::Food)
+                        .saturating_sub(super::HOUSEHOLD_PERSONAL_FOOD_RESERVE)
+                        .min(context.storage_remaining_capacity)
+                })
+                .unwrap_or(0);
+            let deposit_action =
+                (deposit_amount > 0).then_some(Action::DepositHouseholdFood(deposit_amount));
+            if let Some(home) = household_context
+                .map(|context| context.residence)
+                .filter(|home| *home != origin)
+            {
                 if let Some(path) = pathfinding::find_path_with_workspace(
                     pathfinding_workspace,
                     world,
@@ -512,16 +528,18 @@ pub(super) fn plan_goal(
                     home,
                 ) {
                     entity.path = path.into_iter().skip(1).collect();
-                    entity.mind.set_plan(
-                        Goal::Rest,
-                        vec![Action::MoveTo(home.0, home.1), Action::Wait],
-                        tick,
-                    );
+                    let mut plan = vec![Action::MoveTo(home.0, home.1)];
+                    plan.extend(deposit_action);
+                    plan.push(Action::Wait);
+                    entity.mind.set_plan(Goal::Rest, plan, tick);
                     entity.activity = super::super::entity::EntityActivity::Moving;
                     return;
                 }
             }
-            entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+            let mut plan = Vec::with_capacity(2);
+            plan.extend(deposit_action);
+            plan.push(Action::Wait);
+            entity.mind.set_plan(Goal::Rest, plan, tick);
             entity.activity = super::super::entity::EntityActivity::Resting;
         }
         Goal::Socialize => {

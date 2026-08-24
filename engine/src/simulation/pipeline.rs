@@ -50,12 +50,14 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
         encounters,
         interactions,
         food_share_attempts,
+        household_deposit_attempts,
     ) = simulation.run_autonomy(world);
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
     simulation.record_social_interactions(interactions);
     simulation.process_food_share_attempts(food_share_attempts);
+    simulation.process_household_deposit_attempts(household_deposit_attempts);
     let autonomy_us = start.elapsed().as_micros() as u64;
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -115,7 +117,7 @@ pub(super) fn run_profiled_autonomy_step(
     let population_cache = &simulation.population_cache;
     let spatial_grid = &simulation.spatial_grid;
     let pathfinding_workspace = &mut simulation.pathfinding_workspace;
-    let home_positions: Vec<_> = simulation
+    let household_contexts: Vec<_> = simulation
         .entities
         .iter()
         .map(|entity| {
@@ -126,7 +128,10 @@ pub(super) fn run_profiled_autonomy_step(
                     .ok()
                     .map(|index| {
                         let household = &simulation.households[index];
-                        (household.residence_x, household.residence_y)
+                        autonomy::HouseholdAutonomyContext {
+                            residence: (household.residence_x, household.residence_y),
+                            storage_remaining_capacity: household.storage.remaining_capacity(),
+                        }
                     })
             })
         })
@@ -141,6 +146,7 @@ pub(super) fn run_profiled_autonomy_step(
         encounters,
         interactions,
         food_share_attempts,
+        household_deposit_attempts,
     ) = autonomy::profile_autonomy(
         &mut simulation.entities,
         world,
@@ -148,13 +154,14 @@ pub(super) fn run_profiled_autonomy_step(
         population_cache,
         spatial_grid,
         pathfinding_workspace,
-        &home_positions,
+        &household_contexts,
     );
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
     simulation.record_social_interactions(interactions);
     simulation.process_food_share_attempts(food_share_attempts);
+    simulation.process_household_deposit_attempts(household_deposit_attempts);
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     for (id, amount) in consumer_ids {
