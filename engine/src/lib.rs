@@ -217,6 +217,10 @@ impl WorldBridge {
         bridge::entity_kinship_json(&self.simulation, id)
     }
 
+    pub fn entity_relationship(&self, first_id: u32, second_id: u32) -> String {
+        bridge::entity_relationship_json(&self.simulation, first_id, second_id)
+    }
+
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
         pathfinding::find_path(&self.grid, (start_x, start_y), (goal_x, goal_y))
             .map(|path| pathfinding::smooth_path(&self.grid, path))

@@ -28,6 +28,52 @@ struct EntityKinshipDto {
     descendants: Vec<KinshipGenerationDto>,
 }
 
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum KinshipRelationDto {
+    SamePerson,
+    Parent,
+    Child,
+    FullSibling,
+    HalfSibling,
+    Ancestor { generations: u16 },
+    Descendant { generations: u16 },
+    AuntUncle { generations_removed: u16 },
+    NieceNephew { generations_removed: u16 },
+    Cousin { degree: u16, removed: u16 },
+    Unrelated,
+}
+
+impl From<simulation::KinshipRelation> for KinshipRelationDto {
+    fn from(relation: simulation::KinshipRelation) -> Self {
+        match relation {
+            simulation::KinshipRelation::SamePerson => Self::SamePerson,
+            simulation::KinshipRelation::Parent => Self::Parent,
+            simulation::KinshipRelation::Child => Self::Child,
+            simulation::KinshipRelation::FullSibling => Self::FullSibling,
+            simulation::KinshipRelation::HalfSibling => Self::HalfSibling,
+            simulation::KinshipRelation::Ancestor { generations } => Self::Ancestor { generations },
+            simulation::KinshipRelation::Descendant { generations } => {
+                Self::Descendant { generations }
+            }
+            simulation::KinshipRelation::AuntUncle {
+                generations_removed,
+            } => Self::AuntUncle {
+                generations_removed,
+            },
+            simulation::KinshipRelation::NieceNephew {
+                generations_removed,
+            } => Self::NieceNephew {
+                generations_removed,
+            },
+            simulation::KinshipRelation::Cousin { degree, removed } => {
+                Self::Cousin { degree, removed }
+            }
+            simulation::KinshipRelation::Unrelated => Self::Unrelated,
+        }
+    }
+}
+
 pub(crate) fn entity_kinship_json(simulation: &Simulation, entity_id: u32) -> String {
     simulation
         .entities()
@@ -52,4 +98,49 @@ pub(crate) fn entity_kinship_json(simulation: &Simulation, entity_id: u32) -> St
                 })
             },
         )
+}
+
+pub(crate) fn entity_relationship_json(
+    simulation: &Simulation,
+    first_id: u32,
+    second_id: u32,
+) -> String {
+    to_json(&KinshipRelationDto::from(simulation::relationship_between(
+        simulation.genealogy(),
+        first_id,
+        second_id,
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cousin_relationship_serializes_as_structured_data() {
+        let payload = to_json(&KinshipRelationDto::from(
+            simulation::KinshipRelation::Cousin {
+                degree: 2,
+                removed: 1,
+            },
+        ));
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+
+        assert_eq!(json["kind"], "cousin");
+        assert_eq!(json["degree"], 2);
+        assert_eq!(json["removed"], 1);
+    }
+
+    #[test]
+    fn generation_relationship_serializes_without_ui_labels() {
+        let payload = to_json(&KinshipRelationDto::from(
+            simulation::KinshipRelation::Ancestor { generations: 3 },
+        ));
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({ "kind": "ancestor", "generations": 3 })
+        );
+    }
 }

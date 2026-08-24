@@ -25,6 +25,7 @@ export interface IWorldBridge {
   entity_event_summary(entityId: number): string;
   entity_info(id: number): string;
   entity_kinship(id: number): string;
+  entity_relationship(firstId: number, secondId: number): string;
   get_tile_data(
     vx: number,
     vy: number,
@@ -183,6 +184,12 @@ export interface KinshipGeneration {
   entity_id: number;
   generation: number;
 }
+
+export type KinshipRelation =
+  | { kind: "same_person" | "parent" | "child" | "full_sibling" | "half_sibling" | "unrelated" }
+  | { kind: "ancestor" | "descendant"; generations: number }
+  | { kind: "aunt_uncle" | "niece_nephew"; generations_removed: number }
+  | { kind: "cousin"; degree: number; removed: number };
 
 export interface KnownRelationshipInfo {
   id: number;

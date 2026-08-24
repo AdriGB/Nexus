@@ -1,7 +1,7 @@
 use super::super::entity::{Pregnancy, Sex};
 use super::super::genealogy::Genealogy;
-use super::super::kinship::KinshipGeneration;
-use super::super::{ancestors_of, children_of, siblings_of, Simulation};
+use super::super::kinship::{KinshipGeneration, KinshipRelation};
+use super::super::{ancestors_of, children_of, relationship_between, siblings_of, Simulation};
 use super::support::{entity, plain_grid};
 
 #[test]
@@ -117,6 +117,10 @@ fn deceased_intermediate_relative_does_not_break_ancestor_traversal() {
                 generation: 2,
             },
         ]
+    );
+    assert_eq!(
+        relationship_between(simulation.genealogy(), 1, 3),
+        KinshipRelation::Ancestor { generations: 2 }
     );
 }
 
