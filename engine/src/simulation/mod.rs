@@ -897,6 +897,7 @@ impl Simulation {
                 if let Some(child) = self.entities.last_mut() {
                     child.caregiver_id = Some(birth.mother_id);
                 }
+                households::assign_newborn(&mut self.entities, child_id, birth.mother_id);
                 self.births = self.births.saturating_add(1);
                 self.push_event(PendingSimulationEvent {
                     caused_by_event_id: None,

@@ -1,7 +1,8 @@
+use super::super::entity::Pregnancy;
 use super::super::households::{form_for_partnership, members_of, Household};
 use super::super::partnerships;
-use super::super::Simulation;
-use super::support::entity;
+use super::super::{Sex, Simulation};
+use super::support::{entity, fertile_entity, plain_grid};
 
 fn partnered_entities() -> Vec<super::super::Entity> {
     let mut first = entity(1, 0, 0, 0.0);
@@ -132,4 +133,106 @@ fn dead_entities_leave_active_membership_naturally() {
             formed_tick: 0
         }]
     );
+}
+
+fn due_birth(mother_household: Option<u32>, father_household: Option<u32>) -> Simulation {
+    let mut mother = fertile_entity(1, Sex::Female, 1, 1);
+    let mut father = fertile_entity(2, Sex::Male, 2, 1);
+    mother.household_id = mother_household;
+    father.household_id = father_household;
+    mother.pregnancy = Some(Pregnancy {
+        father_id: 2,
+        conceived_tick: 0,
+        due_tick: 1,
+    });
+    Simulation {
+        tick: 1,
+        entities: vec![mother, father],
+        next_entity_id: 3,
+        households: mother_household
+            .into_iter()
+            .chain(father_household)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|id| Household { id, formed_tick: 0 })
+            .collect(),
+        next_household_id: 10,
+        ..Simulation::default()
+    }
+}
+
+#[test]
+fn newborn_inherits_mothers_household() {
+    let mut simulation = due_birth(Some(4), Some(4));
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(simulation.entities[2].caregiver_id, Some(1));
+    assert_eq!(simulation.entities[2].household_id, Some(4));
+    assert_eq!(simulation.entities[0].household_id, Some(4));
+}
+
+#[test]
+fn newborn_without_maternal_household_remains_unassigned() {
+    let mut simulation = due_birth(None, None);
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(simulation.entities[2].household_id, None);
+}
+
+#[test]
+fn fathers_different_household_does_not_override_mothers() {
+    let mut simulation = due_birth(Some(4), Some(9));
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(simulation.entities[2].father_id, Some(2));
+    assert_eq!(simulation.entities[1].household_id, Some(9));
+    assert_eq!(simulation.entities[2].household_id, Some(4));
+}
+
+#[test]
+fn newborn_appears_in_derived_household_members() {
+    let mut simulation = due_birth(Some(4), Some(9));
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(members_of(simulation.entities(), 4), vec![1, 3]);
+    let payload: serde_json::Value =
+        serde_json::from_str(&crate::bridge::entity_household_json(&simulation, 3)).unwrap();
+    assert_eq!(payload["household_id"], 4);
+    assert_eq!(payload["member_ids"], serde_json::json!([1, 3]));
+}
+
+#[test]
+fn birth_does_not_create_new_household() {
+    let mut simulation = due_birth(None, Some(9));
+    let households_before = simulation.households.clone();
+    let next_id_before = simulation.next_household_id;
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(simulation.entities[2].household_id, None);
+    assert_eq!(simulation.households, households_before);
+    assert_eq!(simulation.next_household_id, next_id_before);
+}
+
+#[test]
+fn newborn_household_assignment_is_deterministic() {
+    let mut first = due_birth(Some(4), Some(9));
+    let mut second = due_birth(Some(4), Some(9));
+
+    first.update_pregnancies(&plain_grid(4, 4));
+    second.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(
+        first.entities[2].household_id,
+        second.entities[2].household_id
+    );
+    assert_eq!(
+        members_of(first.entities(), 4),
+        members_of(second.entities(), 4)
+    );
+    assert_eq!(first.households, second.households);
 }

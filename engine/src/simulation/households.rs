@@ -16,6 +16,22 @@ pub(crate) fn members_of(entities: &[Entity], household_id: u32) -> Vec<u32> {
         .collect()
 }
 
+pub(super) fn assign_newborn(
+    entities: &mut [Entity],
+    child_id: u32,
+    caregiver_id: u32,
+) -> Option<u32> {
+    let caregiver_index = entities
+        .binary_search_by_key(&caregiver_id, |entity| entity.id)
+        .ok()?;
+    let household_id = entities[caregiver_index].household_id?;
+    let child_index = entities
+        .binary_search_by_key(&child_id, |entity| entity.id)
+        .ok()?;
+    entities[child_index].household_id = Some(household_id);
+    Some(household_id)
+}
+
 pub(super) fn form_for_partnership(
     entities: &mut [Entity],
     households: &mut Vec<Household>,
