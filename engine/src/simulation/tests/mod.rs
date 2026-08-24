@@ -2,6 +2,7 @@ mod autonomy;
 mod biology;
 mod core;
 mod dependency;
+mod dependent_provisioning;
 mod events;
 mod food_sharing;
 mod genealogy;

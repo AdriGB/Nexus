@@ -308,6 +308,7 @@ mod tests {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         };
         remember_entity(&mut mind, snapshot, 100);
 
@@ -334,6 +335,7 @@ mod tests {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         };
         remember_entity(&mut mind, snapshot_a, 100);
 
@@ -344,6 +346,7 @@ mod tests {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         };
         remember_entity(&mut mind, snapshot_b, 200);
 
@@ -367,6 +370,7 @@ mod tests {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         };
         remember_entity(&mut mind, snapshot, 100);
 
@@ -381,6 +385,7 @@ mod tests {
             hunger: 0.0,
             caregiver_id: None,
             is_child: false,
+            is_infant: false,
         };
         remember_entity(&mut mind, snapshot_again, 200);
 
@@ -401,6 +406,7 @@ mod tests {
                 hunger: 0.0,
                 caregiver_id: None,
                 is_child: false,
+                is_infant: false,
             };
             remember_entity(&mut mind, snapshot, 0);
         }

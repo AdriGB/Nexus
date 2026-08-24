@@ -172,7 +172,8 @@ export interface EntityInfo {
       | "highest_utility"
       | "goal_persistence"
       | "dependent_needs_food"
-      | "dependent_follows_caregiver";
+      | "dependent_follows_caregiver"
+      | "dependent_provisioning";
   } | null;
   inventory: {
     capacity: number;

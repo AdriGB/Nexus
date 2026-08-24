@@ -259,7 +259,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [x] Miembros del hogar
 * [x] Almacén común
 * [x] Reparto de recursos
-* [ ] Responsabilidad por dependientes
+* [x] Responsabilidad por dependientes
 * [ ] Incorporación y abandono de miembros
 * [ ] Disolución del hogar
 * [ ] Herencia básica

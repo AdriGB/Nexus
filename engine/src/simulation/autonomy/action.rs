@@ -14,7 +14,7 @@ use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
 
 const REST_HEALTH_PER_TICK: f32 = 0.25;
-const SHARE_FOOD_AMOUNT: u16 = 10;
+pub(super) const SHARE_FOOD_AMOUNT: u16 = 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::simulation) struct FoodShareAttempt {

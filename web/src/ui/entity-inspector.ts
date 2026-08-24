@@ -52,6 +52,8 @@ function decisionExplanation(entity: EntityInfo): string {
       return "Eat was selected because this dependent is hungry and remembers available food.";
     case "dependent_follows_caregiver":
       return "Follow was selected because this child depends on its caregiver and does not need food now.";
+    case "dependent_provisioning":
+      return `${explanation.chosen_goal} was selected to provision food for a hungry dependent.`;
     case "highest_utility":
       return `${explanation.chosen_goal} was selected with the highest utility (${explanation.chosen_score.toFixed(2)}).`;
   }

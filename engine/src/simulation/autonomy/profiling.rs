@@ -103,15 +103,34 @@ fn profiled_update_entity(
     let start = Instant::now();
     invalidate_obsolete_food_plan(entity);
 
+    let dependent_food_need =
+        super::decision::dependent_food_need(entity.id, &entity.mind, population);
+    let provisioning_goal = (entity.hunger < URGENT_HUNGER_THRESHOLD)
+        .then(|| {
+            super::decision::dependent_provisioning_goal(
+                dependent_food_need,
+                entity.inventory.amount(ItemKind::Food),
+            )
+        })
+        .flatten();
+    if provisioning_goal.is_some_and(|goal| entity.mind.current_goal != Some(goal)) {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
+
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
         && !matches!(
             entity.mind.current_goal,
             Some(Goal::Eat | Goal::AcquireResource)
         )
-        && !entity
-            .mind
-            .remembered_food_targets(position, tick)
-            .is_empty();
+        && (entity.inventory.amount(ItemKind::Food) > 0
+            || household_context.is_some_and(|context| context.storage_food_amount > 0)
+            || !entity
+                .mind
+                .remembered_food_targets(position, tick)
+                .is_empty());
     if should_interrupt {
         profile.urgent_interrupts += 1;
         entity.mind.clear_goal();
@@ -144,6 +163,7 @@ fn profiled_update_entity(
                     visible_food_need,
                 },
                 household_food_available,
+                dependent_food_need,
             },
         );
         plan_goal(

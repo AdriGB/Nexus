@@ -577,6 +577,7 @@ mod tests {
                 hunger: 0.0,
                 caregiver_id: None,
                 is_child: false,
+                is_infant: false,
             },
             EntitySnapshot {
                 id: 3,
@@ -585,6 +586,7 @@ mod tests {
                 hunger: 0.0,
                 caregiver_id: None,
                 is_child: false,
+                is_infant: false,
             },
         ];
         (mind, population)

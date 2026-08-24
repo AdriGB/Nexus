@@ -8,6 +8,7 @@ pub(super) struct EntitySnapshot {
     pub hunger: f32,
     pub caregiver_id: Option<u32>,
     pub is_child: bool,
+    pub is_infant: bool,
 }
 
 #[derive(Clone, Debug, Default)]
