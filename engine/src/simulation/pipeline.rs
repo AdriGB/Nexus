@@ -18,13 +18,21 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     let (consumed_this_tick, world_changed) = simulation.update_autonomy(world);
     physiology::resolve_starvation(&mut simulation.entities);
     simulation.record_resource_changes(consumed_this_tick, world_changed);
-    simulation.remove_dead_entities();
+    let deaths = simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
-    households::dissolve_empty_households(
+    let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,
+        simulation.tick,
+    );
+    households::settle_basic_inheritances(
+        &mut simulation.entities,
+        &mut simulation.households,
+        &simulation.genealogy,
+        &deaths,
+        &dissolutions,
         simulation.tick,
     );
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -84,16 +92,24 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let resource_changes_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
-    simulation.remove_dead_entities();
+    let deaths = simulation.remove_dead_entities();
     let remove_dead_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
-    households::dissolve_empty_households(
+    let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,
+        simulation.tick,
+    );
+    households::settle_basic_inheritances(
+        &mut simulation.entities,
+        &mut simulation.households,
+        &simulation.genealogy,
+        &deaths,
+        &dissolutions,
         simulation.tick,
     );
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -190,13 +206,21 @@ pub(super) fn run_profiled_autonomy_step(
 
     physiology::resolve_starvation(&mut simulation.entities);
     simulation.record_resource_changes(consumed_this_tick, world_changed);
-    simulation.remove_dead_entities();
+    let deaths = simulation.remove_dead_entities();
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
-    households::dissolve_empty_households(
+    let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,
+        simulation.tick,
+    );
+    households::settle_basic_inheritances(
+        &mut simulation.entities,
+        &mut simulation.households,
+        &simulation.genealogy,
+        &deaths,
+        &dissolutions,
         simulation.tick,
     );
     // Covers both newly reassigned infants and newborns assigned to their mother.

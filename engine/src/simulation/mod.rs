@@ -45,6 +45,13 @@ use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use std::collections::HashSet;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct DeathContext {
+    pub entity_id: u32,
+    pub household_id: Option<u32>,
+    pub partner_id: Option<u32>,
+}
+
 pub const INITIAL_POPULATION: u32 = 10;
 
 type AutonomyRunResult = (
@@ -987,7 +994,7 @@ impl Simulation {
         }
     }
 
-    fn remove_dead_entities(&mut self) {
+    fn remove_dead_entities(&mut self) -> Vec<DeathContext> {
         let deaths: Vec<_> = self
             .entities
             .iter()
@@ -998,19 +1005,28 @@ impl Simulation {
                 } else {
                     SimulationEventCause::Starvation
                 };
-                (entity.id, entity.x, entity.y, cause)
+                (
+                    DeathContext {
+                        entity_id: entity.id,
+                        household_id: entity.household_id,
+                        partner_id: entity.partner_id,
+                    },
+                    entity.x,
+                    entity.y,
+                    cause,
+                )
             })
             .collect();
-        for (entity_id, x, y, cause) in deaths {
+        for (death, x, y, cause) in &deaths {
             self.push_event(PendingSimulationEvent {
                 caused_by_event_id: None,
                 tick: self.tick,
-                location: EventLocation { x, y },
-                actor_id: entity_id,
+                location: EventLocation { x: *x, y: *y },
+                actor_id: death.entity_id,
                 target_id: None,
-                related_entity_ids: vec![entity_id],
+                related_entity_ids: vec![death.entity_id],
                 kind: SimulationEventKind::Death,
-                cause,
+                cause: *cause,
                 details: SimulationEventDetails::Death,
             });
         }
@@ -1020,6 +1036,7 @@ impl Simulation {
         self.deaths = self
             .deaths
             .saturating_add((population_before_deaths - self.entities.len()) as u64);
+        deaths.into_iter().map(|(death, _, _, _)| death).collect()
     }
 
     fn update_pregnancies(&mut self, world: &Grid) {
