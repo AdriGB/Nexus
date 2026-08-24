@@ -22,8 +22,8 @@ pub(crate) fn entity_kinship_json(simulation: &Simulation, entity_id: u32) -> St
                 to_json(&EntityKinshipDto {
                     mother_id: entity.mother_id,
                     father_id: entity.father_id,
-                    children_ids: simulation::children_of(simulation.entities(), entity_id),
-                    sibling_ids: simulation::siblings_of(simulation.entities(), entity_id),
+                    children_ids: simulation::children_of(simulation.genealogy(), entity_id),
+                    sibling_ids: simulation::siblings_of(simulation.genealogy(), entity_id),
                 })
             },
         )

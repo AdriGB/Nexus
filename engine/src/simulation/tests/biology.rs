@@ -96,7 +96,7 @@ fn newborn_starts_at_age_zero() {
         seed: 42,
         ..Simulation::default()
     };
-    simulation.push_newborn((0, 0)).unwrap();
+    simulation.push_entity((0, 0), 0).unwrap();
     assert_eq!(simulation.entities()[0].age_ticks, 0);
     assert!(simulation.entities()[0].lifespan_ticks > FOUNDER_AGE_MAX);
 }
