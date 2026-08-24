@@ -31,12 +31,20 @@ pub(in crate::simulation) struct HouseholdDepositAttempt {
     pub actor_location: (u32, u32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct HouseholdWithdrawAttempt {
+    pub actor_id: u32,
+    pub amount: u16,
+    pub actor_location: (u32, u32),
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(in crate::simulation) struct ActionOutcome {
     pub food_consumed: u16,
     pub world_changed: bool,
     pub food_share_attempt: Option<FoodShareAttempt>,
     pub household_deposit_attempt: Option<HouseholdDepositAttempt>,
+    pub household_withdraw_attempt: Option<HouseholdWithdrawAttempt>,
 }
 
 pub(in crate::simulation) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
@@ -136,6 +144,7 @@ pub(super) fn execute_current_action(
                     world_changed: gathered > 0,
                     food_share_attempt: None,
                     household_deposit_attempt: None,
+                    household_withdraw_attempt: None,
                 }
             } else {
                 ActionOutcome::default()
@@ -151,6 +160,7 @@ pub(super) fn execute_current_action(
                 world_changed: false,
                 food_share_attempt: None,
                 household_deposit_attempt: None,
+                household_withdraw_attempt: None,
             }
         }
         Action::Wait => {
@@ -396,6 +406,7 @@ pub(super) fn execute_current_action(
                     amount: SHARE_FOOD_AMOUNT,
                 }),
                 household_deposit_attempt: None,
+                household_withdraw_attempt: None,
             }
         }
         Action::DepositHouseholdFood(amount) => {
@@ -407,6 +418,23 @@ pub(super) fn execute_current_action(
                 world_changed: false,
                 food_share_attempt: None,
                 household_deposit_attempt: Some(HouseholdDepositAttempt {
+                    actor_id: entity.id,
+                    amount,
+                    actor_location: (entity.x, entity.y),
+                }),
+                household_withdraw_attempt: None,
+            }
+        }
+        Action::WithdrawHouseholdFood(amount) => {
+            entity.movement_credit = 0.0;
+            entity.mind.advance_action();
+            entity.activity = EntityActivity::Idle;
+            ActionOutcome {
+                food_consumed: 0,
+                world_changed: false,
+                food_share_attempt: None,
+                household_deposit_attempt: None,
+                household_withdraw_attempt: Some(HouseholdWithdrawAttempt {
                     actor_id: entity.id,
                     amount,
                     actor_location: (entity.x, entity.y),

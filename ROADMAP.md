@@ -258,7 +258,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [x] Residencia compartida
 * [x] Miembros del hogar
 * [x] Almacén común
-* [ ] Reparto de recursos
+* [x] Reparto de recursos
 * [ ] Responsabilidad por dependientes
 * [ ] Incorporación y abandono de miembros
 * [ ] Disolución del hogar
