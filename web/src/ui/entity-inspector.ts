@@ -169,6 +169,7 @@ export function syncEntityInspector(): void {
         ? "—"
         : kinship.sibling_ids.map((id) => `#${id}`).join(", "),
     ),
+    `<span class="info-key"></span><button class="btn-secondary family-tree-open" type="button" data-family-tree-id="${entity.id}">View Family Tree</button>`,
     infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
     infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
     infoSectionTitle("Personality"),

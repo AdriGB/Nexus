@@ -221,6 +221,20 @@ impl WorldBridge {
         bridge::entity_relationship_json(&self.simulation, first_id, second_id)
     }
 
+    pub fn entity_family_tree(
+        &self,
+        entity_id: u32,
+        ancestor_depth: u16,
+        descendant_depth: u16,
+    ) -> String {
+        bridge::entity_family_tree_json(
+            &self.simulation,
+            entity_id,
+            ancestor_depth,
+            descendant_depth,
+        )
+    }
+
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {
         pathfinding::find_path(&self.grid, (start_x, start_y), (goal_x, goal_y))
             .map(|path| pathfinding::smooth_path(&self.grid, path))
