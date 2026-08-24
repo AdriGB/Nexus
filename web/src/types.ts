@@ -16,6 +16,16 @@ export interface IWorldBridge {
     kind: "food" | "timber" | "stone" | "iron",
     quantity: number,
   ): number;
+  deposit_household_item(
+    entityId: number,
+    kind: "food" | "timber" | "stone" | "iron",
+    quantity: number,
+  ): number;
+  withdraw_household_item(
+    entityId: number,
+    kind: "food" | "timber" | "stone" | "iron",
+    quantity: number,
+  ): number;
   population_stats(): string;
   first_entity_info(): string;
   first_entity_relationships(): string;
@@ -190,6 +200,7 @@ export interface EntityHousehold {
   formed_tick: number | null;
   residence_x: number | null;
   residence_y: number | null;
+  storage: EntityInfo["inventory"] | null;
 }
 
 export interface KinshipGeneration {

@@ -21,6 +21,7 @@ fn household(residence: (u32, u32)) -> Household {
         formed_tick: 0,
         residence_x: residence.0,
         residence_y: residence.1,
+        storage: super::super::Inventory::new(200),
     }
 }
 
@@ -155,7 +156,7 @@ fn child_follow_behavior_is_unchanged() {
 #[test]
 fn household_residence_does_not_move_when_member_rests() {
     let mut simulation = simulation_with_member((0, 0), (4, 0));
-    let residence = simulation.households[0];
+    let residence = simulation.households[0].clone();
     let mut world = plain_grid(5, 1);
 
     for _ in 0..5 {

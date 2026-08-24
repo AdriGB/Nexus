@@ -32,6 +32,7 @@ fn partnership_forms_symmetric_household_with_derived_members() {
             formed_tick: 42,
             residence_x: 0,
             residence_y: 0,
+            storage: super::super::Inventory::new(200),
         }]
     );
 }
@@ -97,7 +98,7 @@ fn identical_simulations_produce_identical_residences() {
         let mut households = Vec::new();
         let mut next_id = 1;
         form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 7);
-        households[0]
+        households[0].clone()
     };
 
     assert_eq!(form(), form());
@@ -139,7 +140,7 @@ fn residence_selection_is_independent_of_actor_target_order() {
             second_id,
             5,
         );
-        households[0]
+        households[0].clone()
     };
 
     assert_eq!(form(1, 2), form(2, 1));
@@ -218,7 +219,7 @@ fn partnership_dissolution_does_not_change_residence() {
                 seek_retry_after_tick: None,
             });
     }
-    let residence = households[0];
+    let residence = households[0].clone();
 
     partnerships::try_dissolve(&mut entities, 1, 2).unwrap();
 
@@ -238,6 +239,7 @@ fn dead_entities_leave_active_membership_naturally() {
             formed_tick: 0,
             residence_x: 0,
             residence_y: 0,
+            storage: super::super::Inventory::new(200),
         }],
         next_household_id: 2,
         ..Simulation::default()
@@ -253,6 +255,7 @@ fn dead_entities_leave_active_membership_naturally() {
             formed_tick: 0,
             residence_x: 0,
             residence_y: 0,
+            storage: super::super::Inventory::new(200),
         }]
     );
 }
@@ -266,7 +269,7 @@ fn member_death_does_not_change_residence() {
     let mut next_id = 1;
     form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 0);
     entities[0].health = 0.0;
-    let residence = households[0];
+    let residence = households[0].clone();
     let mut simulation = Simulation {
         entities,
         households,
@@ -303,6 +306,7 @@ fn due_birth(mother_household: Option<u32>, father_household: Option<u32>) -> Si
                 formed_tick: 0,
                 residence_x: 1,
                 residence_y: 1,
+                storage: super::super::Inventory::new(200),
             })
             .collect(),
         next_household_id: 10,
@@ -359,7 +363,7 @@ fn newborn_appears_in_derived_household_members() {
 #[test]
 fn newborn_membership_does_not_change_residence() {
     let mut simulation = due_birth(Some(4), Some(9));
-    let residence = simulation.households[0];
+    let residence = simulation.households[0].clone();
 
     simulation.update_pregnancies(&plain_grid(4, 4));
 
