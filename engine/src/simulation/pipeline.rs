@@ -22,6 +22,11 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::dissolve_empty_households(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     simulation.run_daily_relationship_decay();
     simulation.try_daily_conceptions();
@@ -86,6 +91,11 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::dissolve_empty_households(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     let pregnancies_us = start.elapsed().as_micros() as u64;
 
@@ -132,6 +142,7 @@ pub(super) fn run_profiled_autonomy_step(
                     .households
                     .binary_search_by_key(&household_id, |household| household.id)
                     .ok()
+                    .filter(|index| simulation.households[*index].is_active())
                     .map(|index| {
                         let household = &simulation.households[index];
                         autonomy::HouseholdAutonomyContext {
@@ -183,6 +194,11 @@ pub(super) fn run_profiled_autonomy_step(
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::dissolve_empty_households(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     // Covers both newly reassigned infants and newborns assigned to their mother.
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     simulation.run_daily_relationship_decay();

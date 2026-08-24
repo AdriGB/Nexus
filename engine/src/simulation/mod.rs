@@ -269,8 +269,9 @@ impl Simulation {
             .binary_search_by_key(&household_id, |household| household.id)
             .ok()?;
         let household = &self.households[household_index];
-        ((self.entities[entity_index].x, self.entities[entity_index].y)
-            == (household.residence_x, household.residence_y))
+        (household.is_active()
+            && (self.entities[entity_index].x, self.entities[entity_index].y)
+                == (household.residence_x, household.residence_y))
             .then_some((entity_index, household_index))
     }
 
@@ -493,6 +494,7 @@ impl Simulation {
                 households
                     .binary_search_by_key(&household_id, |household| household.id)
                     .ok()
+                    .filter(|index| households[*index].is_active())
                     .map(|index| {
                         let household = &households[index];
                         autonomy::HouseholdAutonomyContext {
