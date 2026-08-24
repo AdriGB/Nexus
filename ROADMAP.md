@@ -246,7 +246,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 ## Kinship
 
 * [x] Madre y padre persistentes
-* [ ] Hijos
+* [x] Hijos
 * [ ] Hermanos
 * [x] Parejas
 * [ ] Árbol familiar

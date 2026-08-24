@@ -4,6 +4,7 @@ mod dependents;
 mod entity;
 mod events;
 mod inventory;
+mod kinship;
 mod lifecycle;
 mod partnerships;
 mod physiology;
@@ -25,6 +26,7 @@ pub use self::events::{
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
 pub use self::inventory::{Inventory, ItemKind};
+pub(crate) use self::kinship::children_of;
 use self::lifecycle::{
     founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
     spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
