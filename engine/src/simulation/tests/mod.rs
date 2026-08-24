@@ -9,6 +9,7 @@ mod genealogy;
 mod household_dissolution;
 mod household_food_deposit;
 mod household_food_withdrawal;
+mod household_inheritance;
 mod household_membership_transitions;
 mod household_rest;
 mod household_storage;

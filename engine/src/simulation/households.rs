@@ -2,7 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{Entity, Inventory, LifeStage};
+use super::{
+    descendants_of, siblings_of, DeathContext, Entity, Genealogy, Inventory, ItemKind, LifeStage,
+};
 
 pub const DEFAULT_HOUSEHOLD_STORAGE_CAPACITY: u16 = 200;
 
@@ -11,9 +13,18 @@ pub(crate) struct Household {
     pub id: u32,
     pub formed_tick: u64,
     pub dissolved_tick: Option<u64>,
+    pub inheritance: Option<HouseholdInheritance>,
     pub residence_x: u32,
     pub residence_y: u32,
     pub storage: Inventory,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HouseholdInheritance {
+    pub resolved_tick: u64,
+    pub decedent_id: u32,
+    pub heir_id: Option<u32>,
+    pub destination_household_id: Option<u32>,
 }
 
 impl Household {
@@ -26,6 +37,138 @@ impl Household {
 pub(super) struct HouseholdDissolution {
     pub household_id: u32,
     pub dissolved_tick: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct HouseholdInheritanceSettlement {
+    pub household_id: u32,
+    pub decedent_id: u32,
+    pub heir_id: Option<u32>,
+    pub destination_household_id: Option<u32>,
+    pub transferred: [u16; ItemKind::ALL.len()],
+}
+
+pub(super) fn settle_basic_inheritances(
+    entities: &mut [Entity],
+    households: &mut [Household],
+    genealogy: &Genealogy,
+    deaths: &[DeathContext],
+    dissolutions: &[HouseholdDissolution],
+    tick: u64,
+) -> Vec<HouseholdInheritanceSettlement> {
+    let newly_dissolved: HashSet<u32> = dissolutions.iter().map(|item| item.household_id).collect();
+    let living: HashSet<u32> = entities.iter().map(|entity| entity.id).collect();
+    let mut settlements = Vec::new();
+
+    for source_index in 0..households.len() {
+        let household_id = households[source_index].id;
+        if !newly_dissolved.contains(&household_id)
+            || households[source_index].dissolved_tick != Some(tick)
+            || households[source_index].inheritance.is_some()
+        {
+            continue;
+        }
+        let mut associated: Vec<_> = deaths
+            .iter()
+            .filter(|death| death.household_id == Some(household_id))
+            .copied()
+            .collect();
+        if associated.is_empty() {
+            continue;
+        }
+        associated.sort_unstable_by_key(|death| death.entity_id);
+
+        let mut candidates = Vec::new();
+        for death in &associated {
+            if let Some(heir_id) = death.partner_id.filter(|id| living.contains(id)) {
+                candidates.push((0u8, 0u16, death.entity_id, heir_id));
+            }
+            for relative in descendants_of(genealogy, death.entity_id) {
+                if living.contains(&relative.entity_id) {
+                    candidates.push((1, relative.generation, death.entity_id, relative.entity_id));
+                }
+            }
+            if let Some(record) = genealogy.get(death.entity_id) {
+                for heir_id in [record.mother_id, record.father_id].into_iter().flatten() {
+                    if living.contains(&heir_id) {
+                        candidates.push((2, 0, death.entity_id, heir_id));
+                    }
+                }
+            }
+            for heir_id in siblings_of(genealogy, death.entity_id) {
+                if living.contains(&heir_id) {
+                    candidates.push((3, 0, death.entity_id, heir_id));
+                }
+            }
+        }
+        candidates.sort_unstable();
+        let selected = candidates.first().copied();
+        let decedent_id = selected.map_or(associated[0].entity_id, |candidate| candidate.2);
+        let heir_id = selected.map(|candidate| candidate.3);
+        let destination_household_id = heir_id.and_then(|id| {
+            entities
+                .binary_search_by_key(&id, |entity| entity.id)
+                .ok()
+                .and_then(|index| entities[index].household_id)
+                .filter(|target_id| {
+                    households
+                        .binary_search_by_key(target_id, |household| household.id)
+                        .ok()
+                        .is_some_and(|index| households[index].is_active())
+                })
+        });
+        let mut transferred = [0; ItemKind::ALL.len()];
+        if let Some(heir_id) = heir_id {
+            if let Some(target_id) = destination_household_id {
+                let target_index = households
+                    .binary_search_by_key(&target_id, |household| household.id)
+                    .expect("validated inheritance destination");
+                let (source, target) = if source_index < target_index {
+                    let (left, right) = households.split_at_mut(target_index);
+                    (&mut left[source_index].storage, &mut right[0].storage)
+                } else {
+                    let (left, right) = households.split_at_mut(source_index);
+                    (&mut right[0].storage, &mut left[target_index].storage)
+                };
+                transfer_inventory(source, target, &mut transferred);
+            } else if let Ok(heir_index) =
+                entities.binary_search_by_key(&heir_id, |entity| entity.id)
+            {
+                transfer_inventory(
+                    &mut households[source_index].storage,
+                    &mut entities[heir_index].inventory,
+                    &mut transferred,
+                );
+            }
+        }
+        let inheritance = HouseholdInheritance {
+            resolved_tick: tick,
+            decedent_id,
+            heir_id,
+            destination_household_id,
+        };
+        households[source_index].inheritance = Some(inheritance);
+        settlements.push(HouseholdInheritanceSettlement {
+            household_id,
+            decedent_id,
+            heir_id,
+            destination_household_id,
+            transferred,
+        });
+    }
+    settlements
+}
+
+fn transfer_inventory(
+    source: &mut Inventory,
+    destination: &mut Inventory,
+    transferred: &mut [u16; ItemKind::ALL.len()],
+) {
+    for (index, kind) in ItemKind::ALL.into_iter().enumerate() {
+        let accepted = destination.add(kind, source.amount(kind));
+        source.remove(kind, accepted);
+        transferred[index] = accepted;
+    }
 }
 
 pub(super) fn dissolve_empty_households(
@@ -207,6 +350,7 @@ pub(super) fn form_for_partnership(
         id,
         formed_tick: tick,
         dissolved_tick: None,
+        inheritance: None,
         residence_x,
         residence_y,
         storage: Inventory::new(DEFAULT_HOUSEHOLD_STORAGE_CAPACITY),

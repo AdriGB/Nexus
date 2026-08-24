@@ -262,7 +262,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [x] Responsabilidad por dependientes
 * [x] Incorporación y abandono de miembros
 * [x] Disolución del hogar
-* [ ] Herencia básica
+* [x] Herencia básica
 * [ ] Estadísticas de hogares
 
 ## Relationship-driven behavior
