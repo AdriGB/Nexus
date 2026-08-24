@@ -456,6 +456,7 @@ pub(super) fn plan_goal(
     goal: Goal,
     pathfinding_workspace: &mut PathfindingWorkspace,
     population: &[EntitySnapshot],
+    home_position: Option<(u32, u32)>,
 ) {
     let origin = (entity.x, entity.y);
     match goal {
@@ -501,6 +502,25 @@ pub(super) fn plan_goal(
         }
         Goal::Follow => plan_follow(entity, world, tick, pathfinding_workspace, population),
         Goal::Rest => {
+            entity.path.clear();
+            entity.path_index = 0;
+            if let Some(home) = home_position.filter(|home| *home != origin) {
+                if let Some(path) = pathfinding::find_path_with_workspace(
+                    pathfinding_workspace,
+                    world,
+                    origin,
+                    home,
+                ) {
+                    entity.path = path.into_iter().skip(1).collect();
+                    entity.mind.set_plan(
+                        Goal::Rest,
+                        vec![Action::MoveTo(home.0, home.1), Action::Wait],
+                        tick,
+                    );
+                    entity.activity = super::super::entity::EntityActivity::Moving;
+                    return;
+                }
+            }
             entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
             entity.activity = super::super::entity::EntityActivity::Resting;
         }

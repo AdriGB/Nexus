@@ -115,6 +115,22 @@ pub(super) fn run_profiled_autonomy_step(
     let population_cache = &simulation.population_cache;
     let spatial_grid = &simulation.spatial_grid;
     let pathfinding_workspace = &mut simulation.pathfinding_workspace;
+    let home_positions: Vec<_> = simulation
+        .entities
+        .iter()
+        .map(|entity| {
+            entity.household_id.and_then(|household_id| {
+                simulation
+                    .households
+                    .binary_search_by_key(&household_id, |household| household.id)
+                    .ok()
+                    .map(|index| {
+                        let household = simulation.households[index];
+                        (household.residence_x, household.residence_y)
+                    })
+            })
+        })
+        .collect();
 
     let (
         consumed_this_tick,
@@ -132,6 +148,7 @@ pub(super) fn run_profiled_autonomy_step(
         population_cache,
         spatial_grid,
         pathfinding_workspace,
+        &home_positions,
     );
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
