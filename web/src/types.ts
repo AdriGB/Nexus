@@ -174,6 +174,7 @@ export interface EntityKinship {
   mother_id: number | null;
   father_id: number | null;
   children_ids: number[];
+  sibling_ids: number[];
 }
 
 export interface KnownRelationshipInfo {
