@@ -247,7 +247,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 
 * [x] Madre y padre persistentes
 * [x] Hijos
-* [ ] Hermanos
+* [x] Hermanos
 * [x] Parejas
 * [ ] Árbol familiar
 * [ ] Relaciones de parentesco derivadas

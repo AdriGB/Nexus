@@ -163,6 +163,12 @@ export function syncEntityInspector(): void {
         ? "—"
         : kinship.children_ids.map((id) => `#${id}`).join(", "),
     ),
+    infoRow(
+      "Siblings",
+      kinship.sibling_ids.length === 0
+        ? "—"
+        : kinship.sibling_ids.map((id) => `#${id}`).join(", "),
+    ),
     infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
     infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
     infoSectionTitle("Personality"),
