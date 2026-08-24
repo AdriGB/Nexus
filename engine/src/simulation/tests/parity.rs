@@ -103,6 +103,7 @@ fn assert_equivalent(sim_a: &Simulation, world_a: &Grid, sim_b: &Simulation, wor
             }
         }
     }
+    assert_eq!(sim_a.genealogy, sim_b.genealogy);
 
     // World resources
     assert_eq!(world_a.resources.len(), world_b.resources.len());

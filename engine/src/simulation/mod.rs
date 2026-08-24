@@ -3,6 +3,7 @@ mod config;
 mod dependents;
 mod entity;
 mod events;
+mod genealogy;
 mod inventory;
 mod kinship;
 mod lifecycle;
@@ -25,6 +26,7 @@ pub use self::events::{
     SimulationEventKind,
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
+use self::genealogy::Genealogy;
 pub use self::inventory::{Inventory, ItemKind};
 pub(crate) use self::kinship::{children_of, siblings_of};
 use self::lifecycle::{
@@ -92,6 +94,7 @@ pub struct Simulation {
     food_consumed: u64,
     seed: u64,
     recent_events: RecentEventHistory,
+    genealogy: Genealogy,
 }
 
 impl Default for Simulation {
@@ -110,6 +113,7 @@ impl Default for Simulation {
             food_consumed: 0,
             seed: 0,
             recent_events: RecentEventHistory::default(),
+            genealogy: Genealogy::default(),
         }
     }
 }
@@ -134,6 +138,10 @@ impl Simulation {
 
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    pub(crate) fn genealogy(&self) -> &Genealogy {
+        &self.genealogy
     }
 
     pub fn transfer_item(
@@ -304,11 +312,17 @@ impl Simulation {
         self.push_entity(position, age_ticks)
     }
 
-    fn push_newborn(&mut self, position: (u32, u32)) -> Option<u32> {
-        self.push_entity(position, 0)
+    fn push_entity(&mut self, position: (u32, u32), age_ticks: u64) -> Option<u32> {
+        self.push_entity_with_parentage(position, age_ticks, None, None)
     }
 
-    fn push_entity(&mut self, (x, y): (u32, u32), age_ticks: u64) -> Option<u32> {
+    fn push_entity_with_parentage(
+        &mut self,
+        (x, y): (u32, u32),
+        age_ticks: u64,
+        mother_id: Option<u32>,
+        father_id: Option<u32>,
+    ) -> Option<u32> {
         let id = self.next_entity_id;
         self.next_entity_id = self.next_entity_id.checked_add(1)?;
         self.entities.push(Entity {
@@ -327,14 +341,15 @@ impl Simulation {
             pregnancy: None,
             postpartum_until_tick: 0,
             movement_credit: 0.0,
-            mother_id: None,
-            father_id: None,
+            mother_id,
+            father_id,
             caregiver_id: None,
             partner_id: None,
             personality: personality_for(self.seed, id),
             inventory: Inventory::default(),
             action_tick: 0,
         });
+        self.genealogy.register(id, mother_id, father_id);
         Some(id)
     }
 
@@ -851,10 +866,13 @@ impl Simulation {
         let capacity = MAX_POPULATION.saturating_sub(self.entities.len());
         let births = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
         for birth in births {
-            if let Some(child_id) = self.push_newborn(birth.position) {
+            if let Some(child_id) = self.push_entity_with_parentage(
+                birth.position,
+                0,
+                Some(birth.mother_id),
+                Some(birth.father_id),
+            ) {
                 if let Some(child) = self.entities.last_mut() {
-                    child.mother_id = Some(birth.mother_id);
-                    child.father_id = Some(birth.father_id);
                     child.caregiver_id = Some(birth.mother_id);
                 }
                 self.births = self.births.saturating_add(1);
