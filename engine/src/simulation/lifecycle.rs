@@ -22,6 +22,13 @@ const COOPERATION_SALT: u64 = 0x5e83_d6a1_b7f4_2c09;
 const CAUTION_SALT: u64 = 0x2b9c_4f87_e5d1_a364;
 const PERSISTENCE_SALT: u64 = 0xf16a_8d3c_50b7_e942;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PendingBirth {
+    pub position: (u32, u32),
+    pub mother_id: u32,
+    pub father_id: u32,
+}
+
 pub(super) fn sex_for(seed: u64, id: u32) -> Sex {
     if entity_random(seed, id, SEX_SALT) & 1 == 0 {
         Sex::Female
@@ -183,7 +190,7 @@ pub(super) fn process_due_pregnancies(
     world: &Grid,
     tick: u64,
     max_births: usize,
-) -> Vec<((u32, u32), u32)> {
+) -> Vec<PendingBirth> {
     let mut occupied: HashSet<_> = entities.iter().map(|entity| (entity.x, entity.y)).collect();
     let mut births = Vec::new();
     for mother in entities.iter_mut() {
@@ -200,10 +207,13 @@ pub(super) fn process_due_pregnancies(
             continue;
         };
         occupied.insert(position);
-        let mother_id = mother.id;
         mother.pregnancy = None;
         mother.postpartum_until_tick = tick.saturating_add(POSTPARTUM_TICKS);
-        births.push((position, mother_id));
+        births.push(PendingBirth {
+            position,
+            mother_id: mother.id,
+            father_id: pregnancy.father_id,
+        });
     }
     births
 }

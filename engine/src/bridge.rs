@@ -451,6 +451,8 @@ mod tests {
             "stage_movement_factor",
             "caregiver_id",
             "partner_id",
+            "mother_id",
+            "father_id",
             "personality",
             "known_resources",
             "known_entities",

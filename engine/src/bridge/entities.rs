@@ -89,6 +89,8 @@ struct EntityInfoDto {
     stage_movement_factor: f32,
     caregiver_id: Option<u32>,
     partner_id: Option<u32>,
+    mother_id: Option<u32>,
+    father_id: Option<u32>,
     personality: PersonalityDto,
     inventory: InventoryDto,
 }
@@ -158,6 +160,8 @@ pub(crate) fn entity_info_json(entity: &Entity, tick: u64) -> String {
         stage_movement_factor: life_stage.movement_factor(),
         caregiver_id: entity.caregiver_id,
         partner_id: entity.partner_id,
+        mother_id: entity.mother_id,
+        father_id: entity.father_id,
         personality: entity.personality.into(),
         inventory: InventoryDto {
             capacity: entity.inventory.capacity(),

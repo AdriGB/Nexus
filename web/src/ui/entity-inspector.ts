@@ -153,8 +153,10 @@ export function syncEntityInspector(): void {
       "Stage Speed",
       `${(entity.stage_movement_factor * 100).toFixed(0)}%`,
     ),
-    infoRow("Caregiver", entity.caregiver_id?.toString() ?? "—"),
-    infoRow("Partner", entity.partner_id?.toString() ?? "—"),
+    infoRow("Mother", entity.mother_id === null ? "—" : `#${entity.mother_id}`),
+    infoRow("Father", entity.father_id === null ? "—" : `#${entity.father_id}`),
+    infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
+    infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
     infoSectionTitle("Personality"),
     infoRow(
       "Curiosity",
