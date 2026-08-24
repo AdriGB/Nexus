@@ -1,5 +1,5 @@
 import { state } from "../state";
-import type { EntityInfo, KnownRelationshipInfo } from "../types";
+import type { EntityInfo, EntityKinship, KnownRelationshipInfo } from "../types";
 
 function infoRow(key: string, value: string, valueClass?: string): string {
   const cls = valueClass ? `info-val ${valueClass}` : "info-val";
@@ -133,6 +133,7 @@ export function syncEntityInspector(): void {
   const relationships = JSON.parse(
     state.world.first_entity_relationships(),
   ) as KnownRelationshipInfo[];
+  const kinship = JSON.parse(state.world.first_entity_kinship()) as EntityKinship;
   const simulationTick = Number(state.world.simulation_tick());
   const relationshipsHtml = relationshipsSection(relationships, simulationTick);
   const dueInHours =
@@ -153,8 +154,15 @@ export function syncEntityInspector(): void {
       "Stage Speed",
       `${(entity.stage_movement_factor * 100).toFixed(0)}%`,
     ),
-    infoRow("Mother", entity.mother_id === null ? "—" : `#${entity.mother_id}`),
-    infoRow("Father", entity.father_id === null ? "—" : `#${entity.father_id}`),
+    infoSectionTitle("Kinship"),
+    infoRow("Mother", kinship.mother_id === null ? "—" : `#${kinship.mother_id}`),
+    infoRow("Father", kinship.father_id === null ? "—" : `#${kinship.father_id}`),
+    infoRow(
+      "Children",
+      kinship.children_ids.length === 0
+        ? "—"
+        : kinship.children_ids.map((id) => `#${id}`).join(", "),
+    ),
     infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
     infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
     infoSectionTitle("Personality"),

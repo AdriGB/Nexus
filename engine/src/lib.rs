@@ -183,6 +183,13 @@ impl WorldBridge {
             .map_or_else(|| "[]".to_string(), bridge::entity_relationships_json)
     }
 
+    pub fn first_entity_kinship(&self) -> String {
+        self.simulation.entities().first().map_or_else(
+            || "{}".to_string(),
+            |entity| bridge::entity_kinship_json(&self.simulation, entity.id),
+        )
+    }
+
     pub fn recent_interaction_events(&self, entity_id: Option<u32>) -> String {
         bridge::recent_interaction_events_json(&self.simulation, entity_id)
     }
@@ -204,6 +211,10 @@ impl WorldBridge {
                 || "{}".to_string(),
                 |entity| bridge::entity_info_json(entity, self.simulation.tick()),
             )
+    }
+
+    pub fn entity_kinship(&self, id: u32) -> String {
+        bridge::entity_kinship_json(&self.simulation, id)
     }
 
     pub fn find_path(&self, start_x: u32, start_y: u32, goal_x: u32, goal_y: u32) -> Vec<u32> {

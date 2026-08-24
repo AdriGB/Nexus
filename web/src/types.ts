@@ -19,10 +19,12 @@ export interface IWorldBridge {
   population_stats(): string;
   first_entity_info(): string;
   first_entity_relationships(): string;
+  first_entity_kinship(): string;
   recent_interaction_events(entityId?: number): string;
   recent_events(entityId?: number): string;
   entity_event_summary(entityId: number): string;
   entity_info(id: number): string;
+  entity_kinship(id: number): string;
   get_tile_data(
     vx: number,
     vy: number,
@@ -166,6 +168,12 @@ export interface EntityInfo {
       amount: number;
     }>;
   };
+}
+
+export interface EntityKinship {
+  mother_id: number | null;
+  father_id: number | null;
+  children_ids: number[];
 }
 
 export interface KnownRelationshipInfo {

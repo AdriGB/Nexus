@@ -5,6 +5,7 @@ mod dependency;
 mod events;
 mod food_sharing;
 mod inventory_transfer;
+mod kinship;
 mod movement;
 mod parity;
 mod partnerships;
