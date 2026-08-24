@@ -6,6 +6,8 @@ use super::Entity;
 pub(crate) struct Household {
     pub id: u32,
     pub formed_tick: u64,
+    pub residence_x: u32,
+    pub residence_y: u32,
 }
 
 pub(crate) fn members_of(entities: &[Entity], household_id: u32) -> Vec<u32> {
@@ -56,12 +58,20 @@ pub(super) fn form_for_partnership(
     }
 
     let id = *next_household_id;
+    let residence_founder = if first_id < second_id {
+        &entities[first_index]
+    } else {
+        &entities[second_index]
+    };
+    let (residence_x, residence_y) = (residence_founder.x, residence_founder.y);
     *next_household_id = next_household_id.checked_add(1)?;
     entities[first_index].household_id = Some(id);
     entities[second_index].household_id = Some(id);
     households.push(Household {
         id,
         formed_tick: tick,
+        residence_x,
+        residence_y,
     });
     Some(id)
 }

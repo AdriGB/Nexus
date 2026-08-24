@@ -8,6 +8,8 @@ struct EntityHouseholdDto {
     household_id: Option<u32>,
     member_ids: Vec<u32>,
     formed_tick: Option<u64>,
+    residence_x: Option<u32>,
+    residence_y: Option<u32>,
 }
 
 pub(crate) fn entity_household_json(simulation: &Simulation, entity_id: u32) -> String {
@@ -30,5 +32,7 @@ pub(crate) fn entity_household_json(simulation: &Simulation, entity_id: u32) -> 
             simulation::members_of(simulation.entities(), id)
         }),
         formed_tick: household.map(|household| household.formed_tick),
+        residence_x: household.map(|household| household.residence_x),
+        residence_y: household.map(|household| household.residence_y),
     })
 }

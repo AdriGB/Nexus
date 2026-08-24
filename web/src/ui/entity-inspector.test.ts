@@ -38,11 +38,15 @@ describe("household inspector", () => {
       household_id: 4,
       member_ids: [12, 19],
       formed_tick: 5821,
+      residence_x: 15,
+      residence_y: 9,
     });
 
     expect(html).toContain("Household");
     expect(html).toContain("#4");
     expect(html).toContain("#12, #19");
+    expect(html).toContain("(15, 9)");
+    expect(html).toContain("5,821 ticks");
   });
 
   it("renders an unassigned entity compactly", () => {
@@ -50,6 +54,8 @@ describe("household inspector", () => {
       household_id: null,
       member_ids: [],
       formed_tick: null,
+      residence_x: null,
+      residence_y: null,
     });
 
     expect(html).toContain("—");

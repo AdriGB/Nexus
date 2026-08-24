@@ -29,7 +29,9 @@ fn partnership_forms_symmetric_household_with_derived_members() {
         households,
         vec![Household {
             id: 1,
-            formed_tick: 42
+            formed_tick: 42,
+            residence_x: 0,
+            residence_y: 0,
         }]
     );
 }
@@ -58,6 +60,10 @@ fn unpartnered_or_assigned_entities_do_not_form_another_household() {
 fn household_ids_are_allocated_deterministically() {
     let build = || {
         let mut entities = partnered_entities();
+        entities[0].x = 7;
+        entities[0].y = 11;
+        entities[1].x = 19;
+        entities[1].y = 23;
         let mut households = Vec::new();
         let mut next_id = 1;
         form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 7);
@@ -78,6 +84,85 @@ fn household_ids_are_allocated_deterministically() {
     );
     assert_eq!(first_households, second_households);
     assert_eq!(first_next_id, second_next_id);
+}
+
+#[test]
+fn identical_simulations_produce_identical_residences() {
+    let form = || {
+        let mut entities = partnered_entities();
+        entities[0].x = 7;
+        entities[0].y = 11;
+        entities[1].x = 19;
+        entities[1].y = 23;
+        let mut households = Vec::new();
+        let mut next_id = 1;
+        form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 7);
+        households[0]
+    };
+
+    assert_eq!(form(), form());
+}
+
+#[test]
+fn household_residence_uses_lower_id_founder_position() {
+    let mut entities = partnered_entities();
+    entities[0].x = 12;
+    entities[0].y = 8;
+    entities[1].x = 13;
+    entities[1].y = 8;
+    let mut households = Vec::new();
+    let mut next_id = 1;
+
+    form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 5);
+
+    assert_eq!(
+        (households[0].residence_x, households[0].residence_y),
+        (12, 8)
+    );
+}
+
+#[test]
+fn residence_selection_is_independent_of_actor_target_order() {
+    let form = |first_id, second_id| {
+        let mut entities = partnered_entities();
+        entities[0].x = 12;
+        entities[0].y = 8;
+        entities[1].x = 30;
+        entities[1].y = 21;
+        let mut households = Vec::new();
+        let mut next_id = 1;
+        form_for_partnership(
+            &mut entities,
+            &mut households,
+            &mut next_id,
+            first_id,
+            second_id,
+            5,
+        );
+        households[0]
+    };
+
+    assert_eq!(form(1, 2), form(2, 1));
+}
+
+#[test]
+fn household_residence_persists_when_members_move() {
+    let mut entities = partnered_entities();
+    entities[0].x = 4;
+    entities[0].y = 6;
+    let mut households = Vec::new();
+    let mut next_id = 1;
+    form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 5);
+
+    entities[0].x = 50;
+    entities[0].y = 60;
+    entities[1].x = 70;
+    entities[1].y = 80;
+
+    assert_eq!(
+        (households[0].residence_x, households[0].residence_y),
+        (4, 6)
+    );
 }
 
 #[test]
@@ -108,6 +193,39 @@ fn partnership_dissolution_does_not_remove_household_membership() {
 }
 
 #[test]
+fn partnership_dissolution_does_not_change_residence() {
+    let mut entities = partnered_entities();
+    entities[0].x = 3;
+    entities[0].y = 7;
+    let mut households = Vec::new();
+    let mut next_id = 1;
+    form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 0);
+    for (entity, other_id) in entities.iter_mut().zip([2, 1]) {
+        entity
+            .mind
+            .memory
+            .known_entities
+            .push(super::super::autonomy::KnownEntity {
+                id: other_id,
+                first_seen_tick: 0,
+                last_seen_tick: 0,
+                last_seen_x: 0,
+                last_seen_y: 0,
+                observed_ticks: 1,
+                affinity: 0,
+                last_interaction_tick: 0,
+                interaction_count: 1,
+                seek_retry_after_tick: None,
+            });
+    }
+    let residence = households[0];
+
+    partnerships::try_dissolve(&mut entities, 1, 2).unwrap();
+
+    assert_eq!(households[0], residence);
+}
+
+#[test]
 fn dead_entities_leave_active_membership_naturally() {
     let mut entities = partnered_entities();
     entities[0].household_id = Some(1);
@@ -118,6 +236,8 @@ fn dead_entities_leave_active_membership_naturally() {
         households: vec![Household {
             id: 1,
             formed_tick: 0,
+            residence_x: 0,
+            residence_y: 0,
         }],
         next_household_id: 2,
         ..Simulation::default()
@@ -130,9 +250,33 @@ fn dead_entities_leave_active_membership_naturally() {
         simulation.households(),
         &[Household {
             id: 1,
-            formed_tick: 0
+            formed_tick: 0,
+            residence_x: 0,
+            residence_y: 0,
         }]
     );
+}
+
+#[test]
+fn member_death_does_not_change_residence() {
+    let mut entities = partnered_entities();
+    entities[0].x = 5;
+    entities[0].y = 9;
+    let mut households = Vec::new();
+    let mut next_id = 1;
+    form_for_partnership(&mut entities, &mut households, &mut next_id, 1, 2, 0);
+    entities[0].health = 0.0;
+    let residence = households[0];
+    let mut simulation = Simulation {
+        entities,
+        households,
+        next_household_id: next_id,
+        ..Simulation::default()
+    };
+
+    simulation.remove_dead_entities();
+
+    assert_eq!(simulation.households[0], residence);
 }
 
 fn due_birth(mother_household: Option<u32>, father_household: Option<u32>) -> Simulation {
@@ -154,7 +298,12 @@ fn due_birth(mother_household: Option<u32>, father_household: Option<u32>) -> Si
             .chain(father_household)
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
-            .map(|id| Household { id, formed_tick: 0 })
+            .map(|id| Household {
+                id,
+                formed_tick: 0,
+                residence_x: 1,
+                residence_y: 1,
+            })
             .collect(),
         next_household_id: 10,
         ..Simulation::default()
@@ -203,6 +352,30 @@ fn newborn_appears_in_derived_household_members() {
         serde_json::from_str(&crate::bridge::entity_household_json(&simulation, 3)).unwrap();
     assert_eq!(payload["household_id"], 4);
     assert_eq!(payload["member_ids"], serde_json::json!([1, 3]));
+    assert_eq!(payload["residence_x"], 1);
+    assert_eq!(payload["residence_y"], 1);
+}
+
+#[test]
+fn newborn_membership_does_not_change_residence() {
+    let mut simulation = due_birth(Some(4), Some(9));
+    let residence = simulation.households[0];
+
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    assert_eq!(simulation.households[0], residence);
+}
+
+#[test]
+fn household_bridge_exposes_residence() {
+    let mut simulation = due_birth(Some(4), None);
+    simulation.update_pregnancies(&plain_grid(4, 4));
+
+    let payload: serde_json::Value =
+        serde_json::from_str(&crate::bridge::entity_household_json(&simulation, 3)).unwrap();
+
+    assert_eq!(payload["residence_x"], 1);
+    assert_eq!(payload["residence_y"], 1);
 }
 
 #[test]
