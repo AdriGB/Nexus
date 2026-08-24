@@ -38,6 +38,7 @@ pub(crate) fn entity_household_json(simulation: &Simulation, entity_id: u32) -> 
             .households()
             .binary_search_by_key(&id, |household| household.id)
             .ok()
+            .filter(|index| simulation.households()[*index].is_active())
             .map(|index| &simulation.households()[index])
     });
 

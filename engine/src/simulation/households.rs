@@ -1,6 +1,6 @@
 //! Persistent household identity with membership derived from living entities.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::{Entity, Inventory, LifeStage};
 
@@ -10,9 +10,45 @@ pub const DEFAULT_HOUSEHOLD_STORAGE_CAPACITY: u16 = 200;
 pub(crate) struct Household {
     pub id: u32,
     pub formed_tick: u64,
+    pub dissolved_tick: Option<u64>,
     pub residence_x: u32,
     pub residence_y: u32,
     pub storage: Inventory,
+}
+
+impl Household {
+    pub(crate) fn is_active(&self) -> bool {
+        self.dissolved_tick.is_none()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct HouseholdDissolution {
+    pub household_id: u32,
+    pub dissolved_tick: u64,
+}
+
+pub(super) fn dissolve_empty_households(
+    entities: &[Entity],
+    households: &mut [Household],
+    tick: u64,
+) -> Vec<HouseholdDissolution> {
+    let referenced_households: HashSet<u32> = entities
+        .iter()
+        .filter_map(|entity| entity.household_id)
+        .collect();
+
+    households
+        .iter_mut()
+        .filter(|household| household.is_active() && !referenced_households.contains(&household.id))
+        .map(|household| {
+            household.dissolved_tick = Some(tick);
+            HouseholdDissolution {
+                household_id: household.id,
+                dissolved_tick: tick,
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn members_of(entities: &[Entity], household_id: u32) -> Vec<u32> {
@@ -39,7 +75,8 @@ pub(super) fn set_member_household(
     if target_household_id.is_some_and(|household_id| {
         households
             .binary_search_by_key(&household_id, |household| household.id)
-            .is_err()
+            .ok()
+            .is_none_or(|index| !households[index].is_active())
     }) {
         return None;
     }
@@ -101,7 +138,13 @@ pub(super) fn assign_newborn(
         .binary_search_by_key(&caregiver_id, |entity| entity.id)
         .ok()?;
     let household_id = entities[caregiver_index].household_id?;
-    set_member_household(entities, households, child_id, Some(household_id));
+    let household_index = households
+        .binary_search_by_key(&household_id, |household| household.id)
+        .ok()?;
+    if !households[household_index].is_active() {
+        return None;
+    }
+    set_member_household(entities, households, child_id, Some(household_id))?;
     Some(household_id)
 }
 
@@ -131,7 +174,15 @@ pub(super) fn form_for_partnership(
         entities[second_index].household_id,
     ) {
         (Some(first_household), Some(second_household)) => {
-            return (first_household == second_household).then_some(first_household);
+            if first_household != second_household {
+                return None;
+            }
+            let household_index = households
+                .binary_search_by_key(&first_household, |household| household.id)
+                .ok()?;
+            return households[household_index]
+                .is_active()
+                .then_some(first_household);
         }
         (Some(household_id), None) => {
             set_member_household(entities, households, second_id, Some(household_id))?;
@@ -155,6 +206,7 @@ pub(super) fn form_for_partnership(
     households.push(Household {
         id,
         formed_tick: tick,
+        dissolved_tick: None,
         residence_x,
         residence_y,
         storage: Inventory::new(DEFAULT_HOUSEHOLD_STORAGE_CAPACITY),

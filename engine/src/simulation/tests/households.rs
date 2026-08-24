@@ -30,6 +30,7 @@ fn partnership_forms_symmetric_household_with_derived_members() {
         vec![Household {
             id: 1,
             formed_tick: 42,
+            dissolved_tick: None,
             residence_x: 0,
             residence_y: 0,
             storage: super::super::Inventory::new(200),
@@ -237,6 +238,7 @@ fn dead_entities_leave_active_membership_naturally() {
         households: vec![Household {
             id: 1,
             formed_tick: 0,
+            dissolved_tick: None,
             residence_x: 0,
             residence_y: 0,
             storage: super::super::Inventory::new(200),
@@ -253,6 +255,7 @@ fn dead_entities_leave_active_membership_naturally() {
         &[Household {
             id: 1,
             formed_tick: 0,
+            dissolved_tick: None,
             residence_x: 0,
             residence_y: 0,
             storage: super::super::Inventory::new(200),
@@ -304,6 +307,7 @@ fn due_birth(mother_household: Option<u32>, father_household: Option<u32>) -> Si
             .map(|id| Household {
                 id,
                 formed_tick: 0,
+                dissolved_tick: None,
                 residence_x: 1,
                 residence_y: 1,
                 storage: super::super::Inventory::new(200),

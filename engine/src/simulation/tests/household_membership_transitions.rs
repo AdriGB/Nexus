@@ -13,6 +13,7 @@ fn household(id: u32, residence: (u32, u32), food: u16) -> Household {
     Household {
         id,
         formed_tick: id as u64,
+        dissolved_tick: None,
         residence_x: residence.0,
         residence_y: residence.1,
         storage,
@@ -392,7 +393,16 @@ fn dependent_reassignment_runs_end_to_end_without_moving_resources() {
     assert_eq!(child.caregiver_id, Some(2));
     assert_eq!(child.household_id, Some(2));
     assert_eq!(child.inventory.amount(ItemKind::Food), 7);
-    assert_eq!(simulation.households, households_before);
+    assert_eq!(simulation.households[0].dissolved_tick, Some(1));
+    assert_eq!(simulation.households[1].dissolved_tick, None);
+    for (after, before) in simulation.households.iter().zip(households_before) {
+        assert_eq!(after.storage, before.storage);
+        assert_eq!(after.formed_tick, before.formed_tick);
+        assert_eq!(
+            (after.residence_x, after.residence_y),
+            (before.residence_x, before.residence_y)
+        );
+    }
 }
 
 #[test]

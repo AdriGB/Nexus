@@ -21,6 +21,7 @@ fn household(capacity: u16, used: u16) -> Household {
     Household {
         id: 1,
         formed_tick: 0,
+        dissolved_tick: None,
         residence_x: 2,
         residence_y: 0,
         storage,
