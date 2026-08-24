@@ -3,7 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{
-    descendants_of, siblings_of, DeathContext, Entity, Genealogy, Inventory, ItemKind, LifeStage,
+    descendants_of, siblings_of, DeathContext, Entity, Genealogy, HouseholdStats, Inventory,
+    ItemKind, LifeStage,
 };
 
 pub const DEFAULT_HOUSEHOLD_STORAGE_CAPACITY: u16 = 200;
@@ -31,6 +32,86 @@ impl Household {
     pub(crate) fn is_active(&self) -> bool {
         self.dissolved_tick.is_none()
     }
+}
+
+pub(super) fn household_stats(
+    entities: &[Entity],
+    households: &[Household],
+    current_tick: u64,
+) -> HouseholdStats {
+    let active_ids: HashSet<u32> = households
+        .iter()
+        .filter(|household| household.is_active())
+        .map(|household| household.id)
+        .collect();
+    let mut member_counts: HashMap<u32, u32> = HashMap::new();
+    let mut dependent_households = HashSet::new();
+    let mut housed_entities = 0u32;
+    for entity in entities {
+        let Some(household_id) = entity.household_id.filter(|id| active_ids.contains(id)) else {
+            continue;
+        };
+        housed_entities = housed_entities.saturating_add(1);
+        *member_counts.entry(household_id).or_default() += 1;
+        if matches!(
+            LifeStage::from_age_ticks(entity.age_ticks),
+            LifeStage::Infant | LifeStage::Child
+        ) {
+            dependent_households.insert(household_id);
+        }
+    }
+
+    let mut stats = HouseholdStats {
+        total_households: households.len() as u32,
+        housed_entities,
+        unhoused_entities: (entities.len() as u32).saturating_sub(housed_entities),
+        households_with_dependents: dependent_households.len() as u32,
+        ..HouseholdStats::default()
+    };
+    let mut active_member_total = 0u64;
+    let mut active_age_total = 0u64;
+    let mut dissolved_lifetime_total = 0u64;
+    for household in households {
+        if household.is_active() {
+            stats.active_households += 1;
+            let size = member_counts.get(&household.id).copied().unwrap_or(0);
+            active_member_total += u64::from(size);
+            stats.largest_active_household_size = stats.largest_active_household_size.max(size);
+            stats.single_member_households += u32::from(size == 1);
+            stats.active_storage_capacity += u64::from(household.storage.capacity());
+            stats.active_storage_used += u64::from(household.storage.used_capacity());
+            stats.active_food_stored += u64::from(household.storage.amount(ItemKind::Food));
+            stats.active_timber_stored += u64::from(household.storage.amount(ItemKind::Timber));
+            stats.active_stone_stored += u64::from(household.storage.amount(ItemKind::Stone));
+            stats.active_iron_stored += u64::from(household.storage.amount(ItemKind::Iron));
+            active_age_total += current_tick.saturating_sub(household.formed_tick);
+        } else {
+            stats.dissolved_households += 1;
+            let dissolved_tick = household
+                .dissolved_tick
+                .expect("inactive household is dissolved");
+            dissolved_lifetime_total += dissolved_tick.saturating_sub(household.formed_tick);
+            if let Some(inheritance) = household.inheritance {
+                stats.settled_inheritances += 1;
+                stats.inheritances_without_heir += u32::from(inheritance.heir_id.is_none());
+            }
+        }
+    }
+    if stats.active_households > 0 {
+        stats.average_active_household_size =
+            active_member_total as f32 / stats.active_households as f32;
+        stats.average_active_household_age_ticks =
+            active_age_total as f64 / f64::from(stats.active_households);
+    }
+    if stats.dissolved_households > 0 {
+        stats.average_dissolved_household_lifetime_ticks =
+            dissolved_lifetime_total as f64 / f64::from(stats.dissolved_households);
+    }
+    if stats.active_storage_capacity > 0 {
+        stats.active_storage_utilization =
+            stats.active_storage_used as f32 / stats.active_storage_capacity as f32;
+    }
+    stats
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

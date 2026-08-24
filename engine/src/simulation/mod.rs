@@ -80,6 +80,30 @@ pub struct PopulationStats {
     pub pregnant: u32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct HouseholdStats {
+    pub total_households: u32,
+    pub active_households: u32,
+    pub dissolved_households: u32,
+    pub housed_entities: u32,
+    pub unhoused_entities: u32,
+    pub average_active_household_size: f32,
+    pub largest_active_household_size: u32,
+    pub single_member_households: u32,
+    pub households_with_dependents: u32,
+    pub active_storage_capacity: u64,
+    pub active_storage_used: u64,
+    pub active_storage_utilization: f32,
+    pub active_food_stored: u64,
+    pub active_timber_stored: u64,
+    pub active_stone_stored: u64,
+    pub active_iron_stored: u64,
+    pub settled_inheritances: u32,
+    pub inheritances_without_heir: u32,
+    pub average_active_household_age_ticks: f64,
+    pub average_dissolved_household_lifetime_ticks: f64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PhaseProfile {
     pub physiology_us: u64,
@@ -344,6 +368,10 @@ impl Simulation {
                 .filter(|entity| entity.pregnancy.is_some())
                 .count() as u32,
         }
+    }
+
+    pub(crate) fn household_stats(&self) -> HouseholdStats {
+        households::household_stats(&self.entities, &self.households, self.tick)
     }
 
     pub fn advance(&mut self, ticks: u32, world: &mut Grid) -> u64 {

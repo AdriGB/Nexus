@@ -27,6 +27,7 @@ export interface IWorldBridge {
     quantity: number,
   ): number;
   population_stats(): string;
+  household_stats(): string;
   first_entity_info(): string;
   first_entity_relationships(): string;
   first_entity_kinship(): string;
@@ -453,6 +454,29 @@ export interface PopulationStats {
   seeking_food: number;
   average_hunger: number;
   food_consumed: number;
+}
+
+export interface HouseholdStats {
+  total_households: number;
+  active_households: number;
+  dissolved_households: number;
+  housed_entities: number;
+  unhoused_entities: number;
+  average_active_household_size: number;
+  largest_active_household_size: number;
+  single_member_households: number;
+  households_with_dependents: number;
+  active_storage_capacity: number;
+  active_storage_used: number;
+  active_storage_utilization: number;
+  active_food_stored: number;
+  active_timber_stored: number;
+  active_stone_stored: number;
+  active_iron_stored: number;
+  settled_inheritances: number;
+  inheritances_without_heir: number;
+  average_active_household_age_ticks: number;
+  average_dissolved_household_lifetime_ticks: number;
 }
 
 export interface RegionStats {

@@ -183,6 +183,10 @@ impl WorldBridge {
         bridge::population_stats_json(self.simulation.population_stats())
     }
 
+    pub fn household_stats(&self) -> String {
+        bridge::household_stats_json(self.simulation.household_stats())
+    }
+
     pub fn first_entity_info(&self) -> String {
         self.simulation.entities().first().map_or_else(
             || "{}".to_string(),

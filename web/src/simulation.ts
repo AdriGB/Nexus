@@ -6,6 +6,7 @@ import {
   syncInteractionHistory,
 } from "./ui/interaction-history";
 import { syncPopulationStats } from "./ui/population-stats";
+import { syncHouseholdStats } from "./ui/household-stats";
 import { updateTileInspector } from "./ui/tile-inspector";
 
 const BASE_TICKS_PER_SECOND = 4;
@@ -74,6 +75,7 @@ export function syncSimulationUi(): void {
   document.getElementById("btn-sim-play")?.classList.toggle("active", !paused);
   document.getElementById("btn-sim-pause")?.classList.toggle("active", paused);
   syncPopulationStats();
+  syncHouseholdStats();
   syncEntityInspector();
   syncInteractionHistory();
 }
