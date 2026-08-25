@@ -302,12 +302,6 @@ fn select_social_target_with_identity(
         }
     }
 
-    if let Some((visible_score, _, _)) = best_visible {
-        if visible_score >= 50 {
-            return best_visible.map(|(_, _, id)| id);
-        }
-    }
-
     for known in &mind.memory.known_entities {
         if known.id == actor.id {
             continue;
@@ -343,7 +337,18 @@ fn select_social_target_with_identity(
         }
     }
 
-    best_memory.or(best_visible).map(|(_, _, id)| id)
+    match (best_visible, best_memory) {
+        (Some(visible), Some(memory)) => {
+            if is_better_target(memory, Some(visible)) {
+                Some(memory.2)
+            } else {
+                Some(visible.2)
+            }
+        }
+        (Some(visible), None) => Some(visible.2),
+        (None, Some(memory)) => Some(memory.2),
+        (None, None) => None,
+    }
 }
 
 fn is_better_target(
@@ -1052,6 +1057,52 @@ mod tests {
                 9
             ),
             None
+        );
+    }
+
+    #[test]
+    fn remembered_partner_can_outrank_visible_unrelated_target() {
+        let mut mind = Mind::default();
+        mind.visible_entities = vec![3];
+        mind.memory.known_entities = vec![remembered_at(2, 0, 10), remembered_at(3, 60, 2)];
+        let mut actor = actor_identity();
+        actor.partner_id = Some(2);
+        let population = vec![adult_snapshot(2), adult_snapshot(3)];
+
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &population,
+                &social_personality(),
+                1.0,
+                0,
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn visible_target_can_still_outrank_remembered_family_when_score_is_higher() {
+        let mut mind = Mind::default();
+        mind.visible_entities = vec![3];
+        mind.memory.known_entities = vec![remembered_at(2, 0, 100), remembered_at(3, 100, 2)];
+        let mut actor = actor_identity();
+        actor.mother_id = Some(2);
+        let population = vec![adult_snapshot(2), adult_snapshot(3)];
+
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &population,
+                &social_personality(),
+                1.0,
+                0,
+            ),
+            Some(3)
         );
     }
 }
