@@ -192,3 +192,8 @@ Scenario JSON files are stored under `target/nexus-bench/` by default; use
 `-OutputDir` to choose another disposable location. Criterion keeps its normal output
 under Cargo's target directory. Local timings are observations, not official baselines
 or regression thresholds.
+
+GitHub Actions runs the `quick` suite for pull requests, the `full` suite nightly,
+and a selected suite (`quick`, `micro`, `scenarios`, or `full`) on manual dispatch.
+Raw scenario JSON is retained for seven days as a diagnostic artifact; it is not an
+official baseline. Benchmark timings do not have regression thresholds yet.
