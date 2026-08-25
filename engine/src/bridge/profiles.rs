@@ -1,10 +1,45 @@
 use serde::Serialize;
 
 use super::to_json;
-use crate::simulation::{AutonomyProfile, PhaseProfile, PopulationStats};
+use crate::simulation::{AutonomyProfile, PhaseProfile, PopulationStats, WorkCounters};
+
+#[derive(Serialize)]
+struct WorkCountersDto {
+    entities_processed: u64,
+    entities_perceived: u64,
+    goal_evaluations: u64,
+    goal_changes: u64,
+    plans_created: u64,
+    actions_executed: u64,
+    social_interactions: u64,
+    spatial_queries: u64,
+    pathfinding_searches: u64,
+    pathfinding_nodes_expanded: u64,
+    events_created: u64,
+}
+
+impl From<&WorkCounters> for WorkCountersDto {
+    fn from(work: &WorkCounters) -> Self {
+        Self {
+            entities_processed: work.entities_processed,
+            entities_perceived: work.entities_perceived,
+            goal_evaluations: work.goal_evaluations,
+            goal_changes: work.goal_changes,
+            plans_created: work.plans_created,
+            actions_executed: work.actions_executed,
+            social_interactions: work.social_interactions,
+            spatial_queries: work.spatial_queries,
+            pathfinding_searches: work.pathfinding_searches,
+            pathfinding_nodes_expanded: work.pathfinding_nodes_expanded,
+            events_created: work.events_created,
+        }
+    }
+}
 
 #[derive(Serialize)]
 struct PhaseProfileDto {
+    #[serde(flatten)]
+    work: WorkCountersDto,
     world_maintenance_us: u64,
     physiology_us: u64,
     dependent_care_us: u64,
@@ -21,6 +56,7 @@ struct PhaseProfileDto {
 
 pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
     to_json(&PhaseProfileDto {
+        work: (&profile.work).into(),
         world_maintenance_us: profile.world_maintenance_us,
         physiology_us: profile.physiology_us,
         dependent_care_us: profile.dependent_care_us,
@@ -38,6 +74,8 @@ pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
 
 #[derive(Serialize)]
 struct AutonomyProfileDto {
+    #[serde(flatten)]
+    work: WorkCountersDto,
     resource_perception_us: u64,
     entity_perception_us: u64,
     plan_validation_us: u64,
@@ -56,6 +94,7 @@ struct AutonomyProfileDto {
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
     to_json(&AutonomyProfileDto {
+        work: (&profile.work).into(),
         resource_perception_us: profile.resource_perception_us,
         entity_perception_us: profile.entity_perception_us,
         plan_validation_us: profile.plan_validation_us,

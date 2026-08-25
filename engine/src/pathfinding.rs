@@ -42,11 +42,24 @@ pub(crate) struct PathfindingWorkspace {
     costs: Vec<f32>,
     generation: Vec<u32>,
     current_gen: u32,
+    count_work: bool,
+    counted_searches: u64,
+    counted_nodes_expanded: u64,
 }
 
 impl PathfindingWorkspace {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn start_counting(&mut self, enabled: bool) {
+        self.count_work = enabled;
+        self.counted_searches = 0;
+        self.counted_nodes_expanded = 0;
+    }
+
+    pub(crate) fn counts(&self) -> (u64, u64) {
+        (self.counted_searches, self.counted_nodes_expanded)
     }
 
     fn prepare(&mut self, tile_count: usize) {
@@ -111,6 +124,9 @@ fn find_path_with_workspace_and_limit(
     goal: (u32, u32),
     max_iterations: Option<usize>,
 ) -> Option<Vec<(u32, u32)>> {
+    if workspace.count_work {
+        workspace.counted_searches = workspace.counted_searches.saturating_add(1);
+    }
     if !grid.get(start.0, start.1)?.terrain.is_walkable()
         || !grid.get(goal.0, goal.1)?.terrain.is_walkable()
     {
@@ -146,6 +162,9 @@ fn find_path_with_workspace_and_limit(
     let mut iterations = 0;
 
     while let Some(current) = workspace.open.pop() {
+        if workspace.count_work {
+            workspace.counted_nodes_expanded = workspace.counted_nodes_expanded.saturating_add(1);
+        }
         iterations += 1;
         if iterations > max_iters {
             return None;
@@ -381,6 +400,19 @@ mod tests {
     fn start_equal_to_goal_returns_one_tile() {
         let grid = grid_from_rows(&["P"]);
         assert_eq!(find_path(&grid, (0, 0), (0, 0)), Some(vec![(0, 0)]));
+    }
+
+    #[test]
+    fn workspace_counts_searches_and_expanded_nodes_exactly() {
+        let grid = grid_from_rows(&["PPP"]);
+        let mut workspace = PathfindingWorkspace::new();
+        workspace.start_counting(true);
+
+        assert_eq!(
+            find_path_with_workspace(&mut workspace, &grid, (0, 0), (2, 0)),
+            Some(vec![(0, 0), (1, 0), (2, 0)])
+        );
+        assert_eq!(workspace.counts(), (1, 3));
     }
 
     #[test]

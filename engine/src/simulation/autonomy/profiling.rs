@@ -4,6 +4,7 @@ pub(super) const PROFILE_SAMPLE_RATE: usize = 4;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AutonomyProfile {
+    pub work: crate::simulation::WorkCounters,
     pub resource_perception_us: u64,
     pub entity_perception_us: u64,
     pub plan_validation_us: u64,

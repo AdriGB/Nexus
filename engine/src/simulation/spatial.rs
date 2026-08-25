@@ -21,9 +21,20 @@ pub(super) struct SpatialGrid {
     cells_wide: u32,
     cells_high: u32,
     cells: Vec<Vec<usize>>,
+    count_queries: Cell<bool>,
+    counted_queries: Cell<u64>,
 }
 
 impl SpatialGrid {
+    pub(super) fn start_counting(&self, enabled: bool) {
+        self.count_queries.set(enabled);
+        self.counted_queries.set(0);
+    }
+
+    pub(super) fn counted_queries(&self) -> u64 {
+        self.counted_queries.get()
+    }
+
     pub(super) fn prepare(&mut self, world_width: u32, world_height: u32) {
         let cells_wide = world_width.div_ceil(SPATIAL_CELL_SIZE);
         let cells_high = world_height.div_ceil(SPATIAL_CELL_SIZE);
@@ -64,6 +75,10 @@ impl SpatialGrid {
         radius: u32,
         mut visit: impl FnMut(usize),
     ) {
+        if self.count_queries.get() {
+            self.counted_queries
+                .set(self.counted_queries.get().saturating_add(1));
+        }
         if self.cells_wide == 0 || self.cells_high == 0 {
             return;
         }
@@ -132,4 +147,20 @@ mod tests {
 
         assert_eq!(candidates, vec![0]);
     }
+
+    #[test]
+    fn query_counter_observes_exact_canonical_visits() {
+        let mut grid = SpatialGrid::default();
+        grid.prepare(8, 8);
+        grid.start_counting(true);
+
+        grid.visit_candidates(0, 0, 1, |_| {});
+        grid.visit_candidates(7, 7, 1, |_| {});
+
+        assert_eq!(grid.counted_queries(), 2);
+        grid.start_counting(false);
+        grid.visit_candidates(0, 0, 1, |_| {});
+        assert_eq!(grid.counted_queries(), 0);
+    }
 }
+use std::cell::Cell;

@@ -109,6 +109,21 @@ pub(crate) struct HouseholdStats {
 }
 
 #[derive(Clone, Debug, Default)]
+pub(crate) struct WorkCounters {
+    pub entities_processed: u64,
+    pub entities_perceived: u64,
+    pub goal_evaluations: u64,
+    pub goal_changes: u64,
+    pub plans_created: u64,
+    pub actions_executed: u64,
+    pub social_interactions: u64,
+    pub spatial_queries: u64,
+    pub pathfinding_searches: u64,
+    pub pathfinding_nodes_expanded: u64,
+    pub events_created: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PhaseProfile {
     pub world_maintenance_us: u64,
     pub physiology_us: u64,
@@ -122,6 +137,7 @@ pub(crate) struct PhaseProfile {
     pub relationships_us: u64,
     pub reproduction_us: u64,
     pub total_us: u64,
+    pub work: WorkCounters,
 }
 
 #[derive(Clone, Debug)]
@@ -487,6 +503,7 @@ impl Simulation {
         &mut self,
         world: &mut Grid,
         profile: Option<&mut AutonomyProfile>,
+        work: Option<&mut WorkCounters>,
     ) -> (u64, bool, Vec<(u32, u16)>) {
         let (
             consumed,
@@ -499,7 +516,7 @@ impl Simulation {
             household_deposit_attempts,
             household_withdraw_attempts,
             household_conflict_attempts,
-        ) = self.run_autonomy(world, profile);
+        ) = self.run_autonomy(world, profile, work);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
@@ -515,6 +532,7 @@ impl Simulation {
         &mut self,
         world: &mut Grid,
         mut profile: Option<&mut AutonomyProfile>,
+        mut work: Option<&mut WorkCounters>,
     ) -> AutonomyRunResult {
         let tick = self.tick;
         let population_cache = &self.population_cache;
@@ -541,6 +559,9 @@ impl Simulation {
             })
             .enumerate()
         {
+            if let Some(work) = work.as_deref_mut() {
+                work.entities_processed += 1;
+            }
             let household_context = entity.household_id.and_then(|household_id| {
                 households
                     .binary_search_by_key(&household_id, |household| household.id)
@@ -565,6 +586,7 @@ impl Simulation {
                 pathfinding_workspace,
                 autonomy::EntityUpdateContext {
                     household: household_context,
+                    work: work.as_deref_mut(),
                     profile: profile
                         .as_deref_mut()
                         .filter(|_| autonomy::should_profile_entity(index)),
@@ -597,6 +619,9 @@ impl Simulation {
             &self.population_cache,
             self.tick,
         );
+        if let Some(work) = work {
+            work.social_interactions += interactions.len() as u64;
+        }
         if let Some(profile) = profile {
             profile.social_us += social_start
                 .expect("profile timer must exist")

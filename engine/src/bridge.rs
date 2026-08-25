@@ -525,6 +525,7 @@ mod tests {
     #[test]
     fn phase_profile_payload_is_valid_json() {
         let profile = PhaseProfile {
+            work: Default::default(),
             world_maintenance_us: 1,
             physiology_us: 2,
             dependent_care_us: 3,
@@ -547,12 +548,15 @@ mod tests {
         assert_eq!(json["autonomy_us"], 6);
         assert_eq!(json["reproduction_us"], 11);
         assert_eq!(json["total_us"], 66);
+        assert_eq!(json["entities_processed"], 0);
+        assert_eq!(json["pathfinding_nodes_expanded"], 0);
         assert!(json.get("pregnancies_us").is_none());
     }
 
     #[test]
     fn autonomy_profile_payload_is_valid_json() {
         let profile = AutonomyProfile {
+            work: Default::default(),
             resource_perception_us: 1000,
             entity_perception_us: 500,
             plan_validation_us: 200,
@@ -576,5 +580,7 @@ mod tests {
         assert_eq!(json["planned_entities"], 87);
         assert_eq!(json["known_resources_max"], 50);
         assert_eq!(json["social_us"], 250);
+        assert_eq!(json["spatial_queries"], 0);
+        assert_eq!(json["events_created"], 0);
     }
 }
