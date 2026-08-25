@@ -5,9 +5,11 @@
 //! result; construction and execution remain inside the engine crate.
 
 use crate::generation::generate_world;
+use crate::pathfinding::{find_path_with_workspace, PathfindingWorkspace};
 use crate::regions::detect_regions;
 use crate::resources::generate_resources;
 use crate::simulation::{PerformanceSummary, Simulation, MAX_POPULATION};
+use crate::world::{Grid, Terrain, Tile};
 use serde::Serialize;
 
 pub const BENCHMARK_SCHEMA_VERSION: u32 = 1;
@@ -96,14 +98,7 @@ fn run_scenario(scenario: BenchmarkScenario) -> Result<BenchmarkResult, String> 
             scenario.name, scenario.population
         ));
     }
-    let mut world = generate_world(
-        scenario.seed,
-        scenario.world.width,
-        scenario.world.height,
-        scenario.world.sea_level,
-    );
-    generate_resources(scenario.seed, &mut world);
-    detect_regions(&mut world);
+    let mut world = build_generated_world(scenario.seed, scenario.world);
     let mut simulation =
         Simulation::with_population(u64::from(scenario.seed), &world, scenario.population);
     let spawned = simulation.entities().len() as u32;
@@ -123,6 +118,167 @@ fn run_scenario(scenario: BenchmarkScenario) -> Result<BenchmarkResult, String> 
         scenario,
         summary,
     })
+}
+
+fn build_generated_world(seed: u32, parameters: BenchmarkWorld) -> Grid {
+    let mut world = generate_world(
+        seed,
+        parameters.width,
+        parameters.height,
+        parameters.sea_level,
+    );
+    generate_resources(seed, &mut world);
+    detect_regions(&mut world);
+    world
+}
+
+/// Opaque fixture that reuses Nexus's production A* workspace.
+pub struct BenchmarkPathfindingFixture {
+    world: Grid,
+    workspace: PathfindingWorkspace,
+    start: (u32, u32),
+    goal: (u32, u32),
+}
+
+impl BenchmarkPathfindingFixture {
+    pub fn short() -> Self {
+        Self::new(pathfinding_world(false), (8, 8), (20, 20))
+    }
+
+    pub fn long() -> Self {
+        Self::new(pathfinding_world(false), (1, 1), (126, 126))
+    }
+
+    pub fn mixed_terrain() -> Self {
+        Self::new(pathfinding_world(true), (1, 64), (126, 64))
+    }
+
+    fn new(world: Grid, start: (u32, u32), goal: (u32, u32)) -> Self {
+        Self {
+            world,
+            workspace: PathfindingWorkspace::new(),
+            start,
+            goal,
+        }
+    }
+
+    pub fn run(&mut self) -> usize {
+        find_path_with_workspace(&mut self.workspace, &self.world, self.start, self.goal)
+            .map_or(0, |path| path.len())
+    }
+}
+
+fn pathfinding_world(mixed: bool) -> Grid {
+    let width = 128;
+    let height = 128;
+    let tiles = (0..height)
+        .flat_map(|y| {
+            (0..width).map(move |x| Tile {
+                terrain: if mixed {
+                    match (x / 8 + y / 16) % 4 {
+                        0 => Terrain::Plains,
+                        1 => Terrain::Grassland,
+                        2 => Terrain::Forest,
+                        _ => Terrain::Hills,
+                    }
+                } else {
+                    Terrain::Plains
+                },
+                altitude: 0.25,
+                moisture: 0.5,
+                temperature: 0.5,
+            })
+        })
+        .collect();
+    Grid {
+        width,
+        height,
+        tiles,
+        region_ids: Vec::new(),
+        regions: Vec::new(),
+        resources: vec![None; (width * height) as usize],
+        renewable_resources: Vec::new(),
+    }
+}
+
+/// Opaque prepared population fixture for spatial-index measurements.
+pub struct BenchmarkSpatialFixture {
+    world: Grid,
+    simulation: Simulation,
+    query_x: u32,
+    query_y: u32,
+}
+
+impl BenchmarkSpatialFixture {
+    pub fn new(population: u32) -> Result<Self, String> {
+        let world = build_generated_world(42, STANDARD_WORLD);
+        let simulation = Simulation::with_population(42, &world, population);
+        if simulation.entities().len() as u32 != population {
+            return Err(format!("could not prepare spatial population {population}"));
+        }
+        let (query_x, query_y) = simulation
+            .entities()
+            .first()
+            .map(|entity| (entity.x, entity.y))
+            .ok_or_else(|| format!("spatial population {population} is empty"))?;
+        let mut fixture = Self {
+            world,
+            simulation,
+            query_x,
+            query_y,
+        };
+        fixture.rebuild();
+        Ok(fixture)
+    }
+
+    pub fn rebuild(&mut self) -> usize {
+        self.simulation
+            .benchmark_rebuild_population_index(&self.world)
+    }
+
+    pub fn query_local_population(&self) -> usize {
+        self.simulation
+            .benchmark_spatial_query(self.query_x, self.query_y, 12)
+    }
+}
+
+/// Cloneable deterministic base state for canonical autonomy measurements.
+pub struct BenchmarkAutonomyFixture {
+    world: Grid,
+    simulation: Simulation,
+}
+
+pub struct BenchmarkAutonomyRun {
+    world: Grid,
+    simulation: Simulation,
+}
+
+impl BenchmarkAutonomyFixture {
+    pub fn new(population: u32) -> Result<Self, String> {
+        let mut world = build_generated_world(42, STANDARD_WORLD);
+        let mut simulation = Simulation::with_population(42, &world, population);
+        if simulation.entities().len() as u32 != population {
+            return Err(format!(
+                "could not prepare autonomy population {population}"
+            ));
+        }
+        simulation.step(&mut world);
+        simulation.benchmark_rebuild_population_index(&world);
+        Ok(Self { world, simulation })
+    }
+
+    pub fn prepare(&self) -> BenchmarkAutonomyRun {
+        BenchmarkAutonomyRun {
+            world: self.world.clone(),
+            simulation: self.simulation.clone(),
+        }
+    }
+}
+
+impl BenchmarkAutonomyRun {
+    pub fn run_once(&mut self) -> u64 {
+        self.simulation.benchmark_autonomy_pass(&mut self.world)
+    }
 }
 
 #[cfg(test)]
@@ -188,5 +344,19 @@ mod tests {
         assert_eq!(first.summary.work_total, second.summary.work_total);
         assert_eq!(first.summary.state_final, second.summary.state_final);
         assert_eq!(first.summary.state_peak, second.summary.state_peak);
+    }
+
+    #[test]
+    fn microbenchmark_fixtures_execute_real_deterministic_workloads() {
+        assert!(BenchmarkPathfindingFixture::short().run() > 0);
+        assert!(BenchmarkPathfindingFixture::long().run() > 0);
+        assert!(BenchmarkPathfindingFixture::mixed_terrain().run() > 0);
+
+        let mut spatial = BenchmarkSpatialFixture::new(100).unwrap();
+        assert_eq!(spatial.rebuild(), 100);
+        let _ = spatial.query_local_population();
+
+        let autonomy = BenchmarkAutonomyFixture::new(100).unwrap();
+        assert_eq!(autonomy.prepare().run_once(), autonomy.prepare().run_once());
     }
 }
