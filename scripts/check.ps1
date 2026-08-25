@@ -32,6 +32,12 @@ function Test-Engine {
         Invoke-CheckStep "Rust format" { cargo fmt --check }
         Invoke-CheckStep "Rust clippy (native)" { cargo clippy -- -D warnings }
         Invoke-CheckStep "Rust tests" { cargo test }
+        Invoke-CheckStep "Benchmark runner clippy" {
+            cargo clippy --features benchmarks --lib --bin nexus-bench -- -D warnings
+        }
+        Invoke-CheckStep "Benchmark runner tests" {
+            cargo test --features benchmarks benchmarking::
+        }
         Invoke-CheckStep "Rust clippy (WASM)" {
             cargo clippy --target wasm32-unknown-unknown -- -D warnings
         }

@@ -20,7 +20,8 @@ mod time;
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
 pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
-use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH, MAX_POPULATION};
+pub(crate) use self::config::MAX_POPULATION;
+use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
 pub(crate) use self::events::EntityEventSummary;
 pub(crate) use self::events::EventId;
@@ -110,7 +111,7 @@ pub(crate) struct HouseholdStats {
     pub average_dissolved_household_lifetime_ticks: f64,
 }
 
-#[derive(Clone, Debug, Default, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct WorkCounters {
     pub entities_processed: u64,
     pub entities_perceived: u64,
