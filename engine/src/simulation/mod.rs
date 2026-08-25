@@ -667,6 +667,7 @@ impl Simulation {
                 );
             } else if let Some(formation) = partnerships::try_form(
                 &mut self.entities,
+                &self.genealogy,
                 interaction.actor_id,
                 interaction.target_id,
             ) {
@@ -1005,6 +1006,10 @@ impl Simulation {
                 y: entity.y,
                 hunger: entity.hunger,
                 caregiver_id: entity.caregiver_id,
+                partner_id: entity.partner_id,
+                mother_id: entity.mother_id,
+                father_id: entity.father_id,
+                is_adult: life_stage == LifeStage::Adult,
                 is_child: life_stage == LifeStage::Child,
                 is_infant: life_stage == LifeStage::Infant,
             });

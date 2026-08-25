@@ -1,6 +1,7 @@
 use super::super::autonomy::{
     AffinityChangeRecord, FoodShareAttempt, KnownEntity, SocialInteraction,
 };
+use super::super::genealogy::Genealogy;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{Simulation, SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 use super::support::{entity, grid_from_rows};
@@ -292,4 +293,115 @@ fn identical_breakups_produce_the_same_event_sequence() {
         first.recent_events().cloned().collect::<Vec<_>>(),
         second.recent_events().cloned().collect::<Vec<_>>()
     );
+}
+
+fn qualified_entities(first_id: u32, second_id: u32) -> Vec<super::super::Entity> {
+    let mut first = entity(first_id, 0, 0, 0.0);
+    let mut second = entity(second_id, 0, 0, 0.0);
+    for entity in [&mut first, &mut second] {
+        entity.age_ticks = 25 * TICKS_PER_YEAR;
+    }
+    second.personality = first.personality;
+    first
+        .mind
+        .memory
+        .known_entities
+        .push(relationship(second_id, 400, 3));
+    second
+        .mind
+        .memory
+        .known_entities
+        .push(relationship(first_id, 400, 3));
+    vec![first, second]
+}
+
+fn genealogy(records: &[(u32, Option<u32>, Option<u32>)]) -> Genealogy {
+    let mut genealogy = Genealogy::default();
+    for &(id, mother, father) in records {
+        genealogy.register(id, mother, father);
+    }
+    genealogy
+}
+
+fn can_form(first_id: u32, second_id: u32, genealogy: &Genealogy) -> bool {
+    super::super::partnerships::try_form(
+        &mut qualified_entities(first_id, second_id),
+        genealogy,
+        first_id,
+        second_id,
+    )
+    .is_some()
+}
+
+#[test]
+fn close_biological_kin_cannot_form_partnerships() {
+    assert!(!can_form(
+        1,
+        2,
+        &genealogy(&[(1, None, None), (2, Some(1), None)])
+    ));
+    assert!(!can_form(
+        3,
+        4,
+        &genealogy(&[
+            (1, None, None),
+            (2, None, None),
+            (3, Some(1), Some(2)),
+            (4, Some(1), Some(2)),
+        ])
+    ));
+    assert!(!can_form(
+        3,
+        4,
+        &genealogy(&[
+            (1, None, None),
+            (2, None, None),
+            (3, Some(1), None),
+            (4, Some(1), Some(2)),
+        ])
+    ));
+    assert!(!can_form(
+        1,
+        3,
+        &genealogy(&[(1, None, None), (2, Some(1), None), (3, Some(2), None),])
+    ));
+    assert!(!can_form(
+        4,
+        5,
+        &genealogy(&[
+            (1, None, None),
+            (2, None, None),
+            (3, Some(1), Some(2)),
+            (4, Some(1), Some(2)),
+            (5, Some(3), None),
+        ])
+    ));
+    assert!(!can_form(
+        5,
+        6,
+        &genealogy(&[
+            (1, None, None),
+            (2, None, None),
+            (3, Some(1), Some(2)),
+            (4, Some(1), Some(2)),
+            (5, Some(3), None),
+            (6, Some(4), None),
+        ])
+    ));
+}
+
+#[test]
+fn second_cousins_and_unrelated_adults_can_still_form_partnerships() {
+    let second_cousins = genealogy(&[
+        (1, None, None),
+        (2, None, None),
+        (3, Some(1), Some(2)),
+        (4, Some(1), Some(2)),
+        (5, Some(3), None),
+        (6, Some(4), None),
+        (7, Some(5), None),
+        (8, Some(6), None),
+    ]);
+    assert!(can_form(7, 8, &second_cousins));
+    assert!(can_form(1, 2, &Genealogy::default()));
 }

@@ -158,6 +158,10 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
             y: 2,
             hunger: 0.0,
             caregiver_id: None,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
             is_child: false,
             is_infant: false,
         },
@@ -167,6 +171,10 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
             y: 3,
             hunger: 0.0,
             caregiver_id: None,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
             is_child: false,
             is_infant: false,
         },
@@ -488,6 +496,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     let score_no_affinity = mind.utility_scores.socialize;
@@ -536,6 +545,7 @@ fn socialize_utility_increases_with_positive_affinity() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     let score_with_affinity = mind.utility_scores.socialize;
@@ -844,6 +854,7 @@ fn socialize_utility_is_zero_without_candidates() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 
@@ -1059,6 +1070,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 
@@ -1082,6 +1094,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     let visible_score = mind.utility_scores.socialize;
@@ -1100,6 +1113,7 @@ fn socialize_utility_nonzero_with_positive_memory_no_visible() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     let memory_only_score = mind.utility_scores.socialize;
@@ -1348,6 +1362,119 @@ fn repeated_positive_interactions_form_relationship() {
         known.affinity > 0,
         "compatible cooperative partners should form positive affinity"
     );
+}
+
+fn relationship_seeking_simulation() -> Simulation {
+    use super::super::autonomy::KnownEntity;
+
+    let mut actor = default_adult(1, 5, 5);
+    actor.personality.sociability = 1.0;
+    actor.personality.curiosity = 0.0;
+    let mut family = default_adult(2, 15, 5);
+    family.mother_id = Some(1);
+    let unrelated = default_adult(3, 15, 6);
+    actor.mind.memory.known_entities = vec![
+        KnownEntity {
+            id: 2,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 15,
+            last_seen_y: 5,
+            observed_ticks: 1,
+            affinity: 500,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        },
+        KnownEntity {
+            id: 3,
+            first_seen_tick: 0,
+            last_seen_tick: 0,
+            last_seen_x: 15,
+            last_seen_y: 6,
+            observed_ticks: 1,
+            affinity: 500,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        },
+    ];
+    Simulation {
+        entities: vec![actor, family, unrelated],
+        next_entity_id: 4,
+        ..Simulation::default()
+    }
+}
+
+#[test]
+fn family_seeking_reuses_socialize_memory_and_normal_pathfinding() {
+    let mut simulation = relationship_seeking_simulation();
+    simulation.step(&mut plain_grid(24, 12));
+    assert_eq!(
+        simulation.entities()[0].mind.current_goal,
+        Some(Goal::Socialize)
+    );
+    assert_eq!(
+        simulation.entities()[0].mind.current_action(),
+        Some(Action::ApproachEntity(2))
+    );
+    assert_eq!(simulation.entities()[0].path.last().copied(), Some((15, 5)));
+}
+
+#[test]
+fn visible_unpartnered_adult_is_preferred_as_potential_partner() {
+    let mut actor = default_adult(1, 5, 5);
+    actor.personality.sociability = 1.0;
+    actor.personality.curiosity = 0.0;
+    let candidate = default_adult(2, 10, 5);
+    let mut unavailable = default_adult(3, 10, 6);
+    unavailable.partner_id = Some(99);
+    let mut simulation = Simulation {
+        entities: vec![actor, candidate, unavailable],
+        next_entity_id: 4,
+        ..Simulation::default()
+    };
+    simulation.step(&mut plain_grid(20, 12));
+    assert_eq!(
+        simulation.entities()[0].mind.current_goal,
+        Some(Goal::Socialize)
+    );
+    assert_eq!(
+        simulation.entities()[0].mind.current_action(),
+        Some(Action::ApproachEntity(2))
+    );
+    assert!(simulation
+        .entities()
+        .iter()
+        .all(|entity| entity.partner_id != Some(2)));
+}
+
+#[test]
+fn relationship_seeking_matches_normal_and_profiled_paths() {
+    let mut normal = relationship_seeking_simulation();
+    let mut profiled = normal.clone();
+    let mut autonomy_profiled = normal.clone();
+    normal.step(&mut plain_grid(24, 12));
+    profiled.profile_step(&mut plain_grid(24, 12));
+    autonomy_profiled.profile_autonomy_step(&mut plain_grid(24, 12));
+    let state = |simulation: &Simulation| {
+        simulation
+            .entities()
+            .iter()
+            .map(|entity| {
+                (
+                    entity.id,
+                    entity.mind.current_goal,
+                    entity.mind.current_action(),
+                    entity.path.clone(),
+                    entity.partner_id,
+                    entity.household_id,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(state(&normal), state(&profiled));
+    assert_eq!(state(&normal), state(&autonomy_profiled));
 }
 
 #[test]
