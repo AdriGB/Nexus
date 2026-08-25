@@ -1,3 +1,5 @@
+#[cfg(feature = "benchmarks")]
+pub mod benchmarking;
 mod bridge;
 mod generation;
 mod pathfinding;

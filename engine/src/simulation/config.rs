@@ -1,4 +1,4 @@
-pub(super) const MAX_POPULATION: usize = 10_000;
+pub(crate) const MAX_POPULATION: usize = 10_000;
 
 pub(super) const MAX_HUNGER: f32 = 100.0;
 pub(super) const MAX_HEALTH: f32 = 100.0;

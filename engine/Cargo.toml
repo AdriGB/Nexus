@@ -6,7 +6,16 @@ description = "Deterministic engine for the Nexus emergent-society simulation"
 repository = "https://github.com/AdriGB/Nexus"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+benchmarks = []
+
+[[bin]]
+name = "nexus-bench"
+path = "src/bin/nexus-bench.rs"
+required-features = ["benchmarks"]
 
 [dependencies]
 wasm-bindgen = "0.2"
