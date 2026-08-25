@@ -27,6 +27,7 @@ pub(super) struct HouseholdDecisionContext {
     pub household_food_available: bool,
     pub dependent_food_need: DependentFoodNeed,
     pub dependent_protection_target: Option<u32>,
+    pub migration_target: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -214,6 +215,7 @@ pub fn evaluate_goals(
             household_food_available: false,
             dependent_food_need: DependentFoodNeed::None,
             dependent_protection_target: None,
+            migration_target: None,
         },
     )
 }
@@ -232,6 +234,7 @@ pub(super) fn evaluate_goals_with_household(
         household_food_available,
         dependent_food_need,
         dependent_protection_target,
+        migration_target,
     } = context;
     let DecisionContext {
         tick,
@@ -330,6 +333,23 @@ pub(super) fn evaluate_goals_with_household(
             });
             return Goal::ProtectDependent;
         }
+    }
+
+    if matches!(
+        stage,
+        LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elder
+    ) && hunger < URGENT_HUNGER_THRESHOLD
+        && migration_target.is_some()
+    {
+        mind.decision_explanation = Some(DecisionExplanation {
+            chosen_goal: Goal::MigrateHousehold,
+            highest_utility_goal: Goal::MigrateHousehold,
+            chosen_score: 1.0,
+            highest_score: 1.0,
+            switch_margin: 0.0,
+            reason: DecisionReason::HouseholdMigration,
+        });
+        return Goal::MigrateHousehold;
     }
 
     let food_confidence = if mind
@@ -771,11 +791,42 @@ pub(super) fn plan_goal(
             super::exploration::plan_exploration(entity, world, tick, pathfinding_workspace);
         }
         Goal::Follow => plan_follow(entity, world, tick, pathfinding_workspace, population),
+        Goal::MigrateHousehold => {
+            let target = household_context
+                .and_then(|context| context.migration_target)
+                .expect("migration goal requires a household migration target");
+            entity.path.clear();
+            entity.path_index = 0;
+            if (entity.x, entity.y) == target {
+                entity
+                    .mind
+                    .set_plan(Goal::MigrateHousehold, vec![Action::Wait], tick);
+                entity.activity = super::super::entity::EntityActivity::Resting;
+            } else if let Some(path) =
+                pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target)
+            {
+                entity.path = path.into_iter().skip(1).collect();
+                entity.path_index = 0;
+                entity.mind.set_plan(
+                    Goal::MigrateHousehold,
+                    vec![Action::MoveTo(target.0, target.1)],
+                    tick,
+                );
+                entity.activity = super::super::entity::EntityActivity::Moving;
+            } else {
+                entity
+                    .mind
+                    .set_plan(Goal::MigrateHousehold, vec![Action::Wait], tick);
+                entity.activity = super::super::entity::EntityActivity::Resting;
+            }
+        }
         Goal::ProtectDependent => plan_protect_dependent(entity, tick, population),
         Goal::Rest => {
             entity.path.clear();
             entity.path_index = 0;
+            let active_migration = household_context.and_then(|context| context.migration_target);
             let deposit_amount = household_context
+                .filter(|_| active_migration.is_none())
                 .filter(|_| LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Adult)
                 .map(|context| {
                     entity
@@ -788,7 +839,7 @@ pub(super) fn plan_goal(
             let deposit_action =
                 (deposit_amount > 0).then_some(Action::DepositHouseholdFood(deposit_amount));
             if let Some(home) = household_context
-                .map(|context| context.residence)
+                .map(|context| context.migration_target.unwrap_or(context.residence))
                 .filter(|home| *home != origin)
             {
                 if let Some(path) = pathfinding::find_path_with_workspace(

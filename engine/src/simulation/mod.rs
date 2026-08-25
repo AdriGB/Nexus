@@ -534,6 +534,7 @@ impl Simulation {
                         let household = &households[index];
                         autonomy::HouseholdAutonomyContext {
                             residence: (household.residence_x, household.residence_y),
+                            migration_target: household.active_migration_target(),
                             storage_remaining_capacity: household.storage.remaining_capacity(),
                             storage_food_amount: household.storage.amount(ItemKind::Food),
                         }

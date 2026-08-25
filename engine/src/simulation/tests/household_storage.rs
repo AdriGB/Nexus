@@ -9,6 +9,7 @@ fn household() -> Household {
         formed_tick: 10,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x: 2,
         residence_y: 3,
         storage: Inventory::new(DEFAULT_HOUSEHOLD_STORAGE_CAPACITY),

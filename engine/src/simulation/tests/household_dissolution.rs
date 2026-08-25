@@ -15,6 +15,7 @@ fn household(id: u32, formed_tick: u64, residence: (u32, u32), food: u16) -> Hou
         formed_tick,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x: residence.0,
         residence_y: residence.1,
         storage,

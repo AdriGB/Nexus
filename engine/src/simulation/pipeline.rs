@@ -15,6 +15,12 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     simulation.regenerate_renewable_resources(world);
     physiology::advance(&mut simulation.entities);
     dependents::clear_graduated_caregivers(&mut simulation.entities);
+    households::plan_daily_household_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        world,
+        simulation.tick,
+    );
     let (consumed_this_tick, world_changed) = simulation.update_autonomy(world);
     physiology::resolve_starvation(&mut simulation.entities);
     simulation.record_resource_changes(consumed_this_tick, world_changed);
@@ -22,6 +28,11 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::settle_completed_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,
@@ -52,6 +63,12 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
 
     dependents::clear_graduated_caregivers(&mut simulation.entities);
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
+    households::plan_daily_household_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        world,
+        simulation.tick,
+    );
 
     let start = Instant::now();
     simulation.rebuild_population_index(world);
@@ -99,6 +116,11 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::settle_completed_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,
@@ -143,6 +165,12 @@ pub(super) fn run_profiled_autonomy_step(
     physiology::advance(&mut simulation.entities);
     dependents::clear_graduated_caregivers(&mut simulation.entities);
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
+    households::plan_daily_household_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        world,
+        simulation.tick,
+    );
     simulation.rebuild_population_index(world);
 
     let tick = simulation.tick;
@@ -163,6 +191,7 @@ pub(super) fn run_profiled_autonomy_step(
                         let household = &simulation.households[index];
                         autonomy::HouseholdAutonomyContext {
                             residence: (household.residence_x, household.residence_y),
+                            migration_target: household.active_migration_target(),
                             storage_remaining_capacity: household.storage.remaining_capacity(),
                             storage_food_amount: household.storage.amount(super::ItemKind::Food),
                         }
@@ -210,6 +239,11 @@ pub(super) fn run_profiled_autonomy_step(
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
+    households::settle_completed_migrations(
+        &simulation.entities,
+        &mut simulation.households,
+        simulation.tick,
+    );
     let dissolutions = households::dissolve_empty_households(
         &simulation.entities,
         &mut simulation.households,

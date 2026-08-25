@@ -131,6 +131,30 @@ fn profiled_update_entity(
         entity.path_index = 0;
         entity.action_tick = 0;
     }
+    let migration_target = household_context.and_then(|context| context.migration_target);
+    let stage = super::super::entity::LifeStage::from_age_ticks(entity.age_ticks);
+    let higher_priority_goal = provisioning_goal.is_some()
+        || entity.mind.current_goal == Some(Goal::ProtectDependent)
+        || entity.hunger >= URGENT_HUNGER_THRESHOLD
+            && matches!(
+                entity.mind.current_goal,
+                Some(Goal::Eat | Goal::AcquireResource)
+            );
+    if migration_target.is_some()
+        && matches!(
+            stage,
+            super::super::entity::LifeStage::Adolescent
+                | super::super::entity::LifeStage::Adult
+                | super::super::entity::LifeStage::Elder
+        )
+        && !higher_priority_goal
+        && entity.mind.current_goal != Some(Goal::MigrateHousehold)
+    {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
 
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
         && !matches!(
@@ -182,6 +206,7 @@ fn profiled_update_entity(
                 household_food_available,
                 dependent_food_need,
                 dependent_protection_target,
+                migration_target,
             },
         );
         plan_goal(

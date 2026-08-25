@@ -12,6 +12,7 @@ mod household_food_deposit;
 mod household_food_withdrawal;
 mod household_inheritance;
 mod household_membership_transitions;
+mod household_migration;
 mod household_rest;
 mod household_statistics;
 mod household_storage;

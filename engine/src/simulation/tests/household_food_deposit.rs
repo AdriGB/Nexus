@@ -23,6 +23,7 @@ fn household(capacity: u16, used: u16) -> Household {
         formed_tick: 0,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x: 2,
         residence_y: 0,
         storage,
