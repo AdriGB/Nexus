@@ -67,6 +67,7 @@ type AutonomyRunResult = (
     Vec<autonomy::FoodShareAttempt>,
     Vec<autonomy::HouseholdDepositAttempt>,
     Vec<autonomy::HouseholdWithdrawAttempt>,
+    Vec<autonomy::HouseholdConflictAttempt>,
 );
 
 #[derive(Clone, Copy, Debug)]
@@ -490,6 +491,7 @@ impl Simulation {
             food_share_attempts,
             household_deposit_attempts,
             household_withdraw_attempts,
+            household_conflict_attempts,
         ) = self.run_autonomy(world, None);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
@@ -498,6 +500,7 @@ impl Simulation {
         self.process_food_share_attempts(food_share_attempts);
         self.process_household_deposit_attempts(household_deposit_attempts);
         self.process_household_withdraw_attempts(household_withdraw_attempts);
+        self.process_household_conflict_attempts(household_conflict_attempts);
         (consumed, world_changed, consumer_ids)
     }
 
@@ -520,6 +523,7 @@ impl Simulation {
         let mut food_share_attempts = Vec::new();
         let mut household_deposit_attempts = Vec::new();
         let mut household_withdraw_attempts = Vec::new();
+        let mut household_conflict_attempts = Vec::new();
 
         for (index, entity) in self
             .entities
@@ -575,6 +579,9 @@ impl Simulation {
             if let Some(attempt) = result.household_withdraw_attempt {
                 household_withdraw_attempts.push(attempt);
             }
+            if let Some(attempt) = result.household_conflict_attempt {
+                household_conflict_attempts.push(attempt);
+            }
         }
 
         let social_start = profile.as_ref().map(|_| Instant::now());
@@ -600,6 +607,7 @@ impl Simulation {
             food_share_attempts,
             household_deposit_attempts,
             household_withdraw_attempts,
+            household_conflict_attempts,
         )
     }
 
@@ -632,6 +640,181 @@ impl Simulation {
                 Some(attempt.actor_location)
             );
             self.withdraw_from_household(attempt.actor_id, ItemKind::Food, attempt.amount);
+        }
+    }
+
+    fn process_household_conflict_attempts(
+        &mut self,
+        mut attempts: Vec<autonomy::HouseholdConflictAttempt>,
+    ) {
+        attempts.sort_by_key(|attempt| {
+            let pair = (
+                attempt.actor_id.min(attempt.target_id),
+                attempt.actor_id.max(attempt.target_id),
+            );
+            let affinity = self
+                .entities
+                .binary_search_by_key(&attempt.actor_id, |entity| entity.id)
+                .ok()
+                .and_then(|index| {
+                    self.entities[index]
+                        .mind
+                        .memory
+                        .affinity_to(attempt.target_id)
+                })
+                .unwrap_or(0);
+            (pair, affinity, attempt.actor_id)
+        });
+        attempts.dedup_by_key(|attempt| {
+            (
+                attempt.actor_id.min(attempt.target_id),
+                attempt.actor_id.max(attempt.target_id),
+            )
+        });
+
+        for attempt in attempts {
+            let (Ok(actor_index), Ok(target_index)) = (
+                self.entities
+                    .binary_search_by_key(&attempt.actor_id, |entity| entity.id),
+                self.entities
+                    .binary_search_by_key(&attempt.target_id, |entity| entity.id),
+            ) else {
+                continue;
+            };
+            if actor_index == target_index {
+                continue;
+            }
+            let household_id = self.entities[actor_index].household_id;
+            if self.entities[actor_index].health <= 0.0
+                || self.entities[target_index].health <= 0.0
+                || household_id.is_none()
+                || self.entities[target_index].household_id != household_id
+                || !matches!(
+                    LifeStage::from_age_ticks(self.entities[actor_index].age_ticks),
+                    LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elder
+                )
+                || !matches!(
+                    LifeStage::from_age_ticks(self.entities[target_index].age_ticks),
+                    LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elder
+                )
+                || self.entities[actor_index]
+                    .x
+                    .abs_diff(self.entities[target_index].x)
+                    + self.entities[actor_index]
+                        .y
+                        .abs_diff(self.entities[target_index].y)
+                    > autonomy::SOCIAL_RADIUS
+                || household_id.is_some_and(|id| {
+                    self.households
+                        .binary_search_by_key(&id, |household| household.id)
+                        .ok()
+                        .is_none_or(|index| !self.households[index].is_active())
+                })
+            {
+                continue;
+            }
+
+            let incompatibility = 1.0
+                - autonomy::personality_compatibility(
+                    &self.entities[actor_index].personality,
+                    &self.entities[target_index].personality,
+                );
+            let actor_delta = -(10
+                + (incompatibility * 10.0).round() as i16
+                + ((1.0 - self.entities[target_index].personality.cooperativeness) * 10.0).round()
+                    as i16);
+            let target_delta = -(10
+                + (incompatibility * 10.0).round() as i16
+                + ((1.0 - self.entities[actor_index].personality.cooperativeness) * 10.0).round()
+                    as i16);
+            let household_id = household_id.unwrap();
+            let event_id = self.push_event(PendingSimulationEvent {
+                caused_by_event_id: None,
+                tick: self.tick,
+                location: EventLocation {
+                    x: attempt.actor_location.0,
+                    y: attempt.actor_location.1,
+                },
+                actor_id: attempt.actor_id,
+                target_id: Some(attempt.target_id),
+                related_entity_ids: vec![attempt.actor_id, attempt.target_id],
+                kind: SimulationEventKind::HouseholdConflict,
+                cause: SimulationEventCause::HouseholdConflict,
+                details: SimulationEventDetails::HouseholdConflict {
+                    household_id,
+                    actor_affinity_delta: actor_delta,
+                    target_affinity_delta: target_delta,
+                },
+            });
+            let actor_location = (self.entities[actor_index].x, self.entities[actor_index].y);
+            let target_location = (self.entities[target_index].x, self.entities[target_index].y);
+            let actor_change = autonomy::record_directed_affinity(
+                &mut self.entities[actor_index],
+                attempt.target_id,
+                self.tick,
+                actor_delta,
+            );
+            let target_change = autonomy::record_directed_affinity(
+                &mut self.entities[target_index],
+                attempt.actor_id,
+                self.tick,
+                target_delta,
+            );
+            self.entities[actor_index]
+                .mind
+                .memory
+                .mark_conflict(attempt.target_id, self.tick);
+            self.entities[target_index]
+                .mind
+                .memory
+                .mark_conflict(attempt.actor_id, self.tick);
+            if let Some(change) = actor_change {
+                self.record_affinity_change(
+                    attempt.actor_id,
+                    actor_location,
+                    change,
+                    SimulationEventCause::HouseholdConflict,
+                    Some(event_id),
+                );
+            }
+            if let Some(change) = target_change {
+                self.record_affinity_change(
+                    attempt.target_id,
+                    target_location,
+                    change,
+                    SimulationEventCause::HouseholdConflict,
+                    Some(event_id),
+                );
+            }
+            if let Some(dissolution) =
+                partnerships::try_dissolve(&mut self.entities, attempt.actor_id, attempt.target_id)
+            {
+                self.record_partnership_dissolution(
+                    dissolution,
+                    actor_location,
+                    SimulationEventCause::HouseholdConflict,
+                    Some(event_id),
+                );
+            }
+            let actor_affinity = self
+                .entities
+                .binary_search_by_key(&attempt.actor_id, |entity| entity.id)
+                .ok()
+                .and_then(|index| {
+                    self.entities[index]
+                        .mind
+                        .memory
+                        .affinity_to(attempt.target_id)
+                })
+                .unwrap_or(0);
+            if actor_affinity <= autonomy::HOUSEHOLD_EXIT_AFFINITY_THRESHOLD {
+                households::set_member_household(
+                    &mut self.entities,
+                    &self.households,
+                    attempt.actor_id,
+                    None,
+                );
+            }
         }
     }
 
@@ -1032,6 +1215,7 @@ impl Simulation {
                 y: entity.y,
                 hunger: entity.hunger,
                 caregiver_id: entity.caregiver_id,
+                household_id: entity.household_id,
                 partner_id: entity.partner_id,
                 mother_id: entity.mother_id,
                 father_id: entity.father_id,

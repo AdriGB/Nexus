@@ -291,6 +291,33 @@ mod tests {
     }
 
     #[test]
+    fn household_conflict_json_preserves_household_id() {
+        let events = [SimulationEvent {
+            id: EventId::new(21),
+            caused_by_event_id: None,
+            tick: 46,
+            location: crate::simulation::EventLocation { x: 2, y: 3 },
+            actor_id: 4,
+            target_id: Some(7),
+            related_entity_ids: vec![4, 7],
+            kind: SimulationEventKind::HouseholdConflict,
+            cause: SimulationEventCause::HouseholdConflict,
+            details: SimulationEventDetails::HouseholdConflict {
+                household_id: 9,
+                actor_affinity_delta: -20,
+                target_affinity_delta: -18,
+            },
+        }];
+
+        let payload: serde_json::Value =
+            serde_json::from_str(&simulation_events_json(events.iter(), 46, None)).unwrap();
+        assert_eq!(payload[0]["kind"], "household_conflict");
+        assert_eq!(payload[0]["household_id"], 9);
+        assert_eq!(payload[0]["actor_affinity_delta"], -20);
+        assert_eq!(payload[0]["target_affinity_delta"], -18);
+    }
+
+    #[test]
     fn partnership_event_json_preserves_causal_relationship_evidence() {
         let events = [SimulationEvent {
             id: EventId::new(17),

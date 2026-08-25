@@ -25,6 +25,7 @@ struct SimulationEventDto {
     related_entity_ids: Vec<u32>,
     kind: &'static str,
     cause: &'static str,
+    household_id: Option<u32>,
     actor_affinity_delta: Option<i16>,
     target_affinity_delta: Option<i16>,
     child_id: Option<u32>,
@@ -119,6 +120,7 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventKind::FoodShareRefused => "food_share_refused",
                 SimulationEventKind::PartnershipFormed => "partnership_formed",
                 SimulationEventKind::PartnershipDissolved => "partnership_dissolved",
+                SimulationEventKind::HouseholdConflict => "household_conflict",
             };
             let cause = match event.cause {
                 SimulationEventCause::MutualSocialContact => "mutual_social_contact",
@@ -132,6 +134,7 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventCause::FoodShared => "food_shared",
                 SimulationEventCause::FoodShareRefused => "food_share_refused",
                 SimulationEventCause::MutualCommitment => "mutual_commitment",
+                SimulationEventCause::HouseholdConflict => "household_conflict",
             };
             let (
                 actor_affinity_delta,
@@ -147,6 +150,21 @@ pub(super) fn simulation_events_json<'a>(
                 SimulationEventDetails::Interaction {
                     actor_affinity_delta,
                     target_affinity_delta,
+                } => (
+                    Some(actor_affinity_delta),
+                    Some(target_affinity_delta),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                SimulationEventDetails::HouseholdConflict {
+                    actor_affinity_delta,
+                    target_affinity_delta,
+                    ..
                 } => (
                     Some(actor_affinity_delta),
                     Some(target_affinity_delta),
@@ -247,6 +265,12 @@ pub(super) fn simulation_events_json<'a>(
                     } => (Some(actor_affinity), Some(target_affinity), None),
                     _ => (None, None, None),
                 };
+            let household_id = match event.details {
+                SimulationEventDetails::HouseholdConflict { household_id, .. } => {
+                    Some(household_id)
+                }
+                _ => None,
+            };
 
             SimulationEventDto {
                 id: event.id.to_string(),
@@ -262,6 +286,7 @@ pub(super) fn simulation_events_json<'a>(
                 related_entity_ids: event.related_entity_ids.clone(),
                 kind,
                 cause,
+                household_id,
                 actor_affinity_delta,
                 target_affinity_delta,
                 child_id,

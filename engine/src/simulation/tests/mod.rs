@@ -8,6 +8,7 @@ mod events;
 mod food_sharing;
 mod genealogy;
 mod grief;
+mod household_conflicts;
 mod household_dissolution;
 mod household_food_deposit;
 mod household_food_withdrawal;
