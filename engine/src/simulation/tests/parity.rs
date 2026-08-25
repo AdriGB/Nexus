@@ -1,9 +1,10 @@
-use super::super::autonomy::KnownEntity;
+use super::super::autonomy::{KnownEntity, KnownResource};
 use super::super::entity::Personality;
 use super::super::time::TICKS_PER_YEAR;
 use super::super::{ItemKind, Simulation, SimulationEventKind};
 use super::support::*;
 use crate::world::Grid;
+use crate::world::ResourceKind;
 
 const TICK_COUNT: u64 = 100;
 const POPULATION: u32 = 10;
@@ -186,12 +187,79 @@ fn both_profile_modes_report_the_same_exact_work_for_a_small_tick() {
         autonomy.work.pathfinding_nodes_expanded
     );
     assert_eq!(phase.work.events_created, autonomy.work.events_created);
+    assert_eq!(phase.state, autonomy.state);
     assert_equivalent(
         &phase_simulation,
         &phase_world,
         &autonomy_simulation,
         &autonomy_world,
     );
+}
+
+#[test]
+fn state_footprint_gauges_derive_exact_values_without_duplicate_state() {
+    let mut first = entity(1, 0, 0, 0.0);
+    first.mind.memory.known_entities = vec![
+        KnownEntity {
+            id: 2,
+            first_seen_tick: 1,
+            last_seen_tick: 2,
+            last_seen_x: 1,
+            last_seen_y: 0,
+            observed_ticks: 2,
+            affinity: 0,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        },
+        KnownEntity {
+            id: 3,
+            first_seen_tick: 1,
+            last_seen_tick: 2,
+            last_seen_x: 2,
+            last_seen_y: 0,
+            observed_ticks: 2,
+            affinity: 0,
+            last_interaction_tick: 0,
+            interaction_count: 0,
+            seek_retry_after_tick: None,
+        },
+    ];
+    first.mind.memory.known_resources.push(KnownResource {
+        x: 3,
+        y: 0,
+        kind: ResourceKind::Food,
+        last_seen_tick: 2,
+        estimated_amount: 10,
+        failed_attempts: 0,
+        avoid_until_tick: 0,
+    });
+    first.mind.memory.known_dead_entities.push(3);
+    let mut second = entity(2, 1, 0, 0.0);
+    second
+        .mind
+        .memory
+        .known_entities
+        .push(first.mind.memory.known_entities[0]);
+    let simulation = Simulation {
+        entities: vec![first, second],
+        next_entity_id: 3,
+        ..Simulation::default()
+    };
+
+    let gauges = simulation.state_gauges();
+
+    assert_eq!(gauges.entities_alive, 2);
+    assert_eq!(gauges.known_entities_total, 3);
+    assert_eq!(gauges.known_entities_max_per_entity, 2);
+    assert_eq!(gauges.known_resources_total, 1);
+    assert_eq!(gauges.known_resources_max_per_entity, 1);
+    assert_eq!(gauges.known_dead_entities_total, 1);
+    assert_eq!(gauges.active_grief_states, 0);
+    assert_eq!(gauges.recent_events_len, 0);
+    assert_eq!(gauges.recent_events_capacity, 1_024);
+    assert_eq!(gauges.households_active, 0);
+    assert_eq!(gauges.genealogy_links, 0);
 }
 
 #[test]
