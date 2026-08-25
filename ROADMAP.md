@@ -324,7 +324,7 @@ La auditoría viva se encuentra en
 
 ## Phase 2.11.4 — Automated benchmark suite
 
-* [ ] Crear microbenchmarks de autonomía, pathfinding e índice espacial
+* [x] Crear microbenchmarks de autonomía, pathfinding e índice espacial
 * [x] Crear escenarios deterministas con seed, mundo, población y duración
 * [x] Registrar baseline 100, 1.000 y 10.000 para ejecución local reproducible
 * [ ] Cubrir dense-social, scarcity, households y pathfinding-heavy

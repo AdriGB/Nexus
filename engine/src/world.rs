@@ -120,6 +120,7 @@ pub struct Tile {
     pub temperature: f64,
 }
 
+#[derive(Clone)]
 pub struct Grid {
     pub width: u32,
     pub height: u32,

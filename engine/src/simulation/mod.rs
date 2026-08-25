@@ -1374,6 +1374,28 @@ impl Simulation {
         }
     }
 
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_rebuild_population_index(&mut self, world: &Grid) -> usize {
+        self.rebuild_population_index(world);
+        self.population_cache.len()
+    }
+
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_spatial_query(&self, x: u32, y: u32, radius: u32) -> usize {
+        let mut candidates = 0;
+        self.spatial_grid
+            .visit_candidates(x, y, radius, |_| candidates += 1);
+        candidates
+    }
+
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_autonomy_pass(&mut self, world: &mut Grid) -> u64 {
+        let (consumed, world_changed, consumers) = self.execute_autonomy(world, None, None);
+        consumed
+            .saturating_add(u64::from(world_changed))
+            .saturating_add(consumers.len() as u64)
+    }
+
     fn record_resource_changes(&mut self, consumed_this_tick: u64, world_changed: bool) {
         if consumed_this_tick > 0 {
             self.food_consumed = self.food_consumed.saturating_add(consumed_this_tick);
