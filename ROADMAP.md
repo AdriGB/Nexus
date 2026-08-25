@@ -329,7 +329,7 @@ La auditoría viva se encuentra en
 * [x] Registrar baseline 100, 1.000 y 10.000 para ejecución local reproducible
 * [x] Cubrir dense-social, scarcity, households y pathfinding-heavy
 * [x] Añadir escenario long-run
-* [ ] Añadir `scripts/bench.ps1`
+* [x] Añadir `scripts/bench.ps1`
 * [ ] Ejecutar benchmarks baratos en PR y completos de forma nightly/manual
 
 ## Phase 2.11.5 — Performance regression guard
