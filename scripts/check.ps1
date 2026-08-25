@@ -41,6 +41,9 @@ function Test-Engine {
         Invoke-CheckStep "Benchmark runner tests" {
             cargo test --features benchmarks benchmarking::
         }
+        Invoke-CheckStep "Benchmark aggregate contract tests" {
+            & (Join-Path $repoRoot "scripts/test-benchmark-results.ps1")
+        }
         Invoke-CheckStep "Rust clippy (WASM)" {
             cargo clippy --target wasm32-unknown-unknown -- -D warnings
         }

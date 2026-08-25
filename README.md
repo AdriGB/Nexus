@@ -197,3 +197,8 @@ GitHub Actions runs the `quick` suite for pull requests, the `full` suite nightl
 and a selected suite (`quick`, `micro`, `scenarios`, or `full`) on manual dispatch.
 Raw scenario JSON is retained for seven days as a diagnostic artifact; it is not an
 official baseline. Benchmark timings do not have regression thresholds yet.
+
+Suites with end-to-end scenarios also produce the stable aggregate contract
+`benchmark-results.json`; see
+[Aggregate benchmark results](docs/performance/benchmark-results.md). Criterion-only
+`micro` runs are not included, and no baseline or comparison policy exists yet.
