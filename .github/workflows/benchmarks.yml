@@ -64,11 +64,13 @@ jobs:
         shell: pwsh
         run: |
           $rawPresent = Get-ChildItem "target/nexus-bench" -Filter "*.json" -ErrorAction SilentlyContinue |
-            Where-Object Name -ne "benchmark-results.json" |
+            Where-Object Name -notin @("benchmark-results.json", "benchmark-comparison.json") |
             Select-Object -First 1
           $aggregatePresent = Test-Path "target/nexus-bench/benchmark-results.json"
+          $comparisonPresent = Test-Path "target/nexus-bench/benchmark-comparison.json"
           "raw_present=$($null -ne $rawPresent)".ToLowerInvariant() >> $env:GITHUB_OUTPUT
           "aggregate_present=$aggregatePresent".ToLowerInvariant() >> $env:GITHUB_OUTPUT
+          "comparison_present=$comparisonPresent".ToLowerInvariant() >> $env:GITHUB_OUTPUT
 
       - name: Upload raw scenario results
         if: ${{ always() && steps.results.outputs.raw_present == 'true' }}
@@ -78,6 +80,7 @@ jobs:
           path: |
             target/nexus-bench/*.json
             !target/nexus-bench/benchmark-results.json
+            !target/nexus-bench/benchmark-comparison.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -87,6 +90,15 @@ jobs:
         with:
           name: nexus-benchmark-results-${{ steps.suite.outputs.value }}
           path: target/nexus-bench/benchmark-results.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload benchmark comparison
+        if: ${{ always() && steps.results.outputs.comparison_present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-benchmark-comparison-${{ steps.suite.outputs.value }}
+          path: target/nexus-bench/benchmark-comparison.json
           if-no-files-found: error
           retention-days: 7
 
@@ -106,6 +118,18 @@ jobs:
           else {
             "not applicable"
           }
+          if ("${{ steps.results.outputs.comparison_present }}" -eq "true") {
+            $comparison = Get-Content "target/nexus-bench/benchmark-comparison.json" -Raw | ConvertFrom-Json
+            $comparisonSummary = @"
+          - Baseline: benchmarks/baselines/github-ubuntu-x64/benchmark-results.json (schema 1)
+          - Compared scenarios: $($comparison.summary.compared_scenarios)
+          - Largest positive timing delta: $($comparison.summary.largest_positive_delta_percent)%
+          - Largest negative timing delta: $($comparison.summary.largest_negative_delta_percent)%
+          "@
+          }
+          else {
+            $comparisonSummary = "- Benchmark comparison: not applicable"
+          }
 
           @"
           ## Performance Benchmarks
@@ -114,4 +138,5 @@ jobs:
           - Commit: ${{ github.sha }}
           - Raw scenario JSON: $rawArtifact
           - Aggregate benchmark-results.json: $aggregateArtifact
+          $comparisonSummary
           "@ >> $env:GITHUB_STEP_SUMMARY

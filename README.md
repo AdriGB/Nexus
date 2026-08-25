@@ -201,4 +201,8 @@ official baseline. Benchmark timings do not have regression thresholds yet.
 Suites with end-to-end scenarios also produce the stable aggregate contract
 `benchmark-results.json`; see
 [Aggregate benchmark results](docs/performance/benchmark-results.md). Criterion-only
-`micro` runs are not included, and no baseline or comparison policy exists yet.
+`micro` runs are not included.
+
+Scenario runs are also compared mathematically with the reviewed GitHub Ubuntu
+Full baseline. The resulting `benchmark-comparison.json` reports timing deltas but
+does not classify or gate performance; baseline updates remain explicit PR changes.
