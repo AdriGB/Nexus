@@ -65,6 +65,7 @@ pub enum SimulationEventKind {
     AffinityChange,
     FoodShared,
     FoodShareRefused,
+    HouseholdConflict,
     PartnershipFormed,
     PartnershipDissolved,
 }
@@ -82,6 +83,7 @@ pub enum SimulationEventCause {
     FoodShared,
     FoodShareRefused,
     MutualCommitment,
+    HouseholdConflict,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,6 +113,11 @@ pub enum SimulationEventDetails {
         amount: u16,
     },
     FoodShareRefused,
+    HouseholdConflict {
+        household_id: u32,
+        actor_affinity_delta: i16,
+        target_affinity_delta: i16,
+    },
     PartnershipFormed {
         actor_affinity: i16,
         target_affinity: i16,
@@ -255,6 +262,7 @@ impl RecentEventHistory {
                 SimulationEventKind::FoodShared | SimulationEventKind::FoodShareRefused => {
                     &mut summary.interactions
                 }
+                SimulationEventKind::HouseholdConflict => &mut summary.interactions,
                 SimulationEventKind::PartnershipFormed => &mut summary.partnerships_formed,
                 SimulationEventKind::PartnershipDissolved => &mut summary.partnerships_dissolved,
             };

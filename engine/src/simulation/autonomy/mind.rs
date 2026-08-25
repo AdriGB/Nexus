@@ -23,6 +23,7 @@ type RememberedFoodTargets = BinaryHeap<Reverse<(u32, u64, (u32, u32))>>;
 pub enum Goal {
     Eat,
     AcquireResource,
+    ConfrontHouseholdMember,
     Explore,
     Follow,
     Grieve,
@@ -38,6 +39,7 @@ impl Goal {
         match self {
             Self::Eat => "Eat",
             Self::AcquireResource => "Acquire Resource",
+            Self::ConfrontHouseholdMember => "Confront Household Member",
             Self::Explore => "Explore",
             Self::Follow => "Follow",
             Self::Grieve => "Grieve",
@@ -185,6 +187,12 @@ struct FailedExploration {
     retry_after_tick: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ConflictRecord {
+    entity_id: u32,
+    last_conflict_tick: u64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Memory {
     pub known_resources: Vec<KnownResource>,
@@ -192,6 +200,7 @@ pub struct Memory {
     failed_exploration: Vec<FailedExploration>,
     pub known_entities: Vec<KnownEntity>,
     pub known_dead_entities: Vec<u32>,
+    conflict_history: Vec<ConflictRecord>,
 }
 
 /// Moves an affinity value toward zero by at most `amount`, never
@@ -207,6 +216,32 @@ fn move_toward_zero(value: i16, amount: i16) -> i16 {
 }
 
 impl Memory {
+    pub(in crate::simulation) fn conflict_on_cooldown(&self, entity_id: u32, tick: u64) -> bool {
+        self.conflict_history
+            .binary_search_by_key(&entity_id, |record| record.entity_id)
+            .ok()
+            .is_some_and(|index| {
+                tick < self.conflict_history[index]
+                    .last_conflict_tick
+                    .saturating_add(TICKS_PER_DAY)
+            })
+    }
+
+    pub(in crate::simulation) fn mark_conflict(&mut self, entity_id: u32, tick: u64) {
+        match self
+            .conflict_history
+            .binary_search_by_key(&entity_id, |record| record.entity_id)
+        {
+            Ok(index) => self.conflict_history[index].last_conflict_tick = tick,
+            Err(index) => self.conflict_history.insert(
+                index,
+                ConflictRecord {
+                    entity_id,
+                    last_conflict_tick: tick,
+                },
+            ),
+        }
+    }
     pub(in crate::simulation) fn mark_entity_dead(&mut self, entity_id: u32) -> bool {
         match self.known_dead_entities.binary_search(&entity_id) {
             Ok(_) => false,
@@ -542,7 +577,13 @@ impl Mind {
     pub(in crate::simulation) fn invalidate_known_dead_target_plan(&mut self) -> bool {
         if !matches!(
             self.current_goal,
-            Some(Goal::Socialize | Goal::ShareFood | Goal::Follow | Goal::ProtectDependent)
+            Some(
+                Goal::Socialize
+                    | Goal::ShareFood
+                    | Goal::Follow
+                    | Goal::ProtectDependent
+                    | Goal::ConfrontHouseholdMember
+            )
         ) {
             return false;
         }

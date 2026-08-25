@@ -38,6 +38,13 @@ pub(in crate::simulation) struct HouseholdWithdrawAttempt {
     pub actor_location: (u32, u32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::simulation) struct HouseholdConflictAttempt {
+    pub actor_id: u32,
+    pub target_id: u32,
+    pub actor_location: (u32, u32),
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(in crate::simulation) struct ActionOutcome {
     pub food_consumed: u16,
@@ -45,6 +52,7 @@ pub(in crate::simulation) struct ActionOutcome {
     pub food_share_attempt: Option<FoodShareAttempt>,
     pub household_deposit_attempt: Option<HouseholdDepositAttempt>,
     pub household_withdraw_attempt: Option<HouseholdWithdrawAttempt>,
+    pub household_conflict_attempt: Option<HouseholdConflictAttempt>,
 }
 
 pub(in crate::simulation) fn effective_movement_speed(entity: &Entity, tick: u64) -> f32 {
@@ -145,6 +153,7 @@ pub(super) fn execute_current_action(
                     food_share_attempt: None,
                     household_deposit_attempt: None,
                     household_withdraw_attempt: None,
+                    household_conflict_attempt: None,
                 }
             } else {
                 ActionOutcome::default()
@@ -161,6 +170,7 @@ pub(super) fn execute_current_action(
                 food_share_attempt: None,
                 household_deposit_attempt: None,
                 household_withdraw_attempt: None,
+                household_conflict_attempt: None,
             }
         }
         Action::Wait => {
@@ -201,11 +211,29 @@ pub(super) fn execute_current_action(
                 .binary_search(&target_id)
                 .is_ok();
 
+            let visible_snapshot = currently_visible
+                .then(|| population.iter().find(|snapshot| snapshot.id == target_id))
+                .flatten();
+            if entity.mind.current_goal == Some(Goal::ConfrontHouseholdMember)
+                && currently_visible
+                && visible_snapshot.is_none_or(|snapshot| {
+                    entity.household_id.is_none()
+                        || snapshot.household_id != entity.household_id
+                        || snapshot.is_child
+                        || snapshot.is_infant
+                })
+            {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.action_tick = 0;
+                entity.activity = EntityActivity::Idle;
+                return ActionOutcome::default();
+            }
+
             let target_pos = if currently_visible {
-                population
-                    .iter()
-                    .find(|s| s.id == target_id)
-                    .map(|s| (s.x, s.y))
+                visible_snapshot.map(|snapshot| (snapshot.x, snapshot.y))
             } else {
                 entity
                     .mind
@@ -246,7 +274,9 @@ pub(super) fn execute_current_action(
                 } else {
                     // Arrived at last known position but target is not visible
                     // — abandon Socialize
-                    if !protecting_dependent {
+                    if !protecting_dependent
+                        && entity.mind.current_goal != Some(Goal::ConfrontHouseholdMember)
+                    {
                         entity.mind.memory.mark_failed_social_seek(target_id, tick);
                     }
                     entity.mind.clear_goal();
@@ -309,7 +339,9 @@ pub(super) fn execute_current_action(
                     } else {
                         // Arrived at last known position but target is not visible
                         // — abandon Socialize
-                        if !protecting_dependent {
+                        if !protecting_dependent
+                            && entity.mind.current_goal != Some(Goal::ConfrontHouseholdMember)
+                        {
                             entity.mind.memory.mark_failed_social_seek(target_id, tick);
                         }
                         entity.mind.clear_goal();
@@ -318,7 +350,9 @@ pub(super) fn execute_current_action(
                 } else if !currently_visible {
                     // Arrived at last known position but target is not here
                     // and not visible — abandon Socialize
-                    if !protecting_dependent {
+                    if !protecting_dependent
+                        && entity.mind.current_goal != Some(Goal::ConfrontHouseholdMember)
+                    {
                         entity.mind.memory.mark_failed_social_seek(target_id, tick);
                     }
                     entity.mind.clear_goal();
@@ -328,6 +362,7 @@ pub(super) fn execute_current_action(
             ActionOutcome::default()
         }
         Action::Interact(target_id) => {
+            let confronting = entity.mind.current_goal == Some(Goal::ConfrontHouseholdMember);
             // Require the target to be currently visible — no omniscience
             if entity
                 .mind
@@ -343,7 +378,7 @@ pub(super) fn execute_current_action(
                 return ActionOutcome::default();
             }
 
-            let Some(snapshot) = population.iter().find(|s| s.id == target_id) else {
+            let Some(snapshot) = population.iter().find(|snapshot| snapshot.id == target_id) else {
                 entity.movement_credit = 0.0;
                 entity.mind.clear_goal();
                 entity.path.clear();
@@ -351,6 +386,19 @@ pub(super) fn execute_current_action(
                 entity.activity = EntityActivity::Idle;
                 return ActionOutcome::default();
             };
+
+            if confronting
+                && (entity.household_id.is_none()
+                    || snapshot.household_id != entity.household_id
+                    || snapshot.is_child
+                    || snapshot.is_infant)
+            {
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.action_tick = 0;
+                return ActionOutcome::default();
+            }
 
             let origin = (entity.x, entity.y);
             let target_pos = (snapshot.x, snapshot.y);
@@ -361,7 +409,11 @@ pub(super) fn execute_current_action(
                 entity.path.clear();
                 entity.path_index = 0;
                 entity.mind.set_plan(
-                    Goal::Socialize,
+                    if confronting {
+                        Goal::ConfrontHouseholdMember
+                    } else {
+                        Goal::Socialize
+                    },
                     vec![
                         Action::ApproachEntity(target_id),
                         Action::Interact(target_id),
@@ -375,7 +427,18 @@ pub(super) fn execute_current_action(
             entity.movement_credit = 0.0;
             entity.mind.advance_action();
             entity.activity = EntityActivity::Socializing;
-            ActionOutcome::default()
+            if confronting {
+                ActionOutcome {
+                    household_conflict_attempt: Some(HouseholdConflictAttempt {
+                        actor_id: entity.id,
+                        target_id,
+                        actor_location: origin,
+                    }),
+                    ..ActionOutcome::default()
+                }
+            } else {
+                ActionOutcome::default()
+            }
         }
         Action::ShareFood(target_id) => {
             // Require the target to be currently visible — no omniscience
@@ -444,6 +507,7 @@ pub(super) fn execute_current_action(
                 }),
                 household_deposit_attempt: None,
                 household_withdraw_attempt: None,
+                household_conflict_attempt: None,
             }
         }
         Action::DepositHouseholdFood(amount) => {
@@ -460,6 +524,7 @@ pub(super) fn execute_current_action(
                     actor_location: (entity.x, entity.y),
                 }),
                 household_withdraw_attempt: None,
+                household_conflict_attempt: None,
             }
         }
         Action::WithdrawHouseholdFood(amount) => {
@@ -476,6 +541,7 @@ pub(super) fn execute_current_action(
                     amount,
                     actor_location: (entity.x, entity.y),
                 }),
+                household_conflict_attempt: None,
             }
         }
     }

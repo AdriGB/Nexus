@@ -211,6 +211,7 @@ pub(super) fn run_profiled_autonomy_step(
         food_share_attempts,
         household_deposit_attempts,
         household_withdraw_attempts,
+        household_conflict_attempts,
     ) = simulation.run_autonomy(world, Some(&mut profile));
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
@@ -219,6 +220,7 @@ pub(super) fn run_profiled_autonomy_step(
     simulation.process_food_share_attempts(food_share_attempts);
     simulation.process_household_deposit_attempts(household_deposit_attempts);
     simulation.process_household_withdraw_attempts(household_withdraw_attempts);
+    simulation.process_household_conflict_attempts(household_conflict_attempts);
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
     for (id, amount) in consumer_ids {

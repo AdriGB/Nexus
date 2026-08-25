@@ -1,4 +1,5 @@
 mod action;
+mod conflict;
 mod decision;
 mod exploration;
 mod mind;
@@ -24,15 +25,18 @@ pub(in crate::simulation) use self::mind::{
 #[cfg(test)]
 pub use self::perception::perceive;
 pub(in crate::simulation) use self::perception::{EntityEncounter, ResourceDiscovery};
-#[cfg(test)]
 pub(in crate::simulation) use self::social::SOCIAL_RADIUS;
 
 #[cfg(test)]
 pub(super) use self::action::effective_movement_speed;
 pub(super) use self::action::ActionOutcome;
 pub(in crate::simulation) use self::action::FoodShareAttempt;
+pub(in crate::simulation) use self::action::HouseholdConflictAttempt;
 pub(in crate::simulation) use self::action::HouseholdDepositAttempt;
 pub(in crate::simulation) use self::action::HouseholdWithdrawAttempt;
+#[cfg(test)]
+pub(in crate::simulation) use self::conflict::best_household_conflict_candidate;
+pub(in crate::simulation) use self::conflict::HOUSEHOLD_EXIT_AFFINITY_THRESHOLD;
 pub(in crate::simulation) use self::decision::DecisionContext;
 use self::decision::HouseholdDecisionContext;
 #[cfg(test)]
@@ -247,6 +251,9 @@ pub(super) fn update_entity(
                 .map(|candidate| candidate.score);
         let best_remembered_social_score =
             social::best_relationship_aware_remembered_score(entity, population, tick);
+        let best_household_conflict_score =
+            conflict::best_household_conflict_candidate(entity, population, tick)
+                .map(|candidate| candidate.score);
 
         let household_food_available =
             household_context.is_some_and(|context| context.storage_food_amount > 0);
@@ -269,6 +276,7 @@ pub(super) fn update_entity(
                 dependent_food_need,
                 dependent_protection_target,
                 migration_target,
+                best_household_conflict_score,
             },
         );
         decision::plan_goal(

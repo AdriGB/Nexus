@@ -28,6 +28,7 @@ pub(super) struct HouseholdDecisionContext {
     pub dependent_food_need: DependentFoodNeed,
     pub dependent_protection_target: Option<u32>,
     pub migration_target: Option<(u32, u32)>,
+    pub best_household_conflict_score: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -216,6 +217,7 @@ pub fn evaluate_goals(
             dependent_food_need: DependentFoodNeed::None,
             dependent_protection_target: None,
             migration_target: None,
+            best_household_conflict_score: None,
         },
     )
 }
@@ -235,6 +237,7 @@ pub(super) fn evaluate_goals_with_household(
         dependent_food_need,
         dependent_protection_target,
         migration_target,
+        best_household_conflict_score,
     } = context;
     let DecisionContext {
         tick,
@@ -425,6 +428,11 @@ pub(super) fn evaluate_goals_with_household(
     } else {
         mind.grief_pressure(tick)
     };
+    let household_conflict = if hunger >= URGENT_HUNGER_THRESHOLD {
+        0.0
+    } else {
+        best_household_conflict_score.unwrap_or(0.0)
+    };
 
     mind.utility_scores = super::mind::UtilityScores {
         eat: if has_food_in_inventory {
@@ -442,6 +450,7 @@ pub(super) fn evaluate_goals_with_household(
     };
 
     let scores = [
+        (household_conflict, Goal::ConfrontHouseholdMember),
         (grief, Goal::Grieve),
         (mind.utility_scores.eat, Goal::Eat),
         (mind.utility_scores.acquire_resource, Goal::AcquireResource),
@@ -793,6 +802,13 @@ pub(super) fn plan_goal(
                 super::exploration::plan_exploration(entity, world, tick, pathfinding_workspace);
             }
         }
+        Goal::ConfrontHouseholdMember => super::conflict::plan_household_conflict(
+            entity,
+            world,
+            tick,
+            population,
+            pathfinding_workspace,
+        ),
         Goal::Explore => {
             super::exploration::plan_exploration(entity, world, tick, pathfinding_workspace);
         }

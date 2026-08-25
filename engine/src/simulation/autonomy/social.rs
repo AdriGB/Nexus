@@ -494,6 +494,19 @@ pub(super) fn process_social_interactions(
                 None => continue,
             };
 
+            let confronting = |actor: &Entity, target_id: u32| {
+                actor.mind.current_goal == Some(Goal::ConfrontHouseholdMember)
+                    && actor
+                        .mind
+                        .current_plan
+                        .iter()
+                        .filter_map(|action| action.target_entity_id())
+                        .any(|id| id == target_id)
+            };
+            if confronting(entity, b_id) || confronting(&entities[b_index], a_id) {
+                continue;
+            }
+
             let b_pos = match population.get(b_index) {
                 Some(snapshot) => (snapshot.x, snapshot.y),
                 None => continue,
@@ -761,6 +774,7 @@ mod tests {
                 y: 0,
                 hunger: 0.0,
                 caregiver_id: None,
+                household_id: None,
                 partner_id: None,
                 mother_id: None,
                 father_id: None,
@@ -774,6 +788,7 @@ mod tests {
                 y: 0,
                 hunger: 0.0,
                 caregiver_id: None,
+                household_id: None,
                 partner_id: None,
                 mother_id: None,
                 father_id: None,
@@ -881,6 +896,7 @@ mod tests {
             y: 0,
             hunger: 0.0,
             caregiver_id: None,
+            household_id: None,
             partner_id: None,
             mother_id: None,
             father_id: None,
