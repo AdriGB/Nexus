@@ -15,6 +15,17 @@ export interface SimulationBenchmark {
 }
 
 interface SimulationPhaseProfile {
+    entities_processed: number;
+    entities_perceived: number;
+    goal_evaluations: number;
+    goal_changes: number;
+    plans_created: number;
+    actions_executed: number;
+    social_interactions: number;
+    spatial_queries: number;
+    pathfinding_searches: number;
+    pathfinding_nodes_expanded: number;
+    events_created: number;
   world_maintenance_us: number;
   physiology_us: number;
   dependent_care_us: number;
@@ -30,6 +41,17 @@ interface SimulationPhaseProfile {
 }
 
 interface SimulationAutonomyProfile {
+    entities_processed: number;
+    entities_perceived: number;
+    goal_evaluations: number;
+    goal_changes: number;
+    plans_created: number;
+    actions_executed: number;
+    social_interactions: number;
+    spatial_queries: number;
+    pathfinding_searches: number;
+    pathfinding_nodes_expanded: number;
+    events_created: number;
   resource_perception_us: number;
   entity_perception_us: number;
   plan_validation_us: number;

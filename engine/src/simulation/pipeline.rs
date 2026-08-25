@@ -4,7 +4,10 @@
 //! domain modules own their rules. Keeping orchestration here makes additions
 //! to the tick lifecycle visible without turning `Simulation` into a scheduler.
 
-use super::{dependents, grief, households, physiology, AutonomyProfile, PhaseProfile, Simulation};
+use super::{
+    dependents, grief, households, physiology, AutonomyProfile, PhaseProfile, Simulation,
+    WorkCounters,
+};
 use crate::world::Grid;
 use web_time::Instant;
 
@@ -38,6 +41,7 @@ impl TickInstrumentation for NoopInstrumentation {
 struct ExecutionInstrumentation<'a, Phases> {
     phases: Phases,
     autonomy: Option<&'a mut AutonomyProfile>,
+    work: Option<&'a mut WorkCounters>,
 }
 
 struct PhaseInstrumentation {
@@ -104,17 +108,22 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
         &mut ExecutionInstrumentation {
             phases: NoopInstrumentation,
             autonomy: None,
+            work: None,
         },
     );
 }
 
 pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -> PhaseProfile {
+    let mut work = WorkCounters::default();
     let mut instrumentation = ExecutionInstrumentation {
         phases: PhaseInstrumentation::new(),
         autonomy: None,
+        work: Some(&mut work),
     };
     execute_step(simulation, world, &mut instrumentation);
-    instrumentation.phases.finish()
+    let mut profile = instrumentation.phases.finish();
+    profile.work = work;
+    profile
 }
 
 fn execute_step<I>(
@@ -124,6 +133,10 @@ fn execute_step<I>(
 ) where
     I: TickInstrumentation,
 {
+    let counting = instrumentation.work.is_some();
+    simulation.spatial_grid.start_counting(counting);
+    simulation.pathfinding_workspace.start_counting(counting);
+    let events_before = simulation.recent_events.total_created();
     simulation.tick = simulation.tick.saturating_add(1);
     instrument(
         &mut instrumentation.phases,
@@ -157,9 +170,10 @@ fn execute_step<I>(
     });
 
     let autonomy_profile = instrumentation.autonomy.as_deref_mut();
+    let work = instrumentation.work.as_deref_mut();
     let (consumed_this_tick, world_changed, consumer_ids) =
         instrument(&mut instrumentation.phases, TickPhase::Autonomy, || {
-            simulation.execute_autonomy(world, autonomy_profile)
+            simulation.execute_autonomy(world, autonomy_profile, work)
         });
 
     instrument(
@@ -243,6 +257,17 @@ fn execute_step<I>(
     instrument(&mut instrumentation.phases, TickPhase::Reproduction, || {
         simulation.try_daily_conceptions();
     });
+
+    if let Some(work) = instrumentation.work.as_deref_mut() {
+        work.spatial_queries = simulation.spatial_grid.counted_queries();
+        let (searches, nodes) = simulation.pathfinding_workspace.counts();
+        work.pathfinding_searches = searches;
+        work.pathfinding_nodes_expanded = nodes;
+        work.events_created = simulation
+            .recent_events
+            .total_created()
+            .saturating_sub(events_before);
+    }
 }
 
 pub(super) fn run_profiled_autonomy_step(
@@ -250,15 +275,18 @@ pub(super) fn run_profiled_autonomy_step(
     world: &mut Grid,
 ) -> AutonomyProfile {
     let mut profile = AutonomyProfile::default();
+    let mut work = WorkCounters::default();
     execute_step(
         simulation,
         world,
         &mut ExecutionInstrumentation {
             phases: NoopInstrumentation,
             autonomy: Some(&mut profile),
+            work: Some(&mut work),
         },
     );
 
+    profile.work = work;
     profile
 }
 

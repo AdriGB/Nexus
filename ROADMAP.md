@@ -315,12 +315,12 @@ La auditoría viva se encuentra en
 
 ## Phase 2.11.3 — Performance observatory
 
-* [ ] Medir tiempo total y por fase del tick
-* [ ] Contar entidades, decisiones, reevaluaciones, percepciones e interacciones
-* [ ] Contar consultas espaciales, búsquedas A* y nodos explorados
-* [ ] Contar eventos y vigilar el tamaño de memorias e historial
+* [x] Medir tiempo total y por fase del tick
+* [x] Contar entidades, decisiones, reevaluaciones, percepciones e interacciones
+* [x] Contar consultas espaciales, búsquedas A* y nodos explorados
+* [ ] Contar eventos y vigilar el tamaño de memorias e historial (eventos listos; memorias e historial pendientes)
 * [ ] Informar mean, median, p95, p99 y max
-* [ ] Exponer perfiles estables a través del bridge
+* [x] Exponer perfiles estables a través del bridge
 
 ## Phase 2.11.4 — Automated benchmark suite
 

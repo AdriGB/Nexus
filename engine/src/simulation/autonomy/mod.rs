@@ -74,6 +74,7 @@ pub(crate) struct HouseholdAutonomyContext {
 pub(super) struct EntityUpdateContext<'a> {
     pub household: Option<HouseholdAutonomyContext>,
     pub profile: Option<&'a mut AutonomyProfile>,
+    pub work: Option<&'a mut crate::simulation::WorkCounters>,
 }
 
 pub(super) fn process_social_interactions(
@@ -109,7 +110,11 @@ pub(super) fn update_entity(
     let EntityUpdateContext {
         household: household_context,
         mut profile,
+        mut work,
     } = context;
+    if let Some(work) = work.as_deref_mut() {
+        work.entities_perceived += 1;
+    }
     entity.mind.prune_expired_grief(tick);
     let position = (entity.x, entity.y);
 
@@ -241,6 +246,9 @@ pub(super) fn update_entity(
     }
 
     if entity.mind.current_action().is_none() {
+        if let Some(work) = work.as_deref_mut() {
+            work.goal_evaluations += 1;
+        }
         let start = profile.as_ref().map(|_| Instant::now());
         if let Some(profile) = profile.as_deref_mut() {
             profile.planned_entities += 1;
@@ -279,6 +287,11 @@ pub(super) fn update_entity(
                 best_household_conflict_score,
             },
         );
+        if Some(goal) != current_goal {
+            if let Some(work) = work.as_deref_mut() {
+                work.goal_changes += 1;
+            }
+        }
         decision::plan_goal(
             entity,
             world,
@@ -288,6 +301,9 @@ pub(super) fn update_entity(
             population,
             household_context,
         );
+        if let Some(work) = work.as_deref_mut() {
+            work.plans_created += 1;
+        }
         if let Some(profile) = profile.as_deref_mut() {
             profile.planning_us += start
                 .expect("profile timer must exist")
@@ -299,6 +315,9 @@ pub(super) fn update_entity(
     let start = profile.as_ref().map(|_| Instant::now());
     let outcome =
         action::execute_current_action(entity, world, tick, population, pathfinding_workspace);
+    if let Some(work) = work {
+        work.actions_executed += 1;
+    }
     if let Some(profile) = profile {
         profile.action_us += start
             .expect("profile timer must exist")

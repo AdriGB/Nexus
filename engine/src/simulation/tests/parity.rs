@@ -145,6 +145,56 @@ fn profile_autonomy_step_matches_step() {
 }
 
 #[test]
+fn both_profile_modes_report_the_same_exact_work_for_a_small_tick() {
+    let mut phase_world = grid_from_rows(&["PPPP"]);
+    let mut autonomy_world = grid_from_rows(&["PPPP"]);
+    let mut phase_simulation = Simulation::with_population(7, &phase_world, 1);
+    let mut autonomy_simulation = phase_simulation.clone();
+
+    let phase = phase_simulation.profile_step(&mut phase_world);
+    let autonomy = autonomy_simulation.profile_autonomy_step(&mut autonomy_world);
+
+    assert_eq!(phase.work.entities_processed, 1);
+    assert_eq!(phase.work.entities_perceived, 1);
+    assert_eq!(phase.work.goal_evaluations, 1);
+    assert_eq!(phase.work.plans_created, 1);
+    assert_eq!(phase.work.actions_executed, 1);
+    assert_eq!(phase.work.spatial_queries, 1);
+    assert_eq!(
+        phase.work.entities_processed,
+        autonomy.work.entities_processed
+    );
+    assert_eq!(
+        phase.work.entities_perceived,
+        autonomy.work.entities_perceived
+    );
+    assert_eq!(phase.work.goal_evaluations, autonomy.work.goal_evaluations);
+    assert_eq!(phase.work.goal_changes, autonomy.work.goal_changes);
+    assert_eq!(phase.work.plans_created, autonomy.work.plans_created);
+    assert_eq!(phase.work.actions_executed, autonomy.work.actions_executed);
+    assert_eq!(
+        phase.work.social_interactions,
+        autonomy.work.social_interactions
+    );
+    assert_eq!(phase.work.spatial_queries, autonomy.work.spatial_queries);
+    assert_eq!(
+        phase.work.pathfinding_searches,
+        autonomy.work.pathfinding_searches
+    );
+    assert_eq!(
+        phase.work.pathfinding_nodes_expanded,
+        autonomy.work.pathfinding_nodes_expanded
+    );
+    assert_eq!(phase.work.events_created, autonomy.work.events_created);
+    assert_equivalent(
+        &phase_simulation,
+        &phase_world,
+        &autonomy_simulation,
+        &autonomy_world,
+    );
+}
+
+#[test]
 fn unified_autonomy_preserves_profile_sampling_and_resource_breakdown() {
     let mut world = grid_from_rows(&["PPPFPPPPPP"]);
     let mut simulation = Simulation::with_population(42, &world, POPULATION);

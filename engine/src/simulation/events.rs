@@ -194,6 +194,7 @@ pub(super) struct RecentEventHistory {
     events: VecDeque<SimulationEvent>,
     capacity: usize,
     next_id: EventId,
+    total_created: u64,
 }
 
 impl Default for RecentEventHistory {
@@ -202,6 +203,7 @@ impl Default for RecentEventHistory {
             events: VecDeque::with_capacity(RECENT_EVENT_CAPACITY),
             capacity: RECENT_EVENT_CAPACITY,
             next_id: EventId::FIRST,
+            total_created: 0,
         }
     }
 }
@@ -213,10 +215,12 @@ impl RecentEventHistory {
             events: VecDeque::with_capacity(capacity),
             capacity,
             next_id: EventId::FIRST,
+            total_created: 0,
         }
     }
 
     pub(super) fn push(&mut self, event: PendingSimulationEvent) -> EventId {
+        self.total_created = self.total_created.saturating_add(1);
         let assigned_id = self.next_id;
         self.next_id = self
             .next_id
@@ -231,6 +235,10 @@ impl RecentEventHistory {
         }
         self.events.push_back(event.assign(assigned_id));
         assigned_id
+    }
+
+    pub(super) fn total_created(&self) -> u64 {
+        self.total_created
     }
 
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
