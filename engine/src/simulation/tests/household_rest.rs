@@ -21,6 +21,7 @@ fn household(residence: (u32, u32)) -> Household {
         formed_tick: 0,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x: residence.0,
         residence_y: residence.1,
         storage: super::super::Inventory::new(200),

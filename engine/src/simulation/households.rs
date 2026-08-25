@@ -2,12 +2,17 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::time::TICKS_PER_DAY;
 use super::{
     descendants_of, siblings_of, DeathContext, Entity, Genealogy, HouseholdStats, Inventory,
     ItemKind, LifeStage,
 };
+use crate::world::{Grid, ResourceKind};
 
 pub const DEFAULT_HOUSEHOLD_STORAGE_CAPACITY: u16 = 200;
+pub(in crate::simulation) const HOUSEHOLD_LOCAL_FOOD_RADIUS: u32 = 8;
+pub(in crate::simulation) const HOUSEHOLD_MIGRATION_COOLDOWN_TICKS: u64 = 7 * TICKS_PER_DAY;
+pub(in crate::simulation) const HOUSEHOLD_MIGRATION_ARRIVAL_RADIUS: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Household {
@@ -15,9 +20,19 @@ pub(crate) struct Household {
     pub formed_tick: u64,
     pub dissolved_tick: Option<u64>,
     pub inheritance: Option<HouseholdInheritance>,
+    pub migration: Option<HouseholdMigration>,
     pub residence_x: u32,
     pub residence_y: u32,
     pub storage: Inventory,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HouseholdMigration {
+    pub started_tick: u64,
+    pub proposer_id: u32,
+    pub target_x: u32,
+    pub target_y: u32,
+    pub completed_tick: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,6 +46,195 @@ pub(crate) struct HouseholdInheritance {
 impl Household {
     pub(crate) fn is_active(&self) -> bool {
         self.dissolved_tick.is_none()
+    }
+
+    pub(crate) fn active_migration_target(&self) -> Option<(u32, u32)> {
+        self.migration
+            .filter(|migration| migration.completed_tick.is_none())
+            .map(|migration| (migration.target_x, migration.target_y))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MigrationProposal {
+    distance: u32,
+    amount: u16,
+    last_seen_tick: u64,
+    proposer_id: u32,
+    target: (u32, u32),
+}
+
+#[derive(Default)]
+struct MigrationPlanningState {
+    members: u32,
+    food: u32,
+    local_food_known: bool,
+    best: Option<MigrationProposal>,
+}
+
+pub(super) fn plan_daily_household_migrations(
+    entities: &[Entity],
+    households: &mut [Household],
+    world: &Grid,
+    tick: u64,
+) {
+    if !tick.is_multiple_of(TICKS_PER_DAY) {
+        return;
+    }
+    let mut states: HashMap<u32, MigrationPlanningState> = households
+        .iter()
+        .filter(|household| household.is_active() && household.active_migration_target().is_none())
+        .map(|household| {
+            (
+                household.id,
+                MigrationPlanningState {
+                    food: u32::from(household.storage.amount(ItemKind::Food)),
+                    ..MigrationPlanningState::default()
+                },
+            )
+        })
+        .collect();
+
+    for entity in entities {
+        let Some(household_id) = entity.household_id else {
+            continue;
+        };
+        let Some(state) = states.get_mut(&household_id) else {
+            continue;
+        };
+        state.members += 1;
+        state.food += u32::from(entity.inventory.amount(ItemKind::Food));
+        if !matches!(
+            LifeStage::from_age_ticks(entity.age_ticks),
+            LifeStage::Adult | LifeStage::Elder
+        ) {
+            continue;
+        }
+        let Ok(index) = households.binary_search_by_key(&household_id, |household| household.id)
+        else {
+            continue;
+        };
+        let residence = (households[index].residence_x, households[index].residence_y);
+        let residence_region = world.region_id_at(residence.0, residence.1);
+        for known in &entity.mind.memory.known_resources {
+            if known.kind != ResourceKind::Food
+                || known.estimated_amount < super::config::FOOD_CONSUMED_PER_MEAL
+                || tick < known.avoid_until_tick
+            {
+                continue;
+            }
+            let distance = residence.0.abs_diff(known.x) + residence.1.abs_diff(known.y);
+            if distance <= HOUSEHOLD_LOCAL_FOOD_RADIUS {
+                state.local_food_known = true;
+                continue;
+            }
+            let Some(tile) = world.get(known.x, known.y) else {
+                continue;
+            };
+            if !tile.terrain.is_walkable()
+                || residence_region.is_some()
+                    && world.region_id_at(known.x, known.y) != residence_region
+            {
+                continue;
+            }
+            let candidate = MigrationProposal {
+                distance,
+                amount: known.estimated_amount,
+                last_seen_tick: known.last_seen_tick,
+                proposer_id: entity.id,
+                target: (known.x, known.y),
+            };
+            if state
+                .best
+                .is_none_or(|best| migration_proposal_is_better(candidate, best))
+            {
+                state.best = Some(candidate);
+            }
+        }
+    }
+
+    for household in households
+        .iter_mut()
+        .filter(|household| household.is_active())
+    {
+        let Some(state) = states.remove(&household.id) else {
+            continue;
+        };
+        let required = state.members * u32::from(super::config::FOOD_CONSUMED_PER_MEAL);
+        let cooldown_ready = household.migration.is_none_or(|migration| {
+            migration.completed_tick.is_some_and(|completed| {
+                tick >= completed.saturating_add(HOUSEHOLD_MIGRATION_COOLDOWN_TICKS)
+            })
+        });
+        if state.members == 0 || state.food >= required || state.local_food_known || !cooldown_ready
+        {
+            continue;
+        }
+        if let Some(proposal) = state.best {
+            household.migration = Some(HouseholdMigration {
+                started_tick: tick,
+                proposer_id: proposal.proposer_id,
+                target_x: proposal.target.0,
+                target_y: proposal.target.1,
+                completed_tick: None,
+            });
+        }
+    }
+}
+
+fn migration_proposal_is_better(candidate: MigrationProposal, best: MigrationProposal) -> bool {
+    candidate.distance < best.distance
+        || candidate.distance == best.distance
+            && (candidate.amount > best.amount
+                || candidate.amount == best.amount
+                    && (candidate.last_seen_tick > best.last_seen_tick
+                        || candidate.last_seen_tick == best.last_seen_tick
+                            && (candidate.proposer_id < best.proposer_id
+                                || candidate.proposer_id == best.proposer_id
+                                    && candidate.target < best.target)))
+}
+
+pub(super) fn settle_completed_migrations(
+    entities: &[Entity],
+    households: &mut [Household],
+    tick: u64,
+) {
+    let targets: HashMap<u32, (u32, u32)> = households
+        .iter()
+        .filter_map(|household| {
+            household
+                .active_migration_target()
+                .map(|target| (household.id, target))
+        })
+        .collect();
+    let mut arrivals: HashMap<u32, (u32, bool)> = HashMap::new();
+    for entity in entities {
+        let Some(household_id) = entity.household_id else {
+            continue;
+        };
+        let Some(&target) = targets.get(&household_id) else {
+            continue;
+        };
+        let entry = arrivals.entry(household_id).or_insert((0, true));
+        entry.0 += 1;
+        entry.1 &= entity.x.abs_diff(target.0) + entity.y.abs_diff(target.1)
+            <= HOUSEHOLD_MIGRATION_ARRIVAL_RADIUS;
+    }
+    for household in households {
+        if arrivals
+            .get(&household.id)
+            .is_some_and(|(members, arrived)| *members > 0 && *arrived)
+        {
+            if let Some(migration) = household
+                .migration
+                .as_mut()
+                .filter(|migration| migration.completed_tick.is_none())
+            {
+                household.residence_x = migration.target_x;
+                household.residence_y = migration.target_y;
+                migration.completed_tick = Some(tick);
+            }
+        }
     }
 }
 
@@ -432,6 +636,7 @@ pub(super) fn form_for_partnership(
         formed_tick: tick,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x,
         residence_y,
         storage: Inventory::new(DEFAULT_HOUSEHOLD_STORAGE_CAPACITY),

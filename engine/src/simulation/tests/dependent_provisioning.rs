@@ -22,6 +22,7 @@ fn household(food: u16) -> Household {
         formed_tick: 0,
         dissolved_tick: None,
         inheritance: None,
+        migration: None,
         residence_x: 0,
         residence_y: 0,
         storage,

@@ -9,6 +9,7 @@ fn household(id: u32, formed_tick: u64, dissolved_tick: Option<u64>, capacity: u
         formed_tick,
         dissolved_tick,
         inheritance: None,
+        migration: None,
         residence_x: 0,
         residence_y: 0,
         storage: Inventory::new(capacity),

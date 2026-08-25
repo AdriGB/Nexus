@@ -47,7 +47,7 @@ pub(in crate::simulation) use self::relationships::{
 pub(in crate::simulation) use self::social::personality_compatibility;
 pub(in crate::simulation) use self::social::SocialInteraction;
 
-use super::entity::Entity;
+use super::entity::{Entity, LifeStage};
 use super::inventory::ItemKind;
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use crate::pathfinding::PathfindingWorkspace;
@@ -58,6 +58,7 @@ pub(crate) const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct HouseholdAutonomyContext {
     pub residence: (u32, u32),
+    pub migration_target: Option<(u32, u32)>,
     pub storage_remaining_capacity: u16,
     pub storage_food_amount: u16,
 }
@@ -131,6 +132,28 @@ pub(super) fn update_entity(
         entity.path_index = 0;
         entity.action_tick = 0;
     }
+    let migration_target = household_context.and_then(|context| context.migration_target);
+    let stage = LifeStage::from_age_ticks(entity.age_ticks);
+    let higher_priority_goal = provisioning_goal.is_some()
+        || entity.mind.current_goal == Some(Goal::ProtectDependent)
+        || entity.hunger >= URGENT_HUNGER_THRESHOLD
+            && matches!(
+                entity.mind.current_goal,
+                Some(Goal::Eat | Goal::AcquireResource)
+            );
+    if migration_target.is_some()
+        && matches!(
+            stage,
+            LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elder
+        )
+        && !higher_priority_goal
+        && entity.mind.current_goal != Some(Goal::MigrateHousehold)
+    {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
 
     let should_interrupt = entity.hunger >= URGENT_HUNGER_THRESHOLD
         && !matches!(
@@ -178,6 +201,7 @@ pub(super) fn update_entity(
                 household_food_available,
                 dependent_food_need,
                 dependent_protection_target,
+                migration_target,
             },
         );
         decision::plan_goal(

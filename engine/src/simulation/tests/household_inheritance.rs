@@ -12,6 +12,7 @@ fn household(id: u32, active: bool, capacity: u16) -> Household {
         formed_tick: 0,
         dissolved_tick: (!active).then_some(7),
         inheritance: None,
+        migration: None,
         residence_x: id,
         residence_y: id,
         storage: Inventory::new(capacity),

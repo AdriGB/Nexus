@@ -23,6 +23,7 @@ pub enum Goal {
     AcquireResource,
     Explore,
     Follow,
+    MigrateHousehold,
     ProtectDependent,
     Rest,
     Socialize,
@@ -36,6 +37,7 @@ impl Goal {
             Self::AcquireResource => "Acquire Resource",
             Self::Explore => "Explore",
             Self::Follow => "Follow",
+            Self::MigrateHousehold => "Migrate Household",
             Self::ProtectDependent => "Protect Dependent",
             Self::Rest => "Rest",
             Self::Socialize => "Socialize",
@@ -409,6 +411,7 @@ pub enum DecisionReason {
     DependentFollowsCaregiver,
     DependentProvisioning,
     DependentProtection,
+    HouseholdMigration,
 }
 
 impl DecisionReason {
@@ -420,6 +423,7 @@ impl DecisionReason {
             Self::DependentFollowsCaregiver => "dependent_follows_caregiver",
             Self::DependentProvisioning => "dependent_provisioning",
             Self::DependentProtection => "dependent_protection",
+            Self::HouseholdMigration => "household_migration",
         }
     }
 }
