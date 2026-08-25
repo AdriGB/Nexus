@@ -9,6 +9,8 @@ const FAILED_TARGET_RETRY_TICKS: u64 = 120;
 pub(super) const KNOWLEDGE_CHUNK_SIZE: u32 = 8;
 pub(super) const FAILED_EXPLORATION_RETRY_TICKS: u64 = 240;
 pub(in crate::simulation) const URGENT_HUNGER_THRESHOLD: f32 = 85.0;
+pub(in crate::simulation) const GRIEF_MIN_DURATION_TICKS: u64 = 2 * TICKS_PER_DAY;
+pub(in crate::simulation) const GRIEF_MAX_DURATION_TICKS: u64 = 14 * TICKS_PER_DAY;
 
 /// Ticks required to complete a gathering action.
 pub(crate) const GATHER_DURATION_TICKS: u32 = 10;
@@ -23,6 +25,7 @@ pub enum Goal {
     AcquireResource,
     Explore,
     Follow,
+    Grieve,
     MigrateHousehold,
     ProtectDependent,
     Rest,
@@ -37,6 +40,7 @@ impl Goal {
             Self::AcquireResource => "Acquire Resource",
             Self::Explore => "Explore",
             Self::Follow => "Follow",
+            Self::Grieve => "Grieve",
             Self::MigrateHousehold => "Migrate Household",
             Self::ProtectDependent => "Protect Dependent",
             Self::Rest => "Rest",
@@ -90,8 +94,7 @@ impl Action {
         }
     }
 
-    #[cfg(test)]
-    pub fn target_entity_id(self) -> Option<u32> {
+    pub(in crate::simulation) fn target_entity_id(self) -> Option<u32> {
         match self {
             Self::ApproachEntity(id) | Self::Interact(id) | Self::ShareFood(id) => Some(id),
             _ => None,
@@ -188,6 +191,7 @@ pub struct Memory {
     pub(super) known_chunks: HashSet<u32>,
     failed_exploration: Vec<FailedExploration>,
     pub known_entities: Vec<KnownEntity>,
+    pub known_dead_entities: Vec<u32>,
 }
 
 /// Moves an affinity value toward zero by at most `amount`, never
@@ -203,6 +207,20 @@ fn move_toward_zero(value: i16, amount: i16) -> i16 {
 }
 
 impl Memory {
+    pub(in crate::simulation) fn mark_entity_dead(&mut self, entity_id: u32) -> bool {
+        match self.known_dead_entities.binary_search(&entity_id) {
+            Ok(_) => false,
+            Err(index) => {
+                self.known_dead_entities.insert(index, entity_id);
+                true
+            }
+        }
+    }
+
+    pub fn knows_entity_dead(&self, entity_id: u32) -> bool {
+        self.known_dead_entities.binary_search(&entity_id).is_ok()
+    }
+
     /// Slowly cools relationship affinity toward neutral for relationships
     /// with no recent interaction.
     ///
@@ -216,6 +234,9 @@ impl Memory {
     ) -> Vec<AffinityChangeRecord> {
         let mut changes = Vec::new();
         for known in &mut self.known_entities {
+            if self.known_dead_entities.binary_search(&known.id).is_ok() {
+                continue;
+            }
             if known.affinity == 0 {
                 continue;
             }
@@ -438,6 +459,25 @@ pub struct DecisionExplanation {
     pub reason: DecisionReason,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GriefState {
+    pub deceased_id: u32,
+    pub started_tick: u64,
+    pub ends_tick: u64,
+    pub intensity: u8,
+}
+
+impl GriefState {
+    pub fn pressure(self, tick: u64) -> f32 {
+        let total = self.ends_tick.saturating_sub(self.started_tick);
+        if total == 0 || tick >= self.ends_tick {
+            return 0.0;
+        }
+        let remaining = self.ends_tick.saturating_sub(tick);
+        (f32::from(self.intensity) / 100.0 * remaining as f32 / total as f32).clamp(0.0, 1.0)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Mind {
     pub perception_radius: u32,
@@ -449,6 +489,7 @@ pub struct Mind {
     pub utility_scores: UtilityScores,
     pub decision_explanation: Option<DecisionExplanation>,
     pub visible_entities: Vec<u32>,
+    pub grief: Vec<GriefState>,
 }
 
 impl Default for Mind {
@@ -463,11 +504,60 @@ impl Default for Mind {
             utility_scores: UtilityScores::default(),
             decision_explanation: None,
             visible_entities: Vec::new(),
+            grief: Vec::new(),
         }
     }
 }
 
 impl Mind {
+    pub(in crate::simulation) fn add_grief(&mut self, state: GriefState) -> bool {
+        match self
+            .grief
+            .binary_search_by_key(&state.deceased_id, |grief| grief.deceased_id)
+        {
+            Ok(_) => false,
+            Err(index) => {
+                self.grief.insert(index, state);
+                true
+            }
+        }
+    }
+
+    pub(in crate::simulation) fn prune_expired_grief(&mut self, tick: u64) {
+        self.grief.retain(|grief| tick < grief.ends_tick);
+    }
+
+    pub fn grief_pressure(&self, tick: u64) -> f32 {
+        self.grief
+            .iter()
+            .map(|grief| (grief.pressure(tick), grief.deceased_id))
+            .max_by(|left, right| {
+                left.0
+                    .total_cmp(&right.0)
+                    .then_with(|| right.1.cmp(&left.1))
+            })
+            .map_or(0.0, |grief| grief.0)
+    }
+
+    pub(in crate::simulation) fn invalidate_known_dead_target_plan(&mut self) -> bool {
+        if !matches!(
+            self.current_goal,
+            Some(Goal::Socialize | Goal::ShareFood | Goal::Follow | Goal::ProtectDependent)
+        ) {
+            return false;
+        }
+        let invalid = self
+            .current_plan
+            .iter()
+            .skip(self.plan_index)
+            .filter_map(|action| action.target_entity_id())
+            .any(|target_id| self.memory.knows_entity_dead(target_id));
+        if invalid {
+            self.clear_goal();
+        }
+        invalid
+    }
+
     pub fn current_action(&self) -> Option<Action> {
         self.current_plan.get(self.plan_index).copied()
     }

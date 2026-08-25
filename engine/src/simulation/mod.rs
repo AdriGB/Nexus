@@ -4,6 +4,7 @@ mod dependents;
 mod entity;
 mod events;
 mod genealogy;
+mod grief;
 mod households;
 mod inventory;
 mod kinship;
@@ -50,6 +51,7 @@ pub(super) struct DeathContext {
     pub entity_id: u32,
     pub household_id: Option<u32>,
     pub partner_id: Option<u32>,
+    pub caregiver_id: Option<u32>,
 }
 
 pub const INITIAL_POPULATION: u32 = 10;
@@ -1052,6 +1054,7 @@ impl Simulation {
                         entity_id: entity.id,
                         household_id: entity.household_id,
                         partner_id: entity.partner_id,
+                        caregiver_id: entity.caregiver_id,
                     },
                     entity.x,
                     entity.y,

@@ -214,6 +214,7 @@ pub(super) fn best_generic_remembered_social_score(
     mind.memory
         .known_entities
         .iter()
+        .filter(|known| !mind.memory.knows_entity_dead(known.id))
         .filter(|known| mind.visible_entities.binary_search(&known.id).is_err())
         .filter_map(|known| {
             remembered_social_score_with_bonus(known, tick, origin, personality, 1.0, 0)
@@ -233,6 +234,7 @@ pub(super) fn best_relationship_aware_remembered_score(
         .memory
         .known_entities
         .iter()
+        .filter(|known| !entity.mind.memory.knows_entity_dead(known.id))
         .filter(|known| {
             entity
                 .mind
@@ -304,6 +306,10 @@ fn select_social_target_with_identity(
 
     for known in &mind.memory.known_entities {
         if known.id == actor.id {
+            continue;
+        }
+
+        if mind.memory.knows_entity_dead(known.id) {
             continue;
         }
 

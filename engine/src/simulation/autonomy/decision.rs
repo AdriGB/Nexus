@@ -420,6 +420,11 @@ pub(super) fn evaluate_goals_with_household(
     } else {
         hunger_ratio * (0.7 + 0.3 * acquire_resource_confidence)
     };
+    let grief = if hunger >= URGENT_HUNGER_THRESHOLD {
+        0.0
+    } else {
+        mind.grief_pressure(tick)
+    };
 
     mind.utility_scores = super::mind::UtilityScores {
         eat: if has_food_in_inventory {
@@ -437,6 +442,7 @@ pub(super) fn evaluate_goals_with_household(
     };
 
     let scores = [
+        (grief, Goal::Grieve),
         (mind.utility_scores.eat, Goal::Eat),
         (mind.utility_scores.acquire_resource, Goal::AcquireResource),
         (mind.utility_scores.explore, Goal::Explore),
@@ -791,6 +797,12 @@ pub(super) fn plan_goal(
             super::exploration::plan_exploration(entity, world, tick, pathfinding_workspace);
         }
         Goal::Follow => plan_follow(entity, world, tick, pathfinding_workspace, population),
+        Goal::Grieve => {
+            entity.path.clear();
+            entity.path_index = 0;
+            entity.mind.set_plan(Goal::Grieve, vec![Action::Wait], tick);
+            entity.activity = super::super::entity::EntityActivity::Resting;
+        }
         Goal::MigrateHousehold => {
             let target = household_context
                 .and_then(|context| context.migration_target)

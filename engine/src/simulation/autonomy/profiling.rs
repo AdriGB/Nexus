@@ -70,6 +70,7 @@ fn profiled_update_entity(
         profile,
         household_context,
     } = context;
+    entity.mind.prune_expired_grief(tick);
     let position = (entity.x, entity.y);
 
     let start = Instant::now();
@@ -102,6 +103,11 @@ fn profiled_update_entity(
 
     let start = Instant::now();
     invalidate_obsolete_food_plan(entity);
+    if entity.mind.invalidate_known_dead_target_plan() {
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
 
     let dependent_food_need =
         super::decision::dependent_food_need(entity.id, &entity.mind, population);
