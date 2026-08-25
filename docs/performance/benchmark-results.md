@@ -58,3 +58,15 @@ runs measured `baseline-1000` total mean at 33,686.65 us (+14.189944%),
 30,422.18 us (+3.124146%), and 34,560.62 us (+17.152500%) against the same
 29,500.54 us baseline. Therefore the report neither changes exit codes nor uses
 GitHub warning annotations. The future 20% and 30% policies remain separate.
+
+## Significant slowdown warnings
+
+The same `timings.total.mean.delta_percent` signal becomes a GitHub Actions
+warning only when it is strictly greater than 20%. Values from 10% through 20%
+remain informational. A warning means a potential slowdown worth attention, not
+a confirmed regression: GitHub-hosted runner noise can still contribute.
+
+Warnings are emitted once per scenario in Actions and include total mean delta,
+baseline mean, and current mean. Local runs print ordinary `WARNING:` text
+instead. Neither form changes the benchmark exit code; the future 30% gate is a
+separate policy.
