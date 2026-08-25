@@ -21,6 +21,7 @@ pub use self::mind::{Action, Goal, GriefState, Mind};
 pub(in crate::simulation) use self::mind::{
     RELATIONSHIP_DECAY_PER_DAY, RELATIONSHIP_DECAY_START_TICKS,
 };
+#[cfg(test)]
 pub use self::perception::perceive;
 pub(in crate::simulation) use self::perception::{EntityEncounter, ResourceDiscovery};
 #[cfg(test)]
@@ -41,7 +42,8 @@ pub(in crate::simulation) use self::decision::{
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(in crate::simulation) use self::mind::{GRIEF_MAX_DURATION_TICKS, GRIEF_MIN_DURATION_TICKS};
-pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
+pub(super) use self::profiling::should_profile_entity;
+pub(crate) use self::profiling::AutonomyProfile;
 pub(in crate::simulation) use self::relationships::{
     close_relationship_role_between, CloseRelationshipRole, RelationshipIdentity,
 };
@@ -53,6 +55,7 @@ use super::inventory::ItemKind;
 use super::spatial::{EntitySnapshot, SpatialGrid};
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
+use web_time::Instant;
 
 pub(crate) const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
 
@@ -62,6 +65,11 @@ pub(crate) struct HouseholdAutonomyContext {
     pub migration_target: Option<(u32, u32)>,
     pub storage_remaining_capacity: u16,
     pub storage_food_amount: u16,
+}
+
+pub(super) struct EntityUpdateContext<'a> {
+    pub household: Option<HouseholdAutonomyContext>,
+    pub profile: Option<&'a mut AutonomyProfile>,
 }
 
 pub(super) fn process_social_interactions(
@@ -92,11 +100,42 @@ pub(super) fn update_entity(
     population: &[EntitySnapshot],
     spatial_grid: &SpatialGrid,
     pathfinding_workspace: &mut PathfindingWorkspace,
-    household_context: Option<HouseholdAutonomyContext>,
+    context: EntityUpdateContext<'_>,
 ) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
+    let EntityUpdateContext {
+        household: household_context,
+        mut profile,
+    } = context;
     entity.mind.prune_expired_grief(tick);
     let position = (entity.x, entity.y);
-    let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
+
+    let start = profile.as_ref().map(|_| Instant::now());
+    perception::reconcile_resource_memory(&mut entity.mind, world, position, tick);
+    if let Some(profile) = profile.as_deref_mut() {
+        profile.memory_reconciliation_us += start
+            .expect("profile timer must exist")
+            .elapsed()
+            .as_micros() as u64;
+    }
+
+    let start = profile.as_ref().map(|_| Instant::now());
+    let (visible_count, discoveries) =
+        perception::scan_visible_resources(&mut entity.mind, entity.id, world, position, tick);
+    if let Some(profile) = profile.as_deref_mut() {
+        profile.visible_scan_us += start
+            .expect("profile timer must exist")
+            .elapsed()
+            .as_micros() as u64;
+        profile.visible_resources_seen += visible_count;
+        let known_resources = entity.mind.memory.known_resources.len() as u32;
+        profile.known_resources_total += known_resources;
+        profile.known_resources_max = profile.known_resources_max.max(known_resources);
+        profile.resource_perception_us = profile
+            .memory_reconciliation_us
+            .saturating_add(profile.visible_scan_us);
+    }
+
+    let start = profile.as_ref().map(|_| Instant::now());
     let encounters = perception::perceive_entities(
         &mut entity.mind,
         entity.id,
@@ -105,6 +144,14 @@ pub(super) fn update_entity(
         population,
         spatial_grid,
     );
+    if let Some(profile) = profile.as_deref_mut() {
+        profile.entity_perception_us += start
+            .expect("profile timer must exist")
+            .elapsed()
+            .as_micros() as u64;
+    }
+
+    let start = profile.as_ref().map(|_| Instant::now());
     decision::invalidate_obsolete_food_plan(entity);
     if entity.mind.invalidate_known_dead_target_plan() {
         entity.path.clear();
@@ -174,13 +221,26 @@ pub(super) fn update_entity(
                 .remembered_food_targets(position, tick)
                 .is_empty());
     if should_interrupt {
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.urgent_interrupts += 1;
+        }
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
         entity.action_tick = 0;
     }
+    if let Some(profile) = profile.as_deref_mut() {
+        profile.plan_validation_us += start
+            .expect("profile timer must exist")
+            .elapsed()
+            .as_micros() as u64;
+    }
 
     if entity.mind.current_action().is_none() {
+        let start = profile.as_ref().map(|_| Instant::now());
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.planned_entities += 1;
+        }
         let current_goal = entity.mind.current_goal;
         let best_visible_food_share_score =
             decision::best_optional_food_share_candidate(entity, population)
@@ -220,11 +280,24 @@ pub(super) fn update_entity(
             population,
             household_context,
         );
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.planning_us += start
+                .expect("profile timer must exist")
+                .elapsed()
+                .as_micros() as u64;
+        }
     }
 
-    (
-        action::execute_current_action(entity, world, tick, population, pathfinding_workspace),
-        discoveries,
-        encounters,
-    )
+    let start = profile.as_ref().map(|_| Instant::now());
+    let outcome =
+        action::execute_current_action(entity, world, tick, population, pathfinding_workspace);
+    if let Some(profile) = profile {
+        profile.action_us += start
+            .expect("profile timer must exist")
+            .elapsed()
+            .as_micros() as u64;
+        profile.sampled_entities += 1;
+    }
+
+    (outcome, discoveries, encounters)
 }

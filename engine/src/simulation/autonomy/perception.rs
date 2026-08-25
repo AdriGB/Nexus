@@ -135,6 +135,7 @@ fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) -> bool {
     }
 }
 
+#[cfg(test)]
 pub fn perceive(
     mind: &mut Mind,
     entity_id: u32,

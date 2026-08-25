@@ -4,9 +4,7 @@
 //! domain modules own their rules. Keeping orchestration here makes additions
 //! to the tick lifecycle visible without turning `Simulation` into a scheduler.
 
-use super::{
-    autonomy, dependents, grief, households, physiology, AutonomyProfile, PhaseProfile, Simulation,
-};
+use super::{dependents, grief, households, physiology, AutonomyProfile, PhaseProfile, Simulation};
 use crate::world::Grid;
 use web_time::Instant;
 
@@ -202,37 +200,10 @@ pub(super) fn run_profiled_autonomy_step(
     );
     simulation.rebuild_population_index(world);
 
-    let tick = simulation.tick;
-    let population_cache = &simulation.population_cache;
-    let spatial_grid = &simulation.spatial_grid;
-    let pathfinding_workspace = &mut simulation.pathfinding_workspace;
-    let household_contexts: Vec<_> = simulation
-        .entities
-        .iter()
-        .map(|entity| {
-            entity.household_id.and_then(|household_id| {
-                simulation
-                    .households
-                    .binary_search_by_key(&household_id, |household| household.id)
-                    .ok()
-                    .filter(|index| simulation.households[*index].is_active())
-                    .map(|index| {
-                        let household = &simulation.households[index];
-                        autonomy::HouseholdAutonomyContext {
-                            residence: (household.residence_x, household.residence_y),
-                            migration_target: household.active_migration_target(),
-                            storage_remaining_capacity: household.storage.remaining_capacity(),
-                            storage_food_amount: household.storage.amount(super::ItemKind::Food),
-                        }
-                    })
-            })
-        })
-        .collect();
-
+    let mut profile = AutonomyProfile::default();
     let (
         consumed_this_tick,
         world_changed,
-        profile,
         consumer_ids,
         discoveries,
         encounters,
@@ -240,15 +211,7 @@ pub(super) fn run_profiled_autonomy_step(
         food_share_attempts,
         household_deposit_attempts,
         household_withdraw_attempts,
-    ) = autonomy::profile_autonomy(
-        &mut simulation.entities,
-        world,
-        tick,
-        population_cache,
-        spatial_grid,
-        pathfinding_workspace,
-        &household_contexts,
-    );
+    ) = simulation.run_autonomy(world, Some(&mut profile));
     simulation.record_resource_discoveries(discoveries);
     simulation.record_entity_encounters(encounters);
     simulation.record_food_consumptions(&consumer_ids);
