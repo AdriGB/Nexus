@@ -1396,6 +1396,126 @@ impl Simulation {
             .saturating_add(consumers.len() as u64)
     }
 
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_set_entity_positions(
+        &mut self,
+        world: &Grid,
+        positions: &[(u32, u32)],
+    ) -> Result<(), String> {
+        if positions.len() != self.entities.len() {
+            return Err(format!(
+                "received {} positions for {} entities",
+                positions.len(),
+                self.entities.len()
+            ));
+        }
+        let unique: HashSet<_> = positions.iter().copied().collect();
+        if unique.len() != positions.len()
+            || positions.iter().any(|&(x, y)| {
+                !world
+                    .get(x, y)
+                    .is_some_and(|tile| tile.terrain.is_walkable())
+            })
+        {
+            return Err("benchmark entity positions must be unique and walkable".to_string());
+        }
+        for (entity, &(x, y)) in self.entities.iter_mut().zip(positions) {
+            entity.x = x;
+            entity.y = y;
+            entity.path.clear();
+            entity.path_index = 0;
+            entity.activity = EntityActivity::Idle;
+            entity.mind.current_goal = None;
+            entity.mind.current_plan.clear();
+            entity.mind.plan_index = 0;
+            entity.mind.visible_entities.clear();
+        }
+        self.benchmark_rebuild_population_index(world);
+        Ok(())
+    }
+
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_seed_households(
+        &mut self,
+        world: &Grid,
+        pair_count: usize,
+        food_per_household: u16,
+    ) -> Result<(), String> {
+        households::benchmark_seed_households(
+            &mut self.entities,
+            &mut self.households,
+            &mut self.next_household_id,
+            pair_count,
+            food_per_household,
+            self.tick,
+        )?;
+        self.benchmark_household_invariants(world)
+    }
+
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_household_invariants(&self, world: &Grid) -> Result<(), String> {
+        let active_ids: HashSet<_> = self
+            .households
+            .iter()
+            .filter(|household| household.is_active())
+            .map(|household| household.id)
+            .collect();
+        if !self
+            .households
+            .windows(2)
+            .all(|pair| pair[0].id < pair[1].id)
+            || self
+                .households
+                .last()
+                .is_some_and(|household| self.next_household_id <= household.id)
+        {
+            return Err("benchmark household IDs are not ordered and monotonic".to_string());
+        }
+        for household in self
+            .households
+            .iter()
+            .filter(|household| household.is_active())
+        {
+            if !world
+                .get(household.residence_x, household.residence_y)
+                .is_some_and(|tile| tile.terrain.is_walkable())
+            {
+                return Err(format!(
+                    "household {} has an invalid residence",
+                    household.id
+                ));
+            }
+        }
+        for entity in &self.entities {
+            if entity
+                .household_id
+                .is_some_and(|household_id| !active_ids.contains(&household_id))
+            {
+                return Err(format!(
+                    "entity {} has invalid household membership",
+                    entity.id
+                ));
+            }
+            if let Some(partner_id) = entity.partner_id {
+                let partner = self
+                    .entities
+                    .binary_search_by_key(&partner_id, |candidate| candidate.id)
+                    .ok()
+                    .map(|index| &self.entities[index])
+                    .ok_or_else(|| format!("entity {} has a missing partner", entity.id))?;
+                if partner.partner_id != Some(entity.id)
+                    || partner.household_id != entity.household_id
+                {
+                    return Err(format!(
+                        "entity {} has an asymmetric partnership",
+                        entity.id
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn record_resource_changes(&mut self, consumed_this_tick: u64, world_changed: bool) {
         if consumed_this_tick > 0 {
             self.food_consumed = self.food_consumed.saturating_add(consumed_this_tick);
