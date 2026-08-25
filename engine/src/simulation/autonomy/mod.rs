@@ -16,7 +16,7 @@ pub(in crate::simulation) use self::mind::AffinityChangeRecord;
 pub use self::mind::KnownEntity;
 #[cfg(test)]
 pub use self::mind::KnownResource;
-pub use self::mind::{Action, Goal, Mind};
+pub use self::mind::{Action, Goal, GriefState, Mind};
 #[cfg(test)]
 pub(in crate::simulation) use self::mind::{
     RELATIONSHIP_DECAY_PER_DAY, RELATIONSHIP_DECAY_START_TICKS,
@@ -40,6 +40,7 @@ pub(in crate::simulation) use self::decision::{
 };
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
+pub(in crate::simulation) use self::mind::{GRIEF_MAX_DURATION_TICKS, GRIEF_MIN_DURATION_TICKS};
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
 pub(in crate::simulation) use self::relationships::{
     close_relationship_role_between, CloseRelationshipRole, RelationshipIdentity,
@@ -93,6 +94,7 @@ pub(super) fn update_entity(
     pathfinding_workspace: &mut PathfindingWorkspace,
     household_context: Option<HouseholdAutonomyContext>,
 ) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
+    entity.mind.prune_expired_grief(tick);
     let position = (entity.x, entity.y);
     let discoveries = perceive(&mut entity.mind, entity.id, world, position, tick);
     let encounters = perception::perceive_entities(
@@ -104,6 +106,11 @@ pub(super) fn update_entity(
         spatial_grid,
     );
     decision::invalidate_obsolete_food_plan(entity);
+    if entity.mind.invalidate_known_dead_target_plan() {
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
 
     let dependent_food_need = decision::dependent_food_need(entity.id, &entity.mind, population);
     let dependent_protection_target =

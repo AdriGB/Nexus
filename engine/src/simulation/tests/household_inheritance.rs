@@ -60,6 +60,7 @@ fn partner_is_first_basic_heir_and_active_household_is_preferred() {
             entity_id: 1,
             household_id: Some(1),
             partner_id: Some(2),
+            caregiver_id: None,
         }],
     );
 
@@ -96,6 +97,7 @@ fn nearest_descendant_generation_and_lower_id_break_ties() {
             entity_id: 1,
             household_id: Some(1),
             partner_id: None,
+            caregiver_id: None,
         }],
     );
     assert_eq!(households[0].inheritance.unwrap().heir_id, Some(4));
@@ -111,6 +113,7 @@ fn parent_then_sibling_are_basic_fallbacks() {
         entity_id: 1,
         household_id: Some(1),
         partner_id: None,
+        caregiver_id: None,
     }];
 
     let mut entities = vec![entity(2, 0, 0, 0.0), entity(3, 0, 0, 0.0)];
@@ -153,6 +156,7 @@ fn heir_without_household_receives_all_kinds_with_bounded_capacity() {
             entity_id: 1,
             household_id: Some(1),
             partner_id: None,
+            caregiver_id: None,
         }],
     );
 
@@ -182,6 +186,7 @@ fn no_eligible_relative_records_no_heir_and_preserves_estate() {
             entity_id: 9,
             household_id: Some(1),
             partner_id: None,
+            caregiver_id: None,
         }],
     );
     assert_eq!(
@@ -218,6 +223,7 @@ fn inheritance_is_processed_once_and_record_is_not_overwritten() {
         entity_id: 1,
         household_id: Some(1),
         partner_id: None,
+        caregiver_id: None,
     }];
     settle(&mut entities, &mut households, &genealogy, &first);
     let record = households[0].inheritance;
@@ -235,11 +241,13 @@ fn same_tick_deaths_select_deterministically_by_class_then_decedent() {
             entity_id: 2,
             household_id: Some(1),
             partner_id: Some(4),
+            caregiver_id: None,
         },
         DeathContext {
             entity_id: 1,
             household_id: Some(1),
             partner_id: Some(3),
+            caregiver_id: None,
         },
     ];
     let mut households = vec![household(1, false, 200)];

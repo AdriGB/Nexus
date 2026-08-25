@@ -5,7 +5,7 @@
 //! to the tick lifecycle visible without turning `Simulation` into a scheduler.
 
 use super::{
-    autonomy, dependents, households, physiology, AutonomyProfile, PhaseProfile, Simulation,
+    autonomy, dependents, grief, households, physiology, AutonomyProfile, PhaseProfile, Simulation,
 };
 use crate::world::Grid;
 use web_time::Instant;
@@ -25,6 +25,12 @@ pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
     physiology::resolve_starvation(&mut simulation.entities);
     simulation.record_resource_changes(consumed_this_tick, world_changed);
     let deaths = simulation.remove_dead_entities();
+    grief::process_witnessed_deaths(
+        &mut simulation.entities,
+        &simulation.genealogy,
+        &deaths,
+        simulation.tick,
+    );
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
@@ -113,6 +119,12 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     let remove_dead_us = start.elapsed().as_micros() as u64;
 
     let start = Instant::now();
+    grief::process_witnessed_deaths(
+        &mut simulation.entities,
+        &simulation.genealogy,
+        &deaths,
+        simulation.tick,
+    );
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
@@ -236,6 +248,12 @@ pub(super) fn run_profiled_autonomy_step(
     physiology::resolve_starvation(&mut simulation.entities);
     simulation.record_resource_changes(consumed_this_tick, world_changed);
     let deaths = simulation.remove_dead_entities();
+    grief::process_witnessed_deaths(
+        &mut simulation.entities,
+        &simulation.genealogy,
+        &deaths,
+        simulation.tick,
+    );
     dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     simulation.update_pregnancies(world);
     households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);

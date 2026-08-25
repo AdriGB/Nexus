@@ -271,7 +271,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 * [x] Proteger dependientes
 * [x] Compartir según parentesco y afinidad
 * [x] Migrar junto al hogar
-* [ ] Duelo por la muerte de personas cercanas
+* [x] Duelo por la muerte de personas cercanas
 * [ ] Conflictos dentro del hogar
 
 ### Vertical de validación
