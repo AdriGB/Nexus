@@ -16,10 +16,15 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $engineRoot = Join-Path $repoRoot "engine"
+. (Join-Path $PSScriptRoot "benchmark-results.ps1")
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $OutputDir = Join-Path $repoRoot "target/nexus-bench"
 }
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
+$aggregatePath = Join-Path $OutputDir "benchmark-results.json"
+if (Test-Path -LiteralPath $aggregatePath -PathType Leaf) {
+    Remove-Item -LiteralPath $aggregatePath -Force
+}
 
 function Invoke-NativeStep {
     param(
@@ -171,6 +176,16 @@ foreach ($name in $selectedScenarios) {
         throw "Required scenario '$name' is not registered. Available scenarios: $($availableScenarios -join ', ')."
     }
     Invoke-Scenario -Runner $runner -Name $name
+}
+if ($selectedScenarios.Count -gt 0) {
+    $aggregatePath = Write-BenchmarkResults `
+        -Suite $label `
+        -ScenarioNames $selectedScenarios `
+        -OutputDir $OutputDir
+    Write-Host "Aggregate: $aggregatePath"
+}
+else {
+    Write-Host "No end-to-end scenario results to aggregate for suite '$label'."
 }
 if ($runCriterion) {
     Invoke-Criterion -Quick $quickCriterion
