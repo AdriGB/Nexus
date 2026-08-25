@@ -318,7 +318,7 @@ La auditoría viva se encuentra en
 * [x] Medir tiempo total y por fase del tick
 * [x] Contar entidades, decisiones, reevaluaciones, percepciones e interacciones
 * [x] Contar consultas espaciales, búsquedas A* y nodos explorados
-* [ ] Contar eventos y vigilar el tamaño de memorias e historial (eventos listos; memorias e historial pendientes)
+* [x] Contar eventos y vigilar el tamaño de memorias e historial
 * [ ] Informar mean, median, p95, p99 y max
 * [x] Exponer perfiles estables a través del bridge
 

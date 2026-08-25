@@ -241,6 +241,14 @@ impl RecentEventHistory {
         self.total_created
     }
 
+    pub(super) fn len(&self) -> usize {
+        self.events.len()
+    }
+
+    pub(super) fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.events.iter()
     }

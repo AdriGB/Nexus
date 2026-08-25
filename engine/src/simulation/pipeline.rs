@@ -123,6 +123,7 @@ pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -
     execute_step(simulation, world, &mut instrumentation);
     let mut profile = instrumentation.phases.finish();
     profile.work = work;
+    profile.state = simulation.state_gauges();
     profile
 }
 
@@ -287,6 +288,7 @@ pub(super) fn run_profiled_autonomy_step(
     );
 
     profile.work = work;
+    profile.state = simulation.state_gauges();
     profile
 }
 

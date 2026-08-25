@@ -137,8 +137,9 @@ pub(super) fn update_entity(
             .as_micros() as u64;
         profile.visible_resources_seen += visible_count;
         let known_resources = entity.mind.memory.known_resources.len() as u32;
-        profile.known_resources_total += known_resources;
-        profile.known_resources_max = profile.known_resources_max.max(known_resources);
+        profile.sampled_known_resources_total += known_resources;
+        profile.sampled_known_resources_max =
+            profile.sampled_known_resources_max.max(known_resources);
         profile.resource_perception_us = profile
             .memory_reconciliation_us
             .saturating_add(profile.visible_scan_us);

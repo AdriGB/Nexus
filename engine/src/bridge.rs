@@ -526,6 +526,7 @@ mod tests {
     fn phase_profile_payload_is_valid_json() {
         let profile = PhaseProfile {
             work: Default::default(),
+            state: Default::default(),
             world_maintenance_us: 1,
             physiology_us: 2,
             dependent_care_us: 3,
@@ -550,6 +551,8 @@ mod tests {
         assert_eq!(json["total_us"], 66);
         assert_eq!(json["entities_processed"], 0);
         assert_eq!(json["pathfinding_nodes_expanded"], 0);
+        assert_eq!(json["entities_alive"], 0);
+        assert_eq!(json["recent_events_capacity"], 0);
         assert!(json.get("pregnancies_us").is_none());
     }
 
@@ -557,6 +560,7 @@ mod tests {
     fn autonomy_profile_payload_is_valid_json() {
         let profile = AutonomyProfile {
             work: Default::default(),
+            state: Default::default(),
             resource_perception_us: 1000,
             entity_perception_us: 500,
             plan_validation_us: 200,
@@ -567,8 +571,8 @@ mod tests {
             urgent_interrupts: 3,
             memory_reconciliation_us: 800,
             visible_scan_us: 200,
-            known_resources_total: 15_000,
-            known_resources_max: 50,
+            sampled_known_resources_total: 15_000,
+            sampled_known_resources_max: 50,
             visible_resources_seen: 100,
             social_us: 250,
         };
@@ -578,7 +582,8 @@ mod tests {
 
         assert_eq!(json["sampled_entities"], 500);
         assert_eq!(json["planned_entities"], 87);
-        assert_eq!(json["known_resources_max"], 50);
+        assert_eq!(json["sampled_known_resources_max"], 50);
+        assert_eq!(json["known_resources_max_per_entity"], 0);
         assert_eq!(json["social_us"], 250);
         assert_eq!(json["spatial_queries"], 0);
         assert_eq!(json["events_created"], 0);

@@ -15,6 +15,17 @@ export interface SimulationBenchmark {
 }
 
 interface SimulationPhaseProfile {
+  entities_alive: number;
+  known_entities_total: number;
+  known_entities_max_per_entity: number;
+  known_resources_total: number;
+  known_resources_max_per_entity: number;
+  known_dead_entities_total: number;
+  active_grief_states: number;
+  recent_events_len: number;
+  recent_events_capacity: number;
+  households_active: number;
+  genealogy_links: number;
     entities_processed: number;
     entities_perceived: number;
     goal_evaluations: number;
@@ -41,6 +52,17 @@ interface SimulationPhaseProfile {
 }
 
 interface SimulationAutonomyProfile {
+  entities_alive: number;
+  known_entities_total: number;
+  known_entities_max_per_entity: number;
+  known_resources_total: number;
+  known_resources_max_per_entity: number;
+  known_dead_entities_total: number;
+  active_grief_states: number;
+  recent_events_len: number;
+  recent_events_capacity: number;
+  households_active: number;
+  genealogy_links: number;
     entities_processed: number;
     entities_perceived: number;
     goal_evaluations: number;
@@ -62,8 +84,8 @@ interface SimulationAutonomyProfile {
   urgent_interrupts: number;
   memory_reconciliation_us: number;
   visible_scan_us: number;
-  known_resources_total: number;
-  known_resources_max: number;
+  sampled_known_resources_total: number;
+  sampled_known_resources_max: number;
   visible_resources_seen: number;
   social_us: number;
 }
@@ -284,14 +306,14 @@ export function installPerformanceDebug(): void {
       {
         phase: "avg_known_resources",
         ms: (
-          profile.known_resources_total /
+          profile.sampled_known_resources_total /
           Math.max(profile.sampled_entities, 1)
         ).toFixed(1),
         percent: "",
       },
       {
         phase: "max_known_resources",
-        ms: String(profile.known_resources_max),
+        ms: String(profile.sampled_known_resources_max),
         percent: "",
       },
       {

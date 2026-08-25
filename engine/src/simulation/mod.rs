@@ -123,6 +123,21 @@ pub(crate) struct WorkCounters {
     pub events_created: u64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct StateGauges {
+    pub entities_alive: u64,
+    pub known_entities_total: u64,
+    pub known_entities_max_per_entity: u64,
+    pub known_resources_total: u64,
+    pub known_resources_max_per_entity: u64,
+    pub known_dead_entities_total: u64,
+    pub active_grief_states: u64,
+    pub recent_events_len: u64,
+    pub recent_events_capacity: u64,
+    pub households_active: u64,
+    pub genealogy_links: u64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PhaseProfile {
     pub world_maintenance_us: u64,
@@ -138,6 +153,7 @@ pub(crate) struct PhaseProfile {
     pub reproduction_us: u64,
     pub total_us: u64,
     pub work: WorkCounters,
+    pub state: StateGauges,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +200,43 @@ impl Default for Simulation {
 }
 
 impl Simulation {
+    fn state_gauges(&self) -> StateGauges {
+        let mut gauges = StateGauges {
+            entities_alive: self.entities.len() as u64,
+            recent_events_len: self.recent_events.len() as u64,
+            recent_events_capacity: self.recent_events.capacity() as u64,
+            households_active: self
+                .households
+                .iter()
+                .filter(|household| household.is_active())
+                .count() as u64,
+            genealogy_links: self
+                .genealogy
+                .records()
+                .iter()
+                .map(|record| {
+                    u64::from(record.mother_id.is_some()) + u64::from(record.father_id.is_some())
+                })
+                .sum(),
+            ..StateGauges::default()
+        };
+
+        for entity in &self.entities {
+            let known_entities = entity.mind.memory.known_entities.len() as u64;
+            let known_resources = entity.mind.memory.known_resources.len() as u64;
+            gauges.known_entities_total += known_entities;
+            gauges.known_entities_max_per_entity =
+                gauges.known_entities_max_per_entity.max(known_entities);
+            gauges.known_resources_total += known_resources;
+            gauges.known_resources_max_per_entity =
+                gauges.known_resources_max_per_entity.max(known_resources);
+            gauges.known_dead_entities_total += entity.mind.memory.known_dead_entities.len() as u64;
+            gauges.active_grief_states += entity.mind.grief.len() as u64;
+        }
+
+        gauges
+    }
+
     pub fn with_population(seed: u64, world: &Grid, count: u32) -> Self {
         let mut simulation = Self {
             seed,

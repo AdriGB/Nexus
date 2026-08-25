@@ -1,7 +1,42 @@
 use serde::Serialize;
 
 use super::to_json;
-use crate::simulation::{AutonomyProfile, PhaseProfile, PopulationStats, WorkCounters};
+use crate::simulation::{
+    AutonomyProfile, PhaseProfile, PopulationStats, StateGauges, WorkCounters,
+};
+
+#[derive(Serialize)]
+struct StateGaugesDto {
+    entities_alive: u64,
+    known_entities_total: u64,
+    known_entities_max_per_entity: u64,
+    known_resources_total: u64,
+    known_resources_max_per_entity: u64,
+    known_dead_entities_total: u64,
+    active_grief_states: u64,
+    recent_events_len: u64,
+    recent_events_capacity: u64,
+    households_active: u64,
+    genealogy_links: u64,
+}
+
+impl From<&StateGauges> for StateGaugesDto {
+    fn from(state: &StateGauges) -> Self {
+        Self {
+            entities_alive: state.entities_alive,
+            known_entities_total: state.known_entities_total,
+            known_entities_max_per_entity: state.known_entities_max_per_entity,
+            known_resources_total: state.known_resources_total,
+            known_resources_max_per_entity: state.known_resources_max_per_entity,
+            known_dead_entities_total: state.known_dead_entities_total,
+            active_grief_states: state.active_grief_states,
+            recent_events_len: state.recent_events_len,
+            recent_events_capacity: state.recent_events_capacity,
+            households_active: state.households_active,
+            genealogy_links: state.genealogy_links,
+        }
+    }
+}
 
 #[derive(Serialize)]
 struct WorkCountersDto {
@@ -40,6 +75,8 @@ impl From<&WorkCounters> for WorkCountersDto {
 struct PhaseProfileDto {
     #[serde(flatten)]
     work: WorkCountersDto,
+    #[serde(flatten)]
+    state: StateGaugesDto,
     world_maintenance_us: u64,
     physiology_us: u64,
     dependent_care_us: u64,
@@ -57,6 +94,7 @@ struct PhaseProfileDto {
 pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
     to_json(&PhaseProfileDto {
         work: (&profile.work).into(),
+        state: (&profile.state).into(),
         world_maintenance_us: profile.world_maintenance_us,
         physiology_us: profile.physiology_us,
         dependent_care_us: profile.dependent_care_us,
@@ -76,6 +114,8 @@ pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
 struct AutonomyProfileDto {
     #[serde(flatten)]
     work: WorkCountersDto,
+    #[serde(flatten)]
+    state: StateGaugesDto,
     resource_perception_us: u64,
     entity_perception_us: u64,
     plan_validation_us: u64,
@@ -86,8 +126,8 @@ struct AutonomyProfileDto {
     urgent_interrupts: u32,
     memory_reconciliation_us: u64,
     visible_scan_us: u64,
-    known_resources_total: u32,
-    known_resources_max: u32,
+    sampled_known_resources_total: u32,
+    sampled_known_resources_max: u32,
     visible_resources_seen: u32,
     social_us: u64,
 }
@@ -95,6 +135,7 @@ struct AutonomyProfileDto {
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
     to_json(&AutonomyProfileDto {
         work: (&profile.work).into(),
+        state: (&profile.state).into(),
         resource_perception_us: profile.resource_perception_us,
         entity_perception_us: profile.entity_perception_us,
         plan_validation_us: profile.plan_validation_us,
@@ -105,8 +146,8 @@ pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
         urgent_interrupts: profile.urgent_interrupts,
         memory_reconciliation_us: profile.memory_reconciliation_us,
         visible_scan_us: profile.visible_scan_us,
-        known_resources_total: profile.known_resources_total,
-        known_resources_max: profile.known_resources_max,
+        sampled_known_resources_total: profile.sampled_known_resources_total,
+        sampled_known_resources_max: profile.sampled_known_resources_max,
         visible_resources_seen: profile.visible_resources_seen,
         social_us: profile.social_us,
     })
