@@ -3,6 +3,7 @@ use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::inventory::ItemKind;
 use super::super::spatial::EntitySnapshot;
 use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
+use super::relationships::{close_relationship_role, CloseRelationshipRole, RelationshipIdentity};
 use super::URGENT_HUNGER_THRESHOLD;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
@@ -17,7 +18,7 @@ pub(in crate::simulation) struct DecisionContext {
     pub tick: u64,
     pub origin: (u32, u32),
     pub food_in_inventory: u16,
-    pub visible_food_need: f32,
+    pub best_visible_food_share_score: Option<f32>,
     pub best_remembered_social_score: Option<i32>,
 }
 
@@ -34,6 +35,86 @@ pub(super) enum DependentFoodNeed {
     None,
     Infant,
     Child,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct FoodShareCandidate {
+    pub target_id: u32,
+    pub position: (u32, u32),
+    pub score: f32,
+    pub role: CloseRelationshipRole,
+    pub hunger: f32,
+}
+
+fn food_share_relationship_bonus(role: CloseRelationshipRole) -> f32 {
+    match role {
+        CloseRelationshipRole::CurrentPartner => 0.25,
+        CloseRelationshipRole::ParentChild => 0.20,
+        CloseRelationshipRole::Sibling => 0.12,
+        CloseRelationshipRole::Other => 0.0,
+    }
+}
+
+pub(super) fn best_optional_food_share_candidate(
+    actor: &Entity,
+    population: &[EntitySnapshot],
+) -> Option<FoodShareCandidate> {
+    let identity = RelationshipIdentity::from_entity(actor);
+    let mut best = None;
+
+    for &target_id in &actor.mind.visible_entities {
+        let Ok(index) = population.binary_search_by_key(&target_id, |snapshot| snapshot.id) else {
+            continue;
+        };
+        let target = &population[index];
+        if target.id == actor.id
+            || target.hunger < FOOD_SEARCH_THRESHOLD
+            || target.caregiver_id == Some(actor.id)
+        {
+            continue;
+        }
+        let Ok(known_index) = actor
+            .mind
+            .memory
+            .known_entities
+            .binary_search_by_key(&target.id, |known| known.id)
+        else {
+            continue;
+        };
+        let known = &actor.mind.memory.known_entities[known_index];
+        if known.affinity < -200 {
+            continue;
+        }
+
+        let role = close_relationship_role(identity, target);
+        let need_factor = (target.hunger / MAX_HUNGER).clamp(0.0, 1.0);
+        let affinity_factor = ((f32::from(known.affinity) + 1_000.0) / 2_000.0).clamp(0.0, 1.0);
+        let candidate = FoodShareCandidate {
+            target_id,
+            position: (target.x, target.y),
+            score: need_factor * (0.65 + 0.35 * affinity_factor)
+                + food_share_relationship_bonus(role),
+            role,
+            hunger: target.hunger,
+        };
+        if best.is_none_or(|current| food_share_candidate_is_better(candidate, current)) {
+            best = Some(candidate);
+        }
+    }
+    best
+}
+
+fn food_share_candidate_is_better(
+    candidate: FoodShareCandidate,
+    current: FoodShareCandidate,
+) -> bool {
+    candidate.score.total_cmp(&current.score).is_gt()
+        || candidate.score.total_cmp(&current.score).is_eq()
+            && (candidate.role < current.role
+                || candidate.role == current.role
+                    && (candidate.hunger.total_cmp(&current.hunger).is_gt()
+                        || candidate.hunger.total_cmp(&current.hunger).is_eq()
+                            && candidate.target_id < current.target_id))
 }
 
 impl DependentFoodNeed {
@@ -156,7 +237,7 @@ pub(super) fn evaluate_goals_with_household(
         tick,
         origin,
         food_in_inventory,
-        visible_food_need,
+        best_visible_food_share_score,
         best_remembered_social_score,
     } = context;
     let stage = LifeStage::from_age_ticks(age_ticks);
@@ -306,11 +387,11 @@ pub(super) fn evaluate_goals_with_household(
     let share_food = {
         let has_surplus_food = food_in_inventory >= 20; // At least 2 meals worth
 
-        if visible_food_need < FOOD_SEARCH_THRESHOLD / MAX_HUNGER || !has_surplus_food {
+        if !has_surplus_food {
             0.0
         } else {
             let sated_factor = (1.0 - hunger_ratio) * 0.7 + 0.3;
-            sated_factor * visible_food_need
+            best_visible_food_share_score.map_or(0.0, |score| sated_factor * score)
         }
     };
 
@@ -534,44 +615,7 @@ fn plan_share_food(
         return;
     }
 
-    // Prefer visible entities with greater need and stronger non-hostile affinity.
-    let mut best_target: Option<(f32, u32, (u32, u32))> = None;
-
-    for &visible_id in &entity.mind.visible_entities {
-        if let Some(known) = entity
-            .mind
-            .memory
-            .known_entities
-            .iter()
-            .find(|k| k.id == visible_id)
-        {
-            if known.affinity < -200 {
-                continue;
-            }
-            if let Some(snapshot) = population.iter().find(|s| s.id == visible_id) {
-                if snapshot.hunger < FOOD_SEARCH_THRESHOLD {
-                    continue;
-                }
-                let target_hunger = snapshot.hunger;
-                let need_factor =
-                    (target_hunger / super::super::config::MAX_HUNGER).clamp(0.0, 1.0);
-                let affinity_factor =
-                    ((f32::from(known.affinity) + 1_000.0) / 2_000.0).clamp(0.0, 1.0);
-                let score = need_factor * affinity_factor;
-
-                let target_pos = (snapshot.x, snapshot.y);
-                match best_target {
-                    None => best_target = Some((score, visible_id, target_pos)),
-                    Some((best_score, _, _)) if score > best_score => {
-                        best_target = Some((score, visible_id, target_pos));
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    let Some((_, target_id, target_pos)) = best_target else {
+    let Some(candidate) = best_optional_food_share_candidate(entity, population) else {
         entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
         entity.activity = super::super::entity::EntityActivity::Resting;
         return;
@@ -582,8 +626,8 @@ fn plan_share_food(
         world,
         tick,
         pathfinding_workspace,
-        target_id,
-        target_pos,
+        candidate.target_id,
+        candidate.position,
     );
 }
 
@@ -813,7 +857,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 10,
-                visible_food_need: 0.0,
+                best_visible_food_share_score: None,
                 best_remembered_social_score: None,
             },
         );
@@ -846,7 +890,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
-                visible_food_need: 0.0,
+                best_visible_food_share_score: None,
                 best_remembered_social_score: None,
             },
         );
@@ -891,7 +935,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
-                visible_food_need: 0.0,
+                best_visible_food_share_score: None,
                 best_remembered_social_score: None,
             },
         );
@@ -929,7 +973,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
-                visible_food_need: 0.0,
+                best_visible_food_share_score: None,
                 best_remembered_social_score: None,
             },
         );
@@ -964,7 +1008,7 @@ mod tests {
                 tick: 0,
                 origin: (0, 0),
                 food_in_inventory: 0,
-                visible_food_need: 0.0,
+                best_visible_food_share_score: None,
                 best_remembered_social_score: None,
             },
         );

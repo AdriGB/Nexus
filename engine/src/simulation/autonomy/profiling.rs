@@ -157,7 +157,9 @@ fn profiled_update_entity(
 
         let start = Instant::now();
         let current_goal = entity.mind.current_goal;
-        let visible_food_need = super::visible_food_need(entity.id, &entity.mind, population);
+        let best_visible_food_share_score =
+            super::decision::best_optional_food_share_candidate(entity, population)
+                .map(|candidate| candidate.score);
         let best_remembered_social_score =
             super::social::best_relationship_aware_remembered_score(entity, population, tick);
         let household_food_available =
@@ -174,7 +176,7 @@ fn profiled_update_entity(
                     tick,
                     origin: position,
                     food_in_inventory: entity.inventory.amount(ItemKind::Food),
-                    visible_food_need,
+                    best_visible_food_share_score,
                     best_remembered_social_score,
                 },
                 household_food_available,

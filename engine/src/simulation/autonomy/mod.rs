@@ -4,6 +4,7 @@ mod exploration;
 mod mind;
 mod perception;
 mod profiling;
+mod relationships;
 mod social;
 
 #[cfg(test)]
@@ -40,6 +41,9 @@ pub(in crate::simulation) use self::decision::{
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
+pub(in crate::simulation) use self::relationships::{
+    close_relationship_role_between, CloseRelationshipRole, RelationshipIdentity,
+};
 pub(in crate::simulation) use self::social::personality_compatibility;
 pub(in crate::simulation) use self::social::SocialInteraction;
 
@@ -148,7 +152,9 @@ pub(super) fn update_entity(
 
     if entity.mind.current_action().is_none() {
         let current_goal = entity.mind.current_goal;
-        let visible_food_need = visible_food_need(entity.id, &entity.mind, population);
+        let best_visible_food_share_score =
+            decision::best_optional_food_share_candidate(entity, population)
+                .map(|candidate| candidate.score);
         let best_remembered_social_score =
             social::best_relationship_aware_remembered_score(entity, population, tick);
 
@@ -166,7 +172,7 @@ pub(super) fn update_entity(
                     tick,
                     origin: position,
                     food_in_inventory: entity.inventory.amount(ItemKind::Food),
-                    visible_food_need,
+                    best_visible_food_share_score,
                     best_remembered_social_score,
                 },
                 household_food_available,
@@ -190,23 +196,4 @@ pub(super) fn update_entity(
         discoveries,
         encounters,
     )
-}
-
-fn visible_food_need(entity_id: u32, mind: &Mind, population: &[EntitySnapshot]) -> f32 {
-    if population.iter().any(|snapshot| {
-        snapshot.caregiver_id == Some(entity_id)
-            && snapshot.is_child
-            && snapshot.hunger >= super::config::FOOD_SEARCH_THRESHOLD
-            && mind.visible_entities.binary_search(&snapshot.id).is_ok()
-    }) {
-        // Care responsibilities outrank personality-weighted optional goals.
-        return 2.0;
-    }
-
-    population
-        .iter()
-        .filter(|snapshot| mind.visible_entities.binary_search(&snapshot.id).is_ok())
-        .map(|snapshot| snapshot.hunger / super::config::MAX_HUNGER)
-        .max_by(f32::total_cmp)
-        .unwrap_or(0.0)
 }
