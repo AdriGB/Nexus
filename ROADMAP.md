@@ -280,49 +280,112 @@ Una pareja forma un hogar, tiene hijos, comparte recursos y atraviesa una escase
 
 ---
 
-# Phase 2.11 — Persistence and Scale
+# Phase 2.11 — Architecture, Scale and Reliability
 
-Objetivo: garantizar que la creciente complejidad continúe siendo determinista, guardable y eficiente.
+Objetivo: consolidar Nexus como una arquitectura modular, medible,
+determinista y escalable antes de introducir sistemas sociales de mayor nivel.
+Esta fase prioriza profundidad de ingeniería, no nuevas mecánicas del mundo.
 
-## Complete simulation persistence
+Regla de ejecución: refactor incremental, comportamiento idéntico y mejoras
+demostradas mediante mediciones.
 
-* [ ] Guardar el estado completo de la simulación
-* [ ] Entidades y mentes
-* [ ] Relaciones
-* [ ] Embarazos y parentescos
-* [ ] Inventarios
-* [ ] Hogares y grupos
-* [ ] Recursos modificados
-* [ ] Historial reciente
-* [ ] Versión del formato
-* [ ] Migraciones de partidas
-* [ ] Hash determinista del estado
-* [ ] Replay desde checkpoints
+## Phase 2.11.1 — Architecture audit and consolidation
 
-## Multi-rate simulation
+* [x] Documentar el mapa inicial de dependencias y propietarios de estado
+* [x] Registrar invariantes y riesgos arquitectónicos actuales
+* [ ] Detectar y eliminar accesos cruzados innecesarios a estado interno
+* [ ] Extraer gradualmente operaciones de dominio que viven en `Simulation`
+* [ ] Reducir visibilidad `pub(crate)` sin consumidores reales
+* [ ] Separar commands y queries donde clarifique los contratos
+* [ ] Revisar los límites de `autonomy`, `households` y `events`
+* [ ] Mantener `Simulation` como composition root y contenedor de estado
+* [ ] Añadir tests de arquitectura e invariantes donde sean mantenibles
 
-* [ ] Movimiento por tick
-* [ ] Percepción distribuida entre ticks
-* [ ] Reevaluación de goals solo cuando sea necesaria
-* [ ] Biología diaria cuando corresponda
-* [ ] Hogares actualizados por eventos
-* [ ] Economía diaria o semanal
-* [ ] Cultura mensual o anual
-* [ ] Procesamiento en bloques para periodos inactivos
+La auditoría viva se encuentra en
+[`docs/architecture/2.11-audit.md`](docs/architecture/2.11-audit.md).
 
-## Performance budgets
+## Phase 2.11.2 — One simulation pipeline
 
-* [ ] Profiling por sistema
-* [ ] Tiempo promedio y máximo por tick
-* [ ] Memoria por entidad
-* [ ] Número de búsquedas A* por tick
-* [ ] Presupuesto de decisiones
-* [ ] Benchmarks automatizados:
+* [ ] Unificar `run_step` y `run_profiled_step`
+* [ ] Hacer opcional la instrumentación sobre el mismo camino de ejecución
+* [ ] Mantener una sola definición del orden del tick
+* [ ] Mantener una sola definición del pipeline de autonomía
+* [ ] Nombrar y estabilizar las fases del pipeline
+* [ ] Conservar tests de paridad como defensa adicional
 
-  * [ ] 100 entidades
-  * [ ] 1.000 entidades
-  * [ ] 10.000 entidades
-* [ ] Alertas de regresión en CI
+## Phase 2.11.3 — Performance observatory
+
+* [ ] Medir tiempo total y por fase del tick
+* [ ] Contar entidades, decisiones, reevaluaciones, percepciones e interacciones
+* [ ] Contar consultas espaciales, búsquedas A* y nodos explorados
+* [ ] Contar eventos y vigilar el tamaño de memorias e historial
+* [ ] Informar mean, median, p95, p99 y max
+* [ ] Exponer perfiles estables a través del bridge
+
+## Phase 2.11.4 — Automated benchmark suite
+
+* [ ] Crear microbenchmarks de autonomía, pathfinding e índice espacial
+* [ ] Crear escenarios deterministas con seed, mundo, población y duración
+* [ ] Cubrir baseline 100, 1.000 y 10.000
+* [ ] Cubrir dense-social, scarcity, households y pathfinding-heavy
+* [ ] Añadir escenario long-run
+* [ ] Añadir `scripts/bench.ps1`
+* [ ] Ejecutar benchmarks baratos en PR y completos de forma nightly/manual
+
+## Phase 2.11.5 — Performance regression guard
+
+* [ ] Publicar `benchmark-results.json` como artifact
+* [ ] Comparar cada escenario con un baseline versionado
+* [ ] Informar regresiones superiores al 10 %
+* [ ] Marcar warning por encima del 20 %
+* [ ] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
+* [ ] Mostrar la fase y los contadores que explican cada regresión
+
+## Phase 2.11.6 — Scalability and multi-rate simulation
+
+Solo comienza después de establecer benchmarks reproducibles.
+
+* [ ] Introducir un scheduler determinista con frecuencias explícitas
+* [ ] Clasificar trabajo hot, warm, daily, weekly y monthly+
+* [ ] Convertir mantenimiento adecuado a event-driven y dirty flags
+* [ ] Evitar scans globales no justificados por mediciones
+* [ ] Distribuir percepción y decisiones entre ticks
+* [ ] Limitar pathfinding y otros trabajos mediante presupuestos por tick
+* [ ] Reutilizar caches y workspaces; eliminar allocations calientes
+* [ ] Procesar por batches y detectar entidades realmente inactivas
+* [ ] Añadir fast-forward seguro para periodos sin eventos relevantes
+
+## Phase 2.11.7 — Determinism and state integrity
+
+* [ ] Definir `SimulationStateHash` canónico y determinista
+* [ ] Crear golden scenarios con hashes conocidos
+* [ ] Verificar ejecución completa y por bloques
+* [ ] Verificar profiling activado y desactivado
+* [ ] Verificar el mismo estado lógico en debug y release
+* [ ] Detectar dependencia accidental del orden de iteración
+* [ ] Detectar fuentes de RNG no deterministas
+* [ ] Añadir replay tests
+
+## Phase 2.11.8 — Persistence
+
+* [ ] Snapshot canónico y formato versionado
+* [ ] Guardar seed, configuración, entidades y mentes
+* [ ] Guardar relaciones, genealogía, embarazos e inventarios
+* [ ] Guardar hogares, recursos, eventos recientes, contadores e IDs
+* [ ] Validar al cargar y comprobar igualdad del state hash
+* [ ] Añadir checkpoints y replay desde checkpoint
+* [ ] Preparar migraciones aunque inicialmente solo exista v1
+
+## Phase 2.11.9 — Quality sweep
+
+* [ ] Resolver warnings, dead code y TODO/FIXME vigentes
+* [ ] Revisar nombres, visibilidad, duplicación y magic numbers
+* [ ] Revisar errores silenciosos, edge cases e invariantes
+* [ ] Auditar complejidad algorítmica y allocations innecesarias
+* [ ] Revisar especialmente autonomía, relaciones, hogares y genealogía
+* [ ] Revisar consultas espaciales, pathfinding y eventos
+* [ ] Actualizar inspector, README, arquitectura, roadmap y CONTRIBUTING
+* [ ] Garantizar que scripts locales y CI ejecuten las mismas comprobaciones
 
 ### Objetivo de escala
 
@@ -647,11 +710,11 @@ Además:
 
 Aunque el roadmap sea enorme, el trabajo actual permanece muy acotado:
 
-1. `Socialize`
-2. `ApproachEntity`
-3. `Interact`
-4. Cambios deterministas de afinidad
-5. Cooldown social
-6. Relaciones influyendo en reproducción
-7. Primer `SimulationEvent`
-8. Historial de interacciones
+1. Completar la auditoría arquitectónica incremental
+2. Unificar el pipeline normal y el perfilado
+3. Estabilizar la instrumentación y los escenarios deterministas
+4. Automatizar benchmarks y establecer mediciones baseline
+5. Optimizar únicamente los hotspots demostrados
+
+`Conflictos dentro del hogar` queda pospuesto hasta que las reglas, normas y
+consecuencias sociales puedan modelarlo sin introducir una mecánica aislada.
