@@ -11,7 +11,7 @@ pub(crate) use entities::{entity_info_json, entity_relationships_json};
 pub(crate) use events::{
     entity_event_summary_json, recent_events_json, recent_interaction_events_json,
 };
-pub(crate) use households::entity_household_json;
+pub(crate) use households::{entity_household_json, household_stats_json};
 pub(crate) use kinship::{entity_family_tree_json, entity_kinship_json, entity_relationship_json};
 pub(crate) use profiles::{autonomy_profile_json, phase_profile_json, population_stats_json};
 pub(crate) use world::{region_stats_json, tile_info_json};
