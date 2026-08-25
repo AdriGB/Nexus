@@ -57,3 +57,7 @@ only its own responsibility. Avoid adding generic extension points until at
 least two concrete domains need the same abstraction.
 
 Architectural decisions that constrain future work belong in `docs/adr`.
+
+The Phase 2.11 baseline, including the current dependency map, state ownership,
+invariants, and incremental extraction order, is recorded in
+[`2.11-audit.md`](2.11-audit.md).
