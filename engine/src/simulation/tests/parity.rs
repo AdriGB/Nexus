@@ -146,6 +146,22 @@ fn profile_autonomy_step_matches_step() {
 }
 
 #[test]
+fn multi_tick_profile_run_matches_canonical_steps() {
+    let mut normal_world = grid_from_rows(&["PPPF", "PPPP"]);
+    let mut profiled_world = grid_from_rows(&["PPPF", "PPPP"]);
+    let mut normal = Simulation::with_population(42, &normal_world, 4);
+    let mut profiled = normal.clone();
+
+    for _ in 0..10 {
+        normal.step(&mut normal_world);
+    }
+    let summary = profiled.profile_run(&mut profiled_world, 10);
+
+    assert_eq!(summary.samples, 10);
+    assert_equivalent(&normal, &normal_world, &profiled, &profiled_world);
+}
+
+#[test]
 fn both_profile_modes_report_the_same_exact_work_for_a_small_tick() {
     let mut phase_world = grid_from_rows(&["PPPP"]);
     let mut autonomy_world = grid_from_rows(&["PPPP"]);

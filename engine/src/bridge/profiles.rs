@@ -2,8 +2,12 @@ use serde::Serialize;
 
 use super::to_json;
 use crate::simulation::{
-    AutonomyProfile, PhaseProfile, PopulationStats, StateGauges, WorkCounters,
+    AutonomyProfile, PerformanceSummary, PhaseProfile, PopulationStats, StateGauges, WorkCounters,
 };
+
+pub(crate) fn performance_summary_json(summary: &PerformanceSummary) -> String {
+    to_json(summary)
+}
 
 #[derive(Serialize)]
 struct StateGaugesDto {
