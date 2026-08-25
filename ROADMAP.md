@@ -330,7 +330,7 @@ La auditoría viva se encuentra en
 * [x] Cubrir dense-social, scarcity, households y pathfinding-heavy
 * [x] Añadir escenario long-run
 * [x] Añadir `scripts/bench.ps1`
-* [ ] Ejecutar benchmarks baratos en PR y completos de forma nightly/manual
+* [x] Ejecutar benchmarks baratos en PR y completos de forma nightly/manual
 
 ## Phase 2.11.5 — Performance regression guard
 

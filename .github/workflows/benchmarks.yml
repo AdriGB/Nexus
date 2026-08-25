@@ -1,0 +1,95 @@
+name: Performance Benchmarks
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Benchmark suite to run
+        required: true
+        default: full
+        type: choice
+        options:
+          - quick
+          - micro
+          - scenarios
+          - full
+
+concurrency:
+  group: performance-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  benchmark:
+    name: Benchmark suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - name: Resolve benchmark suite
+        id: suite
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $suite = "quick"
+          }
+          elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $suite = "${{ inputs.suite }}"
+          }
+          else {
+            $suite = "full"
+          }
+
+          "value=$suite" >> $env:GITHUB_OUTPUT
+
+      - name: Run benchmark suite
+        shell: pwsh
+        run: ./scripts/bench.ps1 -Suite "${{ steps.suite.outputs.value }}"
+
+      - name: Inspect scenario output
+        if: ${{ always() }}
+        id: results
+        shell: pwsh
+        run: |
+          $present = Test-Path "target/nexus-bench/*.json"
+          "present=$($present.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Upload raw scenario results
+        if: ${{ always() && steps.results.outputs.present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-benchmark-raw-results-${{ steps.suite.outputs.value }}
+          path: target/nexus-bench/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Write benchmark summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $artifact = if ("${{ steps.results.outputs.present }}" -eq "true") {
+            "uploaded"
+          }
+          else {
+            "not applicable"
+          }
+
+          @"
+          ## Performance Benchmarks
+
+          - Performance suite: ${{ steps.suite.outputs.value }}
+          - Commit: ${{ github.sha }}
+          - Scenario JSON output: $artifact
+          "@ >> $env:GITHUB_STEP_SUMMARY
