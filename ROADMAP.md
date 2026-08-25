@@ -310,7 +310,7 @@ La auditoría viva se encuentra en
 * [x] Hacer opcional la instrumentación sobre el mismo camino de ejecución
 * [x] Mantener una sola definición del orden del tick
 * [x] Mantener una sola definición del pipeline de autonomía
-* [ ] Nombrar y estabilizar las fases del pipeline
+* [x] Nombrar y estabilizar las fases del pipeline
 * [x] Conservar tests de paridad como defensa adicional
 
 ## Phase 2.11.3 — Performance observatory

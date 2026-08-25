@@ -110,14 +110,17 @@ pub(crate) struct HouseholdStats {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PhaseProfile {
+    pub world_maintenance_us: u64,
     pub physiology_us: u64,
-    pub population_index_us: u64,
+    pub dependent_care_us: u64,
+    pub households_us: u64,
+    pub spatial_index_us: u64,
     pub autonomy_us: u64,
-    pub starvation_us: u64,
-    pub resource_changes_us: u64,
-    pub remove_dead_us: u64,
-    pub pregnancies_us: u64,
-    pub conceptions_us: u64,
+    pub survival_us: u64,
+    pub mortality_us: u64,
+    pub lifecycle_us: u64,
+    pub relationships_us: u64,
+    pub reproduction_us: u64,
     pub total_us: u64,
 }
 

@@ -5,27 +5,33 @@ use crate::simulation::{AutonomyProfile, PhaseProfile, PopulationStats};
 
 #[derive(Serialize)]
 struct PhaseProfileDto {
+    world_maintenance_us: u64,
     physiology_us: u64,
-    population_index_us: u64,
+    dependent_care_us: u64,
+    households_us: u64,
+    spatial_index_us: u64,
     autonomy_us: u64,
-    starvation_us: u64,
-    resource_changes_us: u64,
-    remove_dead_us: u64,
-    pregnancies_us: u64,
-    conceptions_us: u64,
+    survival_us: u64,
+    mortality_us: u64,
+    lifecycle_us: u64,
+    relationships_us: u64,
+    reproduction_us: u64,
     total_us: u64,
 }
 
 pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
     to_json(&PhaseProfileDto {
+        world_maintenance_us: profile.world_maintenance_us,
         physiology_us: profile.physiology_us,
-        population_index_us: profile.population_index_us,
+        dependent_care_us: profile.dependent_care_us,
+        households_us: profile.households_us,
+        spatial_index_us: profile.spatial_index_us,
         autonomy_us: profile.autonomy_us,
-        starvation_us: profile.starvation_us,
-        resource_changes_us: profile.resource_changes_us,
-        remove_dead_us: profile.remove_dead_us,
-        pregnancies_us: profile.pregnancies_us,
-        conceptions_us: profile.conceptions_us,
+        survival_us: profile.survival_us,
+        mortality_us: profile.mortality_us,
+        lifecycle_us: profile.lifecycle_us,
+        relationships_us: profile.relationships_us,
+        reproduction_us: profile.reproduction_us,
         total_us: profile.total_us,
     })
 }

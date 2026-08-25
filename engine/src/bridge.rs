@@ -525,22 +525,29 @@ mod tests {
     #[test]
     fn phase_profile_payload_is_valid_json() {
         let profile = PhaseProfile {
-            physiology_us: 1,
-            population_index_us: 2,
-            autonomy_us: 3,
-            starvation_us: 4,
-            resource_changes_us: 5,
-            remove_dead_us: 6,
-            pregnancies_us: 7,
-            conceptions_us: 8,
-            total_us: 36,
+            world_maintenance_us: 1,
+            physiology_us: 2,
+            dependent_care_us: 3,
+            households_us: 4,
+            spatial_index_us: 5,
+            autonomy_us: 6,
+            survival_us: 7,
+            mortality_us: 8,
+            lifecycle_us: 9,
+            relationships_us: 10,
+            reproduction_us: 11,
+            total_us: 66,
         };
 
         let payload = phase_profile_json(&profile);
         let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
 
-        assert_eq!(json["autonomy_us"], 3);
-        assert_eq!(json["total_us"], 36);
+        assert_eq!(json["world_maintenance_us"], 1);
+        assert_eq!(json["households_us"], 4);
+        assert_eq!(json["autonomy_us"], 6);
+        assert_eq!(json["reproduction_us"], 11);
+        assert_eq!(json["total_us"], 66);
+        assert!(json.get("pregnancies_us").is_none());
     }
 
     #[test]

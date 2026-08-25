@@ -15,14 +15,17 @@ export interface SimulationBenchmark {
 }
 
 interface SimulationPhaseProfile {
+  world_maintenance_us: number;
   physiology_us: number;
-  population_index_us: number;
+  dependent_care_us: number;
+  households_us: number;
+  spatial_index_us: number;
   autonomy_us: number;
-  starvation_us: number;
-  resource_changes_us: number;
-  remove_dead_us: number;
-  pregnancies_us: number;
-  conceptions_us: number;
+  survival_us: number;
+  mortality_us: number;
+  lifecycle_us: number;
+  relationships_us: number;
+  reproduction_us: number;
   total_us: number;
 }
 
@@ -141,14 +144,17 @@ export function installPerformanceDebug(): void {
 
     const totalUs = Math.max(profile.total_us, 1);
     const measuredUs =
+      profile.world_maintenance_us +
       profile.physiology_us +
-      profile.population_index_us +
+      profile.dependent_care_us +
+      profile.households_us +
+      profile.spatial_index_us +
       profile.autonomy_us +
-      profile.starvation_us +
-      profile.resource_changes_us +
-      profile.remove_dead_us +
-      profile.pregnancies_us +
-      profile.conceptions_us;
+      profile.survival_us +
+      profile.mortality_us +
+      profile.lifecycle_us +
+      profile.relationships_us +
+      profile.reproduction_us;
     const unaccountedUs = Math.max(0, profile.total_us - measuredUs);
 
     const rows = Object.entries(profile).map(([phase, value]) => ({
