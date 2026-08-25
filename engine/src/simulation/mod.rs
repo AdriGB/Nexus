@@ -45,6 +45,7 @@ use self::time::TICKS_PER_DAY;
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use std::collections::HashSet;
+use web_time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct DeathContext {
@@ -489,7 +490,7 @@ impl Simulation {
             food_share_attempts,
             household_deposit_attempts,
             household_withdraw_attempts,
-        ) = self.run_autonomy(world);
+        ) = self.run_autonomy(world, None);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);
@@ -500,7 +501,11 @@ impl Simulation {
         (consumed, world_changed, consumer_ids)
     }
 
-    fn run_autonomy(&mut self, world: &mut Grid) -> AutonomyRunResult {
+    fn run_autonomy(
+        &mut self,
+        world: &mut Grid,
+        mut profile: Option<&mut AutonomyProfile>,
+    ) -> AutonomyRunResult {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
@@ -516,9 +521,15 @@ impl Simulation {
         let mut household_deposit_attempts = Vec::new();
         let mut household_withdraw_attempts = Vec::new();
 
-        for entity in self.entities.iter_mut().filter(|entity| {
-            entity.health > 0.0 && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
-        }) {
+        for (index, entity) in self
+            .entities
+            .iter_mut()
+            .filter(|entity| {
+                entity.health > 0.0
+                    && LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
+            })
+            .enumerate()
+        {
             let household_context = entity.household_id.and_then(|household_id| {
                 households
                     .binary_search_by_key(&household_id, |household| household.id)
@@ -541,7 +552,12 @@ impl Simulation {
                 population_cache,
                 spatial_grid,
                 pathfinding_workspace,
-                household_context,
+                autonomy::EntityUpdateContext {
+                    household: household_context,
+                    profile: profile
+                        .as_deref_mut()
+                        .filter(|_| autonomy::should_profile_entity(index)),
+                },
             );
             discoveries.extend(entity_discoveries);
             encounters.extend(entity_encounters);
@@ -561,11 +577,18 @@ impl Simulation {
             }
         }
 
+        let social_start = profile.as_ref().map(|_| Instant::now());
         let interactions = autonomy::process_social_interactions(
             &mut self.entities,
             &self.population_cache,
             self.tick,
         );
+        if let Some(profile) = profile {
+            profile.social_us += social_start
+                .expect("profile timer must exist")
+                .elapsed()
+                .as_micros() as u64;
+        }
 
         (
             consumed,

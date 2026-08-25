@@ -145,6 +145,20 @@ fn profile_autonomy_step_matches_step() {
 }
 
 #[test]
+fn unified_autonomy_preserves_profile_sampling_and_resource_breakdown() {
+    let mut world = grid_from_rows(&["PPPFPPPPPP"]);
+    let mut simulation = Simulation::with_population(42, &world, POPULATION);
+
+    let profile = simulation.profile_autonomy_step(&mut world);
+
+    assert_eq!(profile.sampled_entities, 3);
+    assert_eq!(
+        profile.resource_perception_us,
+        profile.memory_reconciliation_us + profile.visible_scan_us
+    );
+}
+
+#[test]
 fn profile_step_matches_food_sharing_relationship_effects() {
     fn sharing_simulation() -> Simulation {
         let mut giver = entity(1, 0, 0, 0.0);
