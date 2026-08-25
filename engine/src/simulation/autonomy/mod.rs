@@ -33,6 +33,10 @@ pub(in crate::simulation) use self::action::HouseholdDepositAttempt;
 pub(in crate::simulation) use self::action::HouseholdWithdrawAttempt;
 pub(in crate::simulation) use self::decision::DecisionContext;
 use self::decision::HouseholdDecisionContext;
+#[cfg(test)]
+pub(in crate::simulation) use self::decision::{
+    DEPENDENT_PROTECTION_TRIGGER_DISTANCE, DEPENDENT_REUNION_RADIUS,
+};
 pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(crate) use self::profiling::{profile_autonomy, AutonomyProfile};
@@ -97,6 +101,8 @@ pub(super) fn update_entity(
     decision::invalidate_obsolete_food_plan(entity);
 
     let dependent_food_need = decision::dependent_food_need(entity.id, &entity.mind, population);
+    let dependent_protection_target =
+        decision::dependent_protection_target(entity.id, position, &entity.mind, population);
     let provisioning_goal = (entity.hunger < URGENT_HUNGER_THRESHOLD)
         .then(|| {
             decision::dependent_provisioning_goal(
@@ -106,6 +112,16 @@ pub(super) fn update_entity(
         })
         .flatten();
     if provisioning_goal.is_some_and(|goal| entity.mind.current_goal != Some(goal)) {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
+    if provisioning_goal.is_none()
+        && dependent_protection_target.is_some()
+        && entity.hunger < URGENT_HUNGER_THRESHOLD
+        && entity.mind.current_goal != Some(Goal::ProtectDependent)
+    {
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
@@ -155,6 +171,7 @@ pub(super) fn update_entity(
                 },
                 household_food_available,
                 dependent_food_need,
+                dependent_protection_target,
             },
         );
         decision::plan_goal(

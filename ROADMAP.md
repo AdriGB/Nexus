@@ -268,7 +268,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 ## Relationship-driven behavior
 
 * [x] Buscar pareja o familiares
-* [ ] Proteger dependientes
+* [x] Proteger dependientes
 * [ ] Compartir según parentesco y afinidad
 * [ ] Migrar junto al hogar
 * [ ] Duelo por la muerte de personas cercanas

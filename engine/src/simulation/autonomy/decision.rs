@@ -9,6 +9,8 @@ use crate::world::{Grid, ResourceKind};
 
 const MIN_SWITCH_MARGIN: f32 = 0.02;
 const MAX_SWITCH_MARGIN: f32 = 0.15;
+pub(in crate::simulation) const DEPENDENT_PROTECTION_TRIGGER_DISTANCE: u32 = 4;
+pub(in crate::simulation) const DEPENDENT_REUNION_RADIUS: u32 = 2;
 
 /// Context passed to [`evaluate_goals`] to avoid nested tuple parameters.
 pub(in crate::simulation) struct DecisionContext {
@@ -23,6 +25,7 @@ pub(super) struct HouseholdDecisionContext {
     pub decision: DecisionContext,
     pub household_food_available: bool,
     pub dependent_food_need: DependentFoodNeed,
+    pub dependent_protection_target: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -64,6 +67,24 @@ pub(super) fn dependent_food_need(
     } else {
         DependentFoodNeed::None
     }
+}
+
+pub(super) fn dependent_protection_target(
+    caregiver_id: u32,
+    caregiver_position: (u32, u32),
+    mind: &Mind,
+    population: &[EntitySnapshot],
+) -> Option<u32> {
+    population
+        .iter()
+        .filter(|snapshot| snapshot.caregiver_id == Some(caregiver_id) && snapshot.is_child)
+        .filter(|snapshot| mind.visible_entities.binary_search(&snapshot.id).is_ok())
+        .filter_map(|snapshot| {
+            let distance = super::mind::manhattan(caregiver_position, (snapshot.x, snapshot.y));
+            (distance > DEPENDENT_PROTECTION_TRIGGER_DISTANCE).then_some((distance, snapshot.id))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)))
+        .map(|(_, id)| id)
 }
 
 pub(super) fn dependent_provisioning_goal(
@@ -111,6 +132,7 @@ pub fn evaluate_goals(
             decision: context,
             household_food_available: false,
             dependent_food_need: DependentFoodNeed::None,
+            dependent_protection_target: None,
         },
     )
 }
@@ -128,6 +150,7 @@ pub(super) fn evaluate_goals_with_household(
         decision: context,
         household_food_available,
         dependent_food_need,
+        dependent_protection_target,
     } = context;
     let DecisionContext {
         tick,
@@ -214,6 +237,17 @@ pub(super) fn evaluate_goals_with_household(
                 reason: DecisionReason::DependentProvisioning,
             });
             return goal;
+        }
+        if dependent_protection_target.is_some() {
+            mind.decision_explanation = Some(DecisionExplanation {
+                chosen_goal: Goal::ProtectDependent,
+                highest_utility_goal: Goal::ProtectDependent,
+                chosen_score: 1.0,
+                highest_score: 1.0,
+                switch_margin: 0.0,
+                reason: DecisionReason::DependentProtection,
+            });
+            return Goal::ProtectDependent;
         }
     }
 
@@ -438,6 +472,24 @@ fn plan_follow(
         entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
         entity.activity = super::super::entity::EntityActivity::Resting;
     }
+}
+
+fn plan_protect_dependent(entity: &mut Entity, tick: u64, population: &[EntitySnapshot]) {
+    let Some(target_id) =
+        dependent_protection_target(entity.id, (entity.x, entity.y), &entity.mind, population)
+    else {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.activity = super::super::entity::EntityActivity::Idle;
+        return;
+    };
+    entity.mind.set_plan(
+        Goal::ProtectDependent,
+        vec![Action::ApproachEntity(target_id)],
+        tick,
+    );
+    entity.activity = super::super::entity::EntityActivity::Moving;
 }
 
 fn plan_share_food(
@@ -675,6 +727,7 @@ pub(super) fn plan_goal(
             super::exploration::plan_exploration(entity, world, tick, pathfinding_workspace);
         }
         Goal::Follow => plan_follow(entity, world, tick, pathfinding_workspace, population),
+        Goal::ProtectDependent => plan_protect_dependent(entity, tick, population),
         Goal::Rest => {
             entity.path.clear();
             entity.path_index = 0;

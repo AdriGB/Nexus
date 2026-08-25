@@ -174,6 +174,22 @@ pub(super) fn execute_current_action(
         }
         Action::ApproachEntity(target_id) => {
             let origin = (entity.x, entity.y);
+            let protecting_dependent = entity.mind.current_goal == Some(Goal::ProtectDependent);
+
+            if protecting_dependent
+                && !population.iter().any(|snapshot| {
+                    snapshot.id == target_id
+                        && snapshot.is_child
+                        && snapshot.caregiver_id == Some(entity.id)
+                })
+            {
+                entity.movement_credit = 0.0;
+                entity.mind.clear_goal();
+                entity.path.clear();
+                entity.path_index = 0;
+                entity.activity = EntityActivity::Idle;
+                return ActionOutcome::default();
+            }
 
             // Use only information the entity actually knows:
             // - If target is currently visible, use perceived position.
@@ -210,17 +226,29 @@ pub(super) fn execute_current_action(
             };
 
             // Already close enough?
-            if super::mind::manhattan(origin, target_pos) <= SOCIAL_RADIUS {
+            let completion_radius = if protecting_dependent {
+                super::decision::DEPENDENT_REUNION_RADIUS
+            } else {
+                SOCIAL_RADIUS
+            };
+            if super::mind::manhattan(origin, target_pos) <= completion_radius {
                 entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
                 if currently_visible {
-                    entity.mind.advance_action();
-                    entity.activity = EntityActivity::Socializing;
+                    if protecting_dependent {
+                        entity.mind.clear_goal();
+                        entity.activity = EntityActivity::Idle;
+                    } else {
+                        entity.mind.advance_action();
+                        entity.activity = EntityActivity::Socializing;
+                    }
                 } else {
                     // Arrived at last known position but target is not visible
                     // — abandon Socialize
-                    entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                    if !protecting_dependent {
+                        entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                    }
                     entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }
@@ -269,21 +297,30 @@ pub(super) fn execute_current_action(
                 entity.movement_credit = 0.0;
                 entity.path.clear();
                 entity.path_index = 0;
-                if super::mind::manhattan((entity.x, entity.y), target_pos) <= SOCIAL_RADIUS {
+                if super::mind::manhattan((entity.x, entity.y), target_pos) <= completion_radius {
                     if currently_visible {
-                        entity.mind.advance_action();
-                        entity.activity = EntityActivity::Socializing;
+                        if protecting_dependent {
+                            entity.mind.clear_goal();
+                            entity.activity = EntityActivity::Idle;
+                        } else {
+                            entity.mind.advance_action();
+                            entity.activity = EntityActivity::Socializing;
+                        }
                     } else {
                         // Arrived at last known position but target is not visible
                         // — abandon Socialize
-                        entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                        if !protecting_dependent {
+                            entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                        }
                         entity.mind.clear_goal();
                         entity.activity = EntityActivity::Idle;
                     }
                 } else if !currently_visible {
                     // Arrived at last known position but target is not here
                     // and not visible — abandon Socialize
-                    entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                    if !protecting_dependent {
+                        entity.mind.memory.mark_failed_social_seek(target_id, tick);
+                    }
                     entity.mind.clear_goal();
                     entity.activity = EntityActivity::Idle;
                 }

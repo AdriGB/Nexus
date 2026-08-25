@@ -105,6 +105,8 @@ fn profiled_update_entity(
 
     let dependent_food_need =
         super::decision::dependent_food_need(entity.id, &entity.mind, population);
+    let dependent_protection_target =
+        super::decision::dependent_protection_target(entity.id, position, &entity.mind, population);
     let provisioning_goal = (entity.hunger < URGENT_HUNGER_THRESHOLD)
         .then(|| {
             super::decision::dependent_provisioning_goal(
@@ -114,6 +116,16 @@ fn profiled_update_entity(
         })
         .flatten();
     if provisioning_goal.is_some_and(|goal| entity.mind.current_goal != Some(goal)) {
+        entity.mind.clear_goal();
+        entity.path.clear();
+        entity.path_index = 0;
+        entity.action_tick = 0;
+    }
+    if provisioning_goal.is_none()
+        && dependent_protection_target.is_some()
+        && entity.hunger < URGENT_HUNGER_THRESHOLD
+        && entity.mind.current_goal != Some(Goal::ProtectDependent)
+    {
         entity.mind.clear_goal();
         entity.path.clear();
         entity.path_index = 0;
@@ -167,6 +179,7 @@ fn profiled_update_entity(
                 },
                 household_food_available,
                 dependent_food_need,
+                dependent_protection_target,
             },
         );
         plan_goal(
