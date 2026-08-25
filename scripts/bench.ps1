@@ -17,13 +17,18 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $engineRoot = Join-Path $repoRoot "engine"
 . (Join-Path $PSScriptRoot "benchmark-results.ps1")
+. (Join-Path $PSScriptRoot "benchmark-comparison.ps1")
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $OutputDir = Join-Path $repoRoot "target/nexus-bench"
 }
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
 $aggregatePath = Join-Path $OutputDir "benchmark-results.json"
+$comparisonPath = Join-Path $OutputDir "benchmark-comparison.json"
 if (Test-Path -LiteralPath $aggregatePath -PathType Leaf) {
     Remove-Item -LiteralPath $aggregatePath -Force
+}
+if (Test-Path -LiteralPath $comparisonPath -PathType Leaf) {
+    Remove-Item -LiteralPath $comparisonPath -Force
 }
 
 function Invoke-NativeStep {
@@ -183,6 +188,14 @@ if ($selectedScenarios.Count -gt 0) {
         -ScenarioNames $selectedScenarios `
         -OutputDir $OutputDir
     Write-Host "Aggregate: $aggregatePath"
+    $baselinePath = Join-Path $repoRoot "benchmarks/baselines/github-ubuntu-x64/benchmark-results.json"
+    if (Test-Path -LiteralPath $baselinePath -PathType Leaf) {
+        $comparisonPath = Write-BenchmarkComparison `
+            -BaselinePath $baselinePath `
+            -CurrentPath $aggregatePath `
+            -OutputPath $comparisonPath
+        Write-Host "Comparison: $comparisonPath"
+    }
 }
 else {
     Write-Host "No end-to-end scenario results to aggregate for suite '$label'."

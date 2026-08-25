@@ -335,7 +335,7 @@ La auditoría viva se encuentra en
 ## Phase 2.11.5 — Performance regression guard
 
 * [x] Publicar `benchmark-results.json` como artifact
-* [ ] Comparar cada escenario con un baseline versionado
+* [x] Comparar cada escenario con un baseline versionado
 * [ ] Informar regresiones superiores al 10 %
 * [ ] Marcar warning por encima del 20 %
 * [ ] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
