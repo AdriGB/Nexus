@@ -645,3 +645,44 @@ pub(super) fn form_for_partnership(
     set_member_household(entities, households, second_id, Some(id))?;
     Some(id)
 }
+
+#[cfg(feature = "benchmarks")]
+pub(in crate::simulation) fn benchmark_seed_households(
+    entities: &mut [Entity],
+    households: &mut Vec<Household>,
+    next_household_id: &mut u32,
+    pair_count: usize,
+    food_per_household: u16,
+    tick: u64,
+) -> Result<(), String> {
+    if pair_count.saturating_mul(2) > entities.len() {
+        return Err(format!(
+            "cannot form {pair_count} benchmark households from {} entities",
+            entities.len()
+        ));
+    }
+    for pair in 0..pair_count {
+        let first_index = pair * 2;
+        let second_index = first_index + 1;
+        let first_id = entities[first_index].id;
+        let second_id = entities[second_index].id;
+        entities[first_index].partner_id = Some(second_id);
+        entities[second_index].partner_id = Some(first_id);
+        let household_id = form_for_partnership(
+            entities,
+            households,
+            next_household_id,
+            first_id,
+            second_id,
+            tick,
+        )
+        .ok_or_else(|| format!("could not form benchmark household for pair {pair}"))?;
+        let household_index = households
+            .binary_search_by_key(&household_id, |household| household.id)
+            .map_err(|_| format!("benchmark household {household_id} was not stored"))?;
+        households[household_index]
+            .storage
+            .add(ItemKind::Food, food_per_household);
+    }
+    Ok(())
+}
