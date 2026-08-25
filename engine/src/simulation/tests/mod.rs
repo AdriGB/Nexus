@@ -22,6 +22,7 @@ mod movement;
 mod parity;
 mod partnerships;
 mod personality;
+mod relationship_food_sharing;
 mod resources;
 mod social;
 mod support;

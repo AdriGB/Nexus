@@ -84,7 +84,7 @@ fn curious_entity_explores_more() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 10,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -99,7 +99,7 @@ fn curious_entity_explores_more() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 10,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -148,7 +148,7 @@ fn cautious_entity_rests_more_and_explores_less() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 10,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -163,7 +163,7 @@ fn cautious_entity_rests_more_and_explores_less() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 10,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -202,7 +202,7 @@ fn neutral_personality_preserves_base_utilities() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 10,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -254,7 +254,7 @@ fn personality_does_not_affect_eat_utility() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );
@@ -269,7 +269,7 @@ fn personality_does_not_affect_eat_utility() {
             tick: 0,
             origin: (0, 0),
             food_in_inventory: 0,
-            visible_food_need: 0.0,
+            best_visible_food_share_score: None,
             best_remembered_social_score: None,
         },
     );

@@ -8,6 +8,8 @@ fn sharing_simulation(cooperativeness: f32) -> Simulation {
     let mut giver = entity(1, 0, 0, 0.0);
     giver.age_ticks = 25 * TICKS_PER_YEAR;
     giver.personality.cooperativeness = cooperativeness;
+    giver.personality.curiosity = 0.0;
+    giver.personality.sociability = 0.0;
     giver.inventory.add(ItemKind::Food, 30);
 
     let mut recipient = entity(2, 0, 0, 90.0);

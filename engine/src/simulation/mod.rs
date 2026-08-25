@@ -729,7 +729,15 @@ impl Simulation {
                         .memory
                         .affinity_to(attempt.target_id)
                         .unwrap_or(0);
-                    food_share_willingness(actor.personality.cooperativeness, affinity)
+                    let role = autonomy::close_relationship_role_between(
+                        autonomy::RelationshipIdentity::from_entity(actor),
+                        autonomy::RelationshipIdentity::from_entity(&self.entities[target_index]),
+                    );
+                    relationship_food_share_willingness(
+                        actor.personality.cooperativeness,
+                        affinity,
+                        role,
+                    )
                 }
             };
 
@@ -1174,9 +1182,28 @@ impl Simulation {
     }
 }
 
+#[cfg(test)]
 fn food_share_willingness(cooperativeness: f32, affinity: i16) -> bool {
+    relationship_food_share_willingness(
+        cooperativeness,
+        affinity,
+        autonomy::CloseRelationshipRole::Other,
+    )
+}
+
+fn relationship_food_share_willingness(
+    cooperativeness: f32,
+    affinity: i16,
+    role: autonomy::CloseRelationshipRole,
+) -> bool {
     let affinity_factor = ((f32::from(affinity) + 1_000.0) / 2_000.0).clamp(0.0, 1.0);
-    cooperativeness * 0.7 + affinity_factor * 0.3 >= 0.5
+    let relationship_bonus = match role {
+        autonomy::CloseRelationshipRole::CurrentPartner => 0.20,
+        autonomy::CloseRelationshipRole::ParentChild => 0.15,
+        autonomy::CloseRelationshipRole::Sibling => 0.10,
+        autonomy::CloseRelationshipRole::Other => 0.0,
+    };
+    cooperativeness * 0.7 + affinity_factor * 0.3 + relationship_bonus >= 0.5
 }
 
 #[cfg(test)]

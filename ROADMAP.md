@@ -269,7 +269,7 @@ Objetivo: crear la primera estructura social superior al individuo.
 
 * [x] Buscar pareja o familiares
 * [x] Proteger dependientes
-* [ ] Compartir según parentesco y afinidad
+* [x] Compartir según parentesco y afinidad
 * [ ] Migrar junto al hogar
 * [ ] Duelo por la muerte de personas cercanas
 * [ ] Conflictos dentro del hogar

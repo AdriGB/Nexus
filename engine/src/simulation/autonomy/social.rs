@@ -4,6 +4,7 @@ use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_DAY;
 use super::exploration::plan_exploration;
 use super::mind::{manhattan, Action, AffinityChangeRecord, Goal, KnownEntity, Mind};
+use super::relationships::{close_relationship_role, CloseRelationshipRole, RelationshipIdentity};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::Grid;
 use std::collections::HashMap;
@@ -70,20 +71,19 @@ fn social_target_role(
     target: &EntitySnapshot,
     visible: bool,
 ) -> SocialTargetRole {
-    if actor.partner_id == Some(target.id) {
-        return SocialTargetRole::CurrentPartner;
-    }
-    if actor.mother_id == Some(target.id)
-        || actor.father_id == Some(target.id)
-        || target.mother_id == Some(actor.id)
-        || target.father_id == Some(actor.id)
-    {
-        return SocialTargetRole::ParentChild;
-    }
-    let sibling = actor.mother_id.is_some() && actor.mother_id == target.mother_id
-        || actor.father_id.is_some() && actor.father_id == target.father_id;
-    if sibling {
-        return SocialTargetRole::Sibling;
+    match close_relationship_role(
+        RelationshipIdentity {
+            id: actor.id,
+            partner_id: actor.partner_id,
+            mother_id: actor.mother_id,
+            father_id: actor.father_id,
+        },
+        target,
+    ) {
+        CloseRelationshipRole::CurrentPartner => return SocialTargetRole::CurrentPartner,
+        CloseRelationshipRole::ParentChild => return SocialTargetRole::ParentChild,
+        CloseRelationshipRole::Sibling => return SocialTargetRole::Sibling,
+        CloseRelationshipRole::Other => {}
     }
     if visible
         && actor.is_adult
