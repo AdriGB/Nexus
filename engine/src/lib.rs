@@ -132,6 +132,11 @@ impl WorldBridge {
         bridge::autonomy_profile_json(&profile)
     }
 
+    pub fn simulation_profile_run(&mut self, ticks: u32) -> String {
+        let summary = self.simulation.profile_run(&mut self.grid, ticks);
+        bridge::performance_summary_json(&summary)
+    }
+
     pub fn simulation_pause(&mut self) {
         self.simulation.pause();
     }

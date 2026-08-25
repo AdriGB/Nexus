@@ -319,7 +319,7 @@ La auditoría viva se encuentra en
 * [x] Contar entidades, decisiones, reevaluaciones, percepciones e interacciones
 * [x] Contar consultas espaciales, búsquedas A* y nodos explorados
 * [x] Contar eventos y vigilar el tamaño de memorias e historial
-* [ ] Informar mean, median, p95, p99 y max
+* [x] Informar mean, median, p95, p99 y max
 * [x] Exponer perfiles estables a través del bridge
 
 ## Phase 2.11.4 — Automated benchmark suite

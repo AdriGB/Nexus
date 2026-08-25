@@ -10,6 +10,7 @@ mod inventory;
 mod kinship;
 mod lifecycle;
 mod partnerships;
+mod performance;
 mod physiology;
 mod pipeline;
 mod renewal;
@@ -39,6 +40,7 @@ use self::lifecycle::{
     founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
     spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
 };
+pub(crate) use self::performance::{PerformanceRun, PerformanceSummary};
 use self::spatial::{EntitySnapshot, SpatialGrid};
 pub(crate) use self::time::years_from_ticks;
 use self::time::TICKS_PER_DAY;
@@ -108,7 +110,7 @@ pub(crate) struct HouseholdStats {
     pub average_dissolved_household_lifetime_ticks: f64,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 pub(crate) struct WorkCounters {
     pub entities_processed: u64,
     pub entities_perceived: u64,
@@ -123,7 +125,33 @@ pub(crate) struct WorkCounters {
     pub events_created: u64,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+impl WorkCounters {
+    fn accumulate(&mut self, other: &Self) {
+        self.entities_processed = self
+            .entities_processed
+            .saturating_add(other.entities_processed);
+        self.entities_perceived = self
+            .entities_perceived
+            .saturating_add(other.entities_perceived);
+        self.goal_evaluations = self.goal_evaluations.saturating_add(other.goal_evaluations);
+        self.goal_changes = self.goal_changes.saturating_add(other.goal_changes);
+        self.plans_created = self.plans_created.saturating_add(other.plans_created);
+        self.actions_executed = self.actions_executed.saturating_add(other.actions_executed);
+        self.social_interactions = self
+            .social_interactions
+            .saturating_add(other.social_interactions);
+        self.spatial_queries = self.spatial_queries.saturating_add(other.spatial_queries);
+        self.pathfinding_searches = self
+            .pathfinding_searches
+            .saturating_add(other.pathfinding_searches);
+        self.pathfinding_nodes_expanded = self
+            .pathfinding_nodes_expanded
+            .saturating_add(other.pathfinding_nodes_expanded);
+        self.events_created = self.events_created.saturating_add(other.events_created);
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct StateGauges {
     pub entities_alive: u64,
     pub known_entities_total: u64,
@@ -136,6 +164,30 @@ pub(crate) struct StateGauges {
     pub recent_events_capacity: u64,
     pub households_active: u64,
     pub genealogy_links: u64,
+}
+
+impl StateGauges {
+    fn retain_maximums(&mut self, other: &Self) {
+        self.entities_alive = self.entities_alive.max(other.entities_alive);
+        self.known_entities_total = self.known_entities_total.max(other.known_entities_total);
+        self.known_entities_max_per_entity = self
+            .known_entities_max_per_entity
+            .max(other.known_entities_max_per_entity);
+        self.known_resources_total = self.known_resources_total.max(other.known_resources_total);
+        self.known_resources_max_per_entity = self
+            .known_resources_max_per_entity
+            .max(other.known_resources_max_per_entity);
+        self.known_dead_entities_total = self
+            .known_dead_entities_total
+            .max(other.known_dead_entities_total);
+        self.active_grief_states = self.active_grief_states.max(other.active_grief_states);
+        self.recent_events_len = self.recent_events_len.max(other.recent_events_len);
+        self.recent_events_capacity = self
+            .recent_events_capacity
+            .max(other.recent_events_capacity);
+        self.households_active = self.households_active.max(other.households_active);
+        self.genealogy_links = self.genealogy_links.max(other.genealogy_links);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -470,6 +522,14 @@ impl Simulation {
 
     pub(crate) fn profile_autonomy_step(&mut self, world: &mut Grid) -> AutonomyProfile {
         pipeline::run_profiled_autonomy_step(self, world)
+    }
+
+    pub(crate) fn profile_run(&mut self, world: &mut Grid, ticks: u32) -> PerformanceSummary {
+        let mut run = PerformanceRun::default();
+        for _ in 0..ticks {
+            run.record(self.profile_step(world));
+        }
+        run.summarize()
     }
 
     pub fn pause(&mut self) {

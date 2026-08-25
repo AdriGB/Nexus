@@ -13,12 +13,14 @@ pub(crate) use events::{
 };
 pub(crate) use households::{entity_household_json, household_stats_json};
 pub(crate) use kinship::{entity_family_tree_json, entity_kinship_json, entity_relationship_json};
-pub(crate) use profiles::{autonomy_profile_json, phase_profile_json, population_stats_json};
+pub(crate) use profiles::{
+    autonomy_profile_json, performance_summary_json, phase_profile_json, population_stats_json,
+};
 pub(crate) use world::{region_stats_json, tile_info_json};
 
 #[cfg(test)]
 use crate::simulation::{
-    AutonomyProfile, EventId, PhaseProfile, SimulationEvent, SimulationEventCause,
+    AutonomyProfile, EventId, PerformanceRun, PhaseProfile, SimulationEvent, SimulationEventCause,
     SimulationEventDetails, SimulationEventKind,
 };
 #[cfg(test)]
@@ -587,5 +589,19 @@ mod tests {
         assert_eq!(json["social_us"], 250);
         assert_eq!(json["spatial_queries"], 0);
         assert_eq!(json["events_created"], 0);
+    }
+
+    #[test]
+    fn performance_summary_payload_has_stable_nested_shape() {
+        let summary = PerformanceRun::default().summarize();
+        let payload = performance_summary_json(&summary);
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+
+        assert_eq!(json["samples"], 0);
+        assert_eq!(json["total"]["mean_us"], 0.0);
+        assert_eq!(json["autonomy"]["p95_us"], 0);
+        assert_eq!(json["work_total"]["actions_executed"], 0);
+        assert_eq!(json["state_final"]["known_entities_total"], 0);
+        assert_eq!(json["state_peak"]["recent_events_len"], 0);
     }
 }
