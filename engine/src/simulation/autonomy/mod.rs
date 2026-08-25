@@ -133,6 +133,8 @@ pub(super) fn update_entity(
     if entity.mind.current_action().is_none() {
         let current_goal = entity.mind.current_goal;
         let visible_food_need = visible_food_need(entity.id, &entity.mind, population);
+        let best_remembered_social_score =
+            social::best_relationship_aware_remembered_score(entity, population, tick);
 
         let household_food_available =
             household_context.is_some_and(|context| context.storage_food_amount > 0);
@@ -149,6 +151,7 @@ pub(super) fn update_entity(
                     origin: position,
                     food_in_inventory: entity.inventory.amount(ItemKind::Food),
                     visible_food_need,
+                    best_remembered_social_score,
                 },
                 household_food_available,
                 dependent_food_need,

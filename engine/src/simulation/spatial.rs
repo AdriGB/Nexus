@@ -7,6 +7,10 @@ pub(super) struct EntitySnapshot {
     pub y: u32,
     pub hunger: f32,
     pub caregiver_id: Option<u32>,
+    pub partner_id: Option<u32>,
+    pub mother_id: Option<u32>,
+    pub father_id: Option<u32>,
+    pub is_adult: bool,
     pub is_child: bool,
     pub is_infant: bool,
 }

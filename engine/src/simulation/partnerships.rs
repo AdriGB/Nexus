@@ -1,7 +1,7 @@
 //! Persistent partnership formation, dissolution, and invariants.
 
 use super::autonomy::personality_compatibility;
-use super::{Entity, LifeStage};
+use super::{relationship_between, Entity, Genealogy, KinshipRelation, LifeStage};
 
 const MIN_INTERACTIONS: u32 = 3;
 const BASE_AFFINITY_THRESHOLD: i16 = 300;
@@ -89,6 +89,7 @@ pub(super) fn dissolve_unhealthy(entities: &mut [Entity]) -> Vec<PartnershipDiss
 
 pub(super) fn try_form(
     entities: &mut [Entity],
+    genealogy: &Genealogy,
     actor_id: u32,
     target_id: u32,
 ) -> Option<PartnershipFormation> {
@@ -99,6 +100,22 @@ pub(super) fn try_form(
         .binary_search_by_key(&target_id, |entity| entity.id)
         .ok()?;
     if actor_index == target_index {
+        return None;
+    }
+
+    if matches!(
+        relationship_between(genealogy, actor_id, target_id),
+        KinshipRelation::SamePerson
+            | KinshipRelation::Parent
+            | KinshipRelation::Child
+            | KinshipRelation::FullSibling
+            | KinshipRelation::HalfSibling
+            | KinshipRelation::Ancestor { .. }
+            | KinshipRelation::Descendant { .. }
+            | KinshipRelation::AuntUncle { .. }
+            | KinshipRelation::NieceNephew { .. }
+            | KinshipRelation::Cousin { degree: 1, .. }
+    ) {
         return None;
     }
 

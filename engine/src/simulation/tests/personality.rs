@@ -85,6 +85,7 @@ fn curious_entity_explores_more() {
             origin: (0, 0),
             food_in_inventory: 10,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     evaluate_goals(
@@ -99,6 +100,7 @@ fn curious_entity_explores_more() {
             origin: (0, 0),
             food_in_inventory: 10,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 
@@ -147,6 +149,7 @@ fn cautious_entity_rests_more_and_explores_less() {
             origin: (0, 0),
             food_in_inventory: 10,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     evaluate_goals(
@@ -161,6 +164,7 @@ fn cautious_entity_rests_more_and_explores_less() {
             origin: (0, 0),
             food_in_inventory: 10,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 
@@ -199,6 +203,7 @@ fn neutral_personality_preserves_base_utilities() {
             origin: (0, 0),
             food_in_inventory: 10,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 
@@ -250,6 +255,7 @@ fn personality_does_not_affect_eat_utility() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
     evaluate_goals(
@@ -264,6 +270,7 @@ fn personality_does_not_affect_eat_utility() {
             origin: (0, 0),
             food_in_inventory: 0,
             visible_food_need: 0.0,
+            best_remembered_social_score: None,
         },
     );
 

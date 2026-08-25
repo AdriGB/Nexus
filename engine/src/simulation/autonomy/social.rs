@@ -30,6 +30,81 @@ const MIN_REMEMBERED_SOCIAL_SCORE: i32 = 100;
 /// in [0, 100] maps to a need pressure in [1.0, 2.0] with this constant.
 const NEED_DISTANCE_PENALTY: f32 = 1.0;
 const STALE_PENALTY_PER_DAY: i32 = 10;
+const CURRENT_PARTNER_SOCIAL_BONUS: i32 = 300;
+const PARENT_CHILD_SOCIAL_BONUS: i32 = 220;
+const SIBLING_SOCIAL_BONUS: i32 = 160;
+const POTENTIAL_PARTNER_SOCIAL_BONUS: i32 = 100;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum SocialTargetRole {
+    CurrentPartner,
+    ParentChild,
+    Sibling,
+    PotentialPartner,
+    Other,
+}
+
+#[derive(Clone, Copy)]
+struct SocialActorIdentity {
+    id: u32,
+    partner_id: Option<u32>,
+    mother_id: Option<u32>,
+    father_id: Option<u32>,
+    is_adult: bool,
+}
+
+impl SocialActorIdentity {
+    fn from_entity(entity: &Entity) -> Self {
+        Self {
+            id: entity.id,
+            partner_id: entity.partner_id,
+            mother_id: entity.mother_id,
+            father_id: entity.father_id,
+            is_adult: LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Adult,
+        }
+    }
+}
+
+fn social_target_role(
+    actor: SocialActorIdentity,
+    target: &EntitySnapshot,
+    visible: bool,
+) -> SocialTargetRole {
+    if actor.partner_id == Some(target.id) {
+        return SocialTargetRole::CurrentPartner;
+    }
+    if actor.mother_id == Some(target.id)
+        || actor.father_id == Some(target.id)
+        || target.mother_id == Some(actor.id)
+        || target.father_id == Some(actor.id)
+    {
+        return SocialTargetRole::ParentChild;
+    }
+    let sibling = actor.mother_id.is_some() && actor.mother_id == target.mother_id
+        || actor.father_id.is_some() && actor.father_id == target.father_id;
+    if sibling {
+        return SocialTargetRole::Sibling;
+    }
+    if visible
+        && actor.is_adult
+        && actor.partner_id.is_none()
+        && target.is_adult
+        && target.partner_id.is_none()
+    {
+        return SocialTargetRole::PotentialPartner;
+    }
+    SocialTargetRole::Other
+}
+
+fn role_bonus(role: SocialTargetRole) -> i32 {
+    match role {
+        SocialTargetRole::CurrentPartner => CURRENT_PARTNER_SOCIAL_BONUS,
+        SocialTargetRole::ParentChild => PARENT_CHILD_SOCIAL_BONUS,
+        SocialTargetRole::Sibling => SIBLING_SOCIAL_BONUS,
+        SocialTargetRole::PotentialPartner => POTENTIAL_PARTNER_SOCIAL_BONUS,
+        SocialTargetRole::Other => 0,
+    }
+}
 
 /// Actor-only need pressure: how much current hunger or low health makes
 /// the actor prefer nearby social targets. Uses `max`, not a sum, so
@@ -42,14 +117,15 @@ fn social_need_pressure(hunger: f32, health: f32) -> f32 {
     1.0 + hunger_pressure.max(health_pressure) * NEED_DISTANCE_PENALTY
 }
 
-pub(super) fn remembered_social_score(
+fn remembered_social_score_with_bonus(
     known: &KnownEntity,
     tick: u64,
     origin: (u32, u32),
     personality: &Personality,
     need_pressure: f32,
+    relationship_bonus: i32,
 ) -> Option<i32> {
-    if known.seek_on_cooldown(tick) {
+    if known.seek_on_cooldown(tick) || known.affinity < -200 {
         return None;
     }
 
@@ -67,6 +143,7 @@ pub(super) fn remembered_social_score(
                 .unwrap_or(i32::MAX)
                 .saturating_mul(5),
         )
+        .saturating_add(relationship_bonus)
         .saturating_sub(distance_penalty)
         .saturating_sub(stale_penalty);
 
@@ -101,6 +178,7 @@ fn interaction_delta(compatibility: f32, other_cooperativeness: f32) -> i16 {
 /// First checks visible entities. If none are suitable but there are known
 /// entities with positive affinity that are not currently visible, may select
 /// one from memory to seek out.
+#[cfg(test)]
 fn select_social_target(
     mind: &Mind,
     origin: (u32, u32),
@@ -110,17 +188,96 @@ fn select_social_target(
     need_pressure: f32,
     tick: u64,
 ) -> Option<u32> {
-    let mut best_visible: Option<(i32, u32)> = None;
-    let mut best_memory: Option<(i32, u32)> = None;
+    select_social_target_with_identity(
+        mind,
+        origin,
+        SocialActorIdentity {
+            id: entity_id,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: false,
+        },
+        population,
+        personality,
+        need_pressure,
+        tick,
+    )
+}
+
+pub(super) fn best_generic_remembered_social_score(
+    mind: &Mind,
+    tick: u64,
+    origin: (u32, u32),
+    personality: &Personality,
+) -> Option<i32> {
+    mind.memory
+        .known_entities
+        .iter()
+        .filter(|known| mind.visible_entities.binary_search(&known.id).is_err())
+        .filter_map(|known| {
+            remembered_social_score_with_bonus(known, tick, origin, personality, 1.0, 0)
+        })
+        .max()
+}
+
+pub(super) fn best_relationship_aware_remembered_score(
+    entity: &Entity,
+    population: &[EntitySnapshot],
+    tick: u64,
+) -> Option<i32> {
+    let actor = SocialActorIdentity::from_entity(entity);
+    let origin = (entity.x, entity.y);
+    entity
+        .mind
+        .memory
+        .known_entities
+        .iter()
+        .filter(|known| {
+            entity
+                .mind
+                .visible_entities
+                .binary_search(&known.id)
+                .is_err()
+        })
+        .filter_map(|known| {
+            let index = population
+                .binary_search_by_key(&known.id, |snapshot| snapshot.id)
+                .ok()?;
+            let role = social_target_role(actor, &population[index], false);
+            remembered_social_score_with_bonus(
+                known,
+                tick,
+                origin,
+                &entity.personality,
+                1.0,
+                role_bonus(role),
+            )
+        })
+        .max()
+}
+
+fn select_social_target_with_identity(
+    mind: &Mind,
+    origin: (u32, u32),
+    actor: SocialActorIdentity,
+    population: &[EntitySnapshot],
+    personality: &Personality,
+    need_pressure: f32,
+    tick: u64,
+) -> Option<u32> {
+    let mut best_visible: Option<(i32, SocialTargetRole, u32)> = None;
+    let mut best_memory: Option<(i32, SocialTargetRole, u32)> = None;
 
     for &visible_id in &mind.visible_entities {
-        if visible_id == entity_id {
+        if visible_id == actor.id {
             continue;
         }
 
-        let Some(snapshot) = population.iter().find(|s| s.id == visible_id) else {
+        let Ok(snapshot_index) = population.binary_search_by_key(&visible_id, |s| s.id) else {
             continue;
         };
+        let snapshot = &population[snapshot_index];
 
         let distance = manhattan(origin, (snapshot.x, snapshot.y)) as i32;
         let known = mind
@@ -136,25 +293,17 @@ fn select_social_target(
         }
 
         let distance_weight = (2.0 - personality.sociability * 1.5).max(0.5) * need_pressure;
-        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32;
+        let role = social_target_role(actor, snapshot, true);
+        let score = affinity * 2 + familiarity * 5 - (distance as f32 * distance_weight) as i32
+            + role_bonus(role);
 
-        match best_visible {
-            None => best_visible = Some((score, visible_id)),
-            Some((best_score, _)) if score > best_score => {
-                best_visible = Some((score, visible_id));
-            }
-            _ => {}
-        }
-    }
-
-    if let Some((visible_score, _)) = best_visible {
-        if visible_score >= 50 {
-            return best_visible.map(|(_, id)| id);
+        if is_better_target((score, role, visible_id), best_visible) {
+            best_visible = Some((score, role, visible_id));
         }
     }
 
     for known in &mind.memory.known_entities {
-        if known.id == entity_id {
+        if known.id == actor.id {
             continue;
         }
 
@@ -166,21 +315,51 @@ fn select_social_target(
             continue;
         }
 
-        let Some(score) = remembered_social_score(known, tick, origin, personality, need_pressure)
-        else {
+        let role = population
+            .binary_search_by_key(&known.id, |item| item.id)
+            .ok()
+            .map_or(SocialTargetRole::Other, |index| {
+                social_target_role(actor, &population[index], false)
+            });
+        let Some(score) = remembered_social_score_with_bonus(
+            known,
+            tick,
+            origin,
+            personality,
+            need_pressure,
+            role_bonus(role),
+        ) else {
             continue;
         };
 
-        match best_memory {
-            None => best_memory = Some((score, known.id)),
-            Some((best_score, _)) if score > best_score => {
-                best_memory = Some((score, known.id));
-            }
-            _ => {}
+        if is_better_target((score, role, known.id), best_memory) {
+            best_memory = Some((score, role, known.id));
         }
     }
 
-    best_memory.or(best_visible).map(|(_, id)| id)
+    match (best_visible, best_memory) {
+        (Some(visible), Some(memory)) => {
+            if is_better_target(memory, Some(visible)) {
+                Some(memory.2)
+            } else {
+                Some(visible.2)
+            }
+        }
+        (Some(visible), None) => Some(visible.2),
+        (None, Some(memory)) => Some(memory.2),
+        (None, None) => None,
+    }
+}
+
+fn is_better_target(
+    candidate: (i32, SocialTargetRole, u32),
+    current: Option<(i32, SocialTargetRole, u32)>,
+) -> bool {
+    current.is_none_or(|best| {
+        candidate.0 > best.0
+            || candidate.0 == best.0
+                && (candidate.1 < best.1 || candidate.1 == best.1 && candidate.2 < best.2)
+    })
 }
 
 /// Plan a Socialize goal for the entity.
@@ -196,10 +375,10 @@ pub(super) fn plan_socialize(
     let origin = (entity.x, entity.y);
     let pressure = social_need_pressure(entity.hunger, entity.health);
 
-    let Some(target_id) = select_social_target(
+    let Some(target_id) = select_social_target_with_identity(
         &entity.mind,
         origin,
-        entity.id,
+        SocialActorIdentity::from_entity(entity),
         population,
         &entity.personality,
         pressure,
@@ -576,6 +755,10 @@ mod tests {
                 y: 0,
                 hunger: 0.0,
                 caregiver_id: None,
+                partner_id: None,
+                mother_id: None,
+                father_id: None,
+                is_adult: true,
                 is_child: false,
                 is_infant: false,
             },
@@ -585,6 +768,10 @@ mod tests {
                 y: 0,
                 hunger: 0.0,
                 caregiver_id: None,
+                partner_id: None,
+                mother_id: None,
+                father_id: None,
+                is_adult: true,
                 is_child: false,
                 is_infant: false,
             },
@@ -679,5 +866,243 @@ mod tests {
         let second = select_social_target(&mind_b, (0, 0), 1, &population_b, &personality, 1.7, 0);
 
         assert_eq!(first, second);
+    }
+
+    fn adult_snapshot(id: u32) -> EntitySnapshot {
+        EntitySnapshot {
+            id,
+            x: 2,
+            y: 0,
+            hunger: 0.0,
+            caregiver_id: None,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
+            is_child: false,
+            is_infant: false,
+        }
+    }
+
+    fn actor_identity() -> SocialActorIdentity {
+        SocialActorIdentity {
+            id: 1,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
+        }
+    }
+
+    #[test]
+    fn current_partner_parent_child_and_sibling_get_social_preference() {
+        for (actor, mut relative) in [
+            (
+                {
+                    let mut actor = actor_identity();
+                    actor.partner_id = Some(2);
+                    actor
+                },
+                adult_snapshot(2),
+            ),
+            (
+                {
+                    let mut actor = actor_identity();
+                    actor.mother_id = Some(2);
+                    actor
+                },
+                adult_snapshot(2),
+            ),
+            (
+                {
+                    let mut actor = actor_identity();
+                    actor.mother_id = Some(9);
+                    actor
+                },
+                {
+                    let mut target = adult_snapshot(2);
+                    target.mother_id = Some(9);
+                    target
+                },
+            ),
+        ] {
+            let mut mind = Mind::default();
+            mind.visible_entities = vec![2, 3];
+            mind.memory.known_entities = vec![remembered_entity(2, 0), remembered_entity(3, 0)];
+            relative.x = 2;
+            let population = vec![relative, adult_snapshot(3)];
+            assert_eq!(
+                select_social_target_with_identity(
+                    &mind,
+                    (0, 0),
+                    actor,
+                    &population,
+                    &social_personality(),
+                    1.0,
+                    0
+                ),
+                Some(2)
+            );
+        }
+    }
+
+    #[test]
+    fn potential_partner_requires_visible_single_adults_and_excludes_family() {
+        let actor = actor_identity();
+        let target = adult_snapshot(2);
+        assert_eq!(
+            social_target_role(actor, &target, true),
+            SocialTargetRole::PotentialPartner
+        );
+        assert_eq!(
+            social_target_role(actor, &target, false),
+            SocialTargetRole::Other
+        );
+        let mut partnered_actor = actor;
+        partnered_actor.partner_id = Some(3);
+        assert_eq!(
+            social_target_role(partnered_actor, &target, true),
+            SocialTargetRole::Other
+        );
+        let mut partnered_target = target;
+        partnered_target.partner_id = Some(3);
+        assert_eq!(
+            social_target_role(actor, &partnered_target, true),
+            SocialTargetRole::Other
+        );
+        let mut child_target = target;
+        child_target.is_adult = false;
+        assert_eq!(
+            social_target_role(actor, &child_target, true),
+            SocialTargetRole::Other
+        );
+        let mut parent = target;
+        parent.id = 9;
+        let mut child_actor = actor;
+        child_actor.mother_id = Some(9);
+        assert_eq!(
+            social_target_role(child_actor, &parent, true),
+            SocialTargetRole::ParentChild
+        );
+    }
+
+    #[test]
+    fn remembered_partner_family_bonus_precedes_threshold_and_uses_lower_id_ties() {
+        let mut mind = Mind::default();
+        mind.memory.known_entities = vec![remembered_entity(2, 0), remembered_entity(3, 0)];
+        let mut actor = actor_identity();
+        actor.partner_id = Some(2);
+        let population = vec![adult_snapshot(2), adult_snapshot(3)];
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &population,
+                &social_personality(),
+                1.0,
+                0
+            ),
+            Some(2)
+        );
+
+        actor.partner_id = None;
+        actor.mother_id = Some(9);
+        let mut first = adult_snapshot(2);
+        first.mother_id = Some(9);
+        let mut second = adult_snapshot(3);
+        second.mother_id = Some(9);
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &[first, second],
+                &social_personality(),
+                1.0,
+                0
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn relationship_bonus_does_not_override_severe_negative_affinity_or_cooldown() {
+        let mut mind = Mind::default();
+        mind.memory.known_entities.push(remembered_entity(2, -201));
+        let mut actor = actor_identity();
+        actor.partner_id = Some(2);
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &[adult_snapshot(2)],
+                &social_personality(),
+                1.0,
+                0
+            ),
+            None
+        );
+        mind.memory.known_entities[0].affinity = 0;
+        mind.memory.known_entities[0].seek_retry_after_tick = Some(10);
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &[adult_snapshot(2)],
+                &social_personality(),
+                1.0,
+                9
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn remembered_partner_can_outrank_visible_unrelated_target() {
+        let mut mind = Mind::default();
+        mind.visible_entities = vec![3];
+        mind.memory.known_entities = vec![remembered_at(2, 0, 10), remembered_at(3, 60, 2)];
+        let mut actor = actor_identity();
+        actor.partner_id = Some(2);
+        let population = vec![adult_snapshot(2), adult_snapshot(3)];
+
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &population,
+                &social_personality(),
+                1.0,
+                0,
+            ),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn visible_target_can_still_outrank_remembered_family_when_score_is_higher() {
+        let mut mind = Mind::default();
+        mind.visible_entities = vec![3];
+        mind.memory.known_entities = vec![remembered_at(2, 0, 100), remembered_at(3, 100, 2)];
+        let mut actor = actor_identity();
+        actor.mother_id = Some(2);
+        let population = vec![adult_snapshot(2), adult_snapshot(3)];
+
+        assert_eq!(
+            select_social_target_with_identity(
+                &mind,
+                (0, 0),
+                actor,
+                &population,
+                &social_personality(),
+                1.0,
+                0,
+            ),
+            Some(3)
+        );
     }
 }

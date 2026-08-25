@@ -3,7 +3,6 @@ use super::super::entity::{Entity, LifeStage, Personality};
 use super::super::inventory::ItemKind;
 use super::super::spatial::EntitySnapshot;
 use super::mind::{Action, DecisionExplanation, DecisionReason, Goal, Mind};
-use super::social::remembered_social_score;
 use super::URGENT_HUNGER_THRESHOLD;
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::{Grid, ResourceKind};
@@ -17,6 +16,7 @@ pub(in crate::simulation) struct DecisionContext {
     pub origin: (u32, u32),
     pub food_in_inventory: u16,
     pub visible_food_need: f32,
+    pub best_remembered_social_score: Option<i32>,
 }
 
 pub(super) struct HouseholdDecisionContext {
@@ -134,6 +134,7 @@ pub(super) fn evaluate_goals_with_household(
         origin,
         food_in_inventory,
         visible_food_need,
+        best_remembered_social_score,
     } = context;
     let stage = LifeStage::from_age_ticks(age_ticks);
 
@@ -250,13 +251,9 @@ pub(super) fn evaluate_goals_with_household(
     let socialize = {
         let has_visible = !mind.visible_entities.is_empty();
 
-        let best_remembered_score = mind
-            .memory
-            .known_entities
-            .iter()
-            .filter(|known| mind.visible_entities.binary_search(&known.id).is_err())
-            .filter_map(|known| remembered_social_score(known, tick, origin, personality, 1.0))
-            .max();
+        let best_remembered_score = best_remembered_social_score.or_else(|| {
+            super::social::best_generic_remembered_social_score(mind, tick, origin, personality)
+        });
         let sociability_factor = 0.3 + personality.sociability * 0.7;
         let sated_factor = (1.0 - hunger_ratio) * 0.6 + 0.4;
 
@@ -764,6 +761,7 @@ mod tests {
                 origin: (0, 0),
                 food_in_inventory: 10,
                 visible_food_need: 0.0,
+                best_remembered_social_score: None,
             },
         );
         assert_eq!(goal, Goal::Eat);
@@ -796,6 +794,7 @@ mod tests {
                 origin: (0, 0),
                 food_in_inventory: 0,
                 visible_food_need: 0.0,
+                best_remembered_social_score: None,
             },
         );
         assert_eq!(goal, Goal::Explore);
@@ -840,6 +839,7 @@ mod tests {
                 origin: (0, 0),
                 food_in_inventory: 0,
                 visible_food_need: 0.0,
+                best_remembered_social_score: None,
             },
         );
 
@@ -877,6 +877,7 @@ mod tests {
                 origin: (0, 0),
                 food_in_inventory: 0,
                 visible_food_need: 0.0,
+                best_remembered_social_score: None,
             },
         );
 
@@ -911,6 +912,7 @@ mod tests {
                 origin: (0, 0),
                 food_in_inventory: 0,
                 visible_food_need: 0.0,
+                best_remembered_social_score: None,
             },
         );
 
