@@ -44,3 +44,17 @@ complete input but currently compare its `overall` summary, not each window.
 
 The comparison is mathematical only: there are no thresholds, classifications,
 warnings, or performance gates.
+
+## Informational slowdown report
+
+The reporting layer selects a scenario only when its
+`timings.total.mean.delta_percent` is strictly greater than 10%. Canonical phase
+spikes and other total statistics never activate the report; total p95 appears
+only as context. The 10% level is informational only and may include runner
+noise.
+
+Calibration during PR #160 illustrates that noise: three GitHub-hosted Quick
+runs measured `baseline-1000` total mean at 33,686.65 us (+14.189944%),
+30,422.18 us (+3.124146%), and 34,560.62 us (+17.152500%) against the same
+29,500.54 us baseline. Therefore the report neither changes exit codes nor uses
+GitHub warning annotations. The future 20% and 30% policies remain separate.

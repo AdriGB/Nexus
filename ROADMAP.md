@@ -336,7 +336,7 @@ La auditoría viva se encuentra en
 
 * [x] Publicar `benchmark-results.json` como artifact
 * [x] Comparar cada escenario con un baseline versionado
-* [ ] Informar regresiones superiores al 10 %
+* [x] Informar regresiones superiores al 10 %
 * [ ] Marcar warning por encima del 20 %
 * [ ] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
 * [ ] Mostrar la fase y los contadores que explican cada regresión

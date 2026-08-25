@@ -120,6 +120,9 @@ jobs:
           }
           if ("${{ steps.results.outputs.comparison_present }}" -eq "true") {
             $comparison = Get-Content "target/nexus-bench/benchmark-comparison.json" -Raw | ConvertFrom-Json
+            . ./scripts/benchmark-regression-report.ps1
+            $slowdowns = @(Get-ReportableBenchmarkSlowdowns -ComparisonPath "target/nexus-bench/benchmark-comparison.json")
+            $informationalSummary = Get-InformationalBenchmarkMarkdown -Slowdowns $slowdowns
             $comparisonSummary = @"
           - Baseline: benchmarks/baselines/github-ubuntu-x64/benchmark-results.json (schema 1)
           - Compared scenarios: $($comparison.summary.compared_scenarios)
@@ -129,6 +132,13 @@ jobs:
           }
           else {
             $comparisonSummary = "- Benchmark comparison: not applicable"
+            $informationalSummary = @"
+          ### Informational slowdowns (>10% total mean)
+
+          None.
+
+          Informational only — this does not affect job status.
+          "@
           }
 
           @"
@@ -139,4 +149,6 @@ jobs:
           - Raw scenario JSON: $rawArtifact
           - Aggregate benchmark-results.json: $aggregateArtifact
           $comparisonSummary
+
+          $informationalSummary
           "@ >> $env:GITHUB_STEP_SUMMARY

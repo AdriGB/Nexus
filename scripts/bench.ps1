@@ -18,6 +18,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $engineRoot = Join-Path $repoRoot "engine"
 . (Join-Path $PSScriptRoot "benchmark-results.ps1")
 . (Join-Path $PSScriptRoot "benchmark-comparison.ps1")
+. (Join-Path $PSScriptRoot "benchmark-regression-report.ps1")
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     $OutputDir = Join-Path $repoRoot "target/nexus-bench"
 }
@@ -195,6 +196,8 @@ if ($selectedScenarios.Count -gt 0) {
             -CurrentPath $aggregatePath `
             -OutputPath $comparisonPath
         Write-Host "Comparison: $comparisonPath"
+        $slowdowns = @(Get-ReportableBenchmarkSlowdowns -ComparisonPath $comparisonPath)
+        Write-InformationalBenchmarkReport -Slowdowns $slowdowns
     }
 }
 else {
