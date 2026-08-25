@@ -127,7 +127,7 @@ pub(crate) struct WorkCounters {
 }
 
 impl WorkCounters {
-    fn accumulate(&mut self, other: &Self) {
+    pub(crate) fn accumulate(&mut self, other: &Self) {
         self.entities_processed = self
             .entities_processed
             .saturating_add(other.entities_processed);
@@ -188,6 +188,21 @@ impl StateGauges {
             .max(other.recent_events_capacity);
         self.households_active = self.households_active.max(other.households_active);
         self.genealogy_links = self.genealogy_links.max(other.genealogy_links);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dominates(&self, other: &Self) -> bool {
+        self.entities_alive >= other.entities_alive
+            && self.known_entities_total >= other.known_entities_total
+            && self.known_entities_max_per_entity >= other.known_entities_max_per_entity
+            && self.known_resources_total >= other.known_resources_total
+            && self.known_resources_max_per_entity >= other.known_resources_max_per_entity
+            && self.known_dead_entities_total >= other.known_dead_entities_total
+            && self.active_grief_states >= other.active_grief_states
+            && self.recent_events_len >= other.recent_events_len
+            && self.recent_events_capacity >= other.recent_events_capacity
+            && self.households_active >= other.households_active
+            && self.genealogy_links >= other.genealogy_links
     }
 }
 

@@ -8,11 +8,11 @@ use crate::generation::generate_world;
 use crate::pathfinding::{find_path_with_workspace, PathfindingWorkspace};
 use crate::regions::detect_regions;
 use crate::resources::generate_resources;
-use crate::simulation::{PerformanceSummary, Simulation, MAX_POPULATION};
+use crate::simulation::{PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION};
 use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 use serde::Serialize;
 
-pub const BENCHMARK_SCHEMA_VERSION: u32 = 2;
+pub const BENCHMARK_SCHEMA_VERSION: u32 = 3;
 
 type Coordinate = (u32, u32);
 type PreparedArena = (Vec<Coordinate>, Coordinate);
@@ -44,6 +44,11 @@ pub enum BenchmarkWorkload {
         initial_hunger: u16,
         known_food_targets: u8,
     },
+    LongRun {
+        window_count: u32,
+        food_grid_spacing: u32,
+        food_capacity: u16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -63,7 +68,7 @@ const STANDARD_WORLD: BenchmarkWorld = BenchmarkWorld {
     sea_level: 0.35,
 };
 
-const SCENARIOS: [BenchmarkScenario; 7] = [
+const SCENARIOS: [BenchmarkScenario; 8] = [
     BenchmarkScenario {
         name: "baseline-100",
         seed: 42,
@@ -139,6 +144,19 @@ const SCENARIOS: [BenchmarkScenario; 7] = [
             known_food_targets: 0,
         },
     },
+    BenchmarkScenario {
+        name: "long-run-1000",
+        seed: 42,
+        population: 1_000,
+        warmup_ticks: 24,
+        measured_ticks: 8_760,
+        world: STANDARD_WORLD,
+        workload: BenchmarkWorkload::LongRun {
+            window_count: 12,
+            food_grid_spacing: 6,
+            food_capacity: 5_000,
+        },
+    },
 ];
 
 #[derive(Serialize)]
@@ -148,14 +166,37 @@ struct BenchmarkResult {
     summary: PerformanceSummary,
 }
 
+#[derive(Serialize)]
+struct LongRunWindow {
+    index: u32,
+    start_tick: u64,
+    end_tick: u64,
+    summary: PerformanceSummary,
+}
+
+#[derive(Serialize)]
+struct LongRunResult {
+    schema_version: u32,
+    scenario: BenchmarkScenario,
+    overall: PerformanceSummary,
+    windows: Vec<LongRunWindow>,
+}
+
 pub fn scenario_names() -> impl Iterator<Item = &'static str> {
     SCENARIOS.iter().map(|scenario| scenario.name)
 }
 
 pub fn run_scenario_json(name: &str) -> Result<String, String> {
     let scenario = find_scenario(name)?;
-    let result = run_scenario(scenario)?;
-    serde_json::to_string(&result).map_err(|error| format!("failed to serialize result: {error}"))
+    if matches!(scenario.workload, BenchmarkWorkload::LongRun { .. }) {
+        let result = run_long_scenario(scenario)?;
+        serde_json::to_string(&result)
+            .map_err(|error| format!("failed to serialize result: {error}"))
+    } else {
+        let result = run_scenario(scenario)?;
+        serde_json::to_string(&result)
+            .map_err(|error| format!("failed to serialize result: {error}"))
+    }
 }
 
 fn find_scenario(name: &str) -> Result<BenchmarkScenario, String> {
@@ -184,6 +225,53 @@ fn run_scenario(scenario: BenchmarkScenario) -> Result<BenchmarkResult, String> 
         schema_version: BENCHMARK_SCHEMA_VERSION,
         scenario,
         summary,
+    })
+}
+
+fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, String> {
+    let BenchmarkWorkload::LongRun { window_count, .. } = scenario.workload else {
+        return Err("long-run executor requires a long-run workload".to_string());
+    };
+    if window_count == 0 || !scenario.measured_ticks.is_multiple_of(window_count) {
+        return Err(format!(
+            "long-run measured ticks {} must divide exactly into {window_count} windows",
+            scenario.measured_ticks
+        ));
+    }
+    let (mut world, mut simulation) = prepare_scenario(scenario)?;
+    for _ in 0..scenario.warmup_ticks {
+        simulation.step(&mut world);
+    }
+    let window_ticks = scenario.measured_ticks / window_count;
+    let mut overall = PerformanceRun::default();
+    let mut windows = Vec::with_capacity(window_count as usize);
+    for index in 0..window_count {
+        let start_tick = simulation.tick();
+        let mut window = PerformanceRun::default();
+        for _ in 0..window_ticks {
+            let profile = simulation.profile_step(&mut world);
+            overall.record(profile.clone());
+            window.record(profile);
+        }
+        let end_tick = simulation.tick();
+        let summary = window.summarize();
+        if summary.state_final.recent_events_len > summary.state_final.recent_events_capacity
+            || summary.state_peak.recent_events_len > summary.state_peak.recent_events_capacity
+        {
+            return Err(format!("event history exceeded capacity in window {index}"));
+        }
+        windows.push(LongRunWindow {
+            index,
+            start_tick,
+            end_tick,
+            summary,
+        });
+    }
+    Ok(LongRunResult {
+        schema_version: BENCHMARK_SCHEMA_VERSION,
+        scenario,
+        overall: overall.summarize(),
+        windows,
     })
 }
 
@@ -232,6 +320,11 @@ fn apply_workload(
             set_single_food_target(world, target, 500);
             Ok(())
         }
+        BenchmarkWorkload::LongRun {
+            food_grid_spacing,
+            food_capacity,
+            ..
+        } => prepare_long_run_food(world, food_grid_spacing, food_capacity),
     }
 }
 
@@ -328,6 +421,41 @@ fn synchronize_renewable_food(world: &mut Grid) {
             })
         })
     });
+}
+
+fn prepare_long_run_food(world: &mut Grid, spacing: u32, capacity: u16) -> Result<(), String> {
+    if spacing == 0 || capacity == 0 {
+        return Err("long-run food spacing and capacity must be nonzero".to_string());
+    }
+    for y in 0..world.height {
+        for x in 0..world.width {
+            if x % spacing == spacing / 2
+                && y % spacing == spacing / 2
+                && world
+                    .get(x, y)
+                    .is_some_and(|tile| tile.terrain.is_walkable())
+            {
+                world.resources[(y * world.width + x) as usize] = Some(ResourceDeposit {
+                    kind: ResourceKind::Food,
+                    amount: capacity,
+                });
+            }
+        }
+    }
+    world.renewable_resources = world
+        .resources
+        .iter()
+        .enumerate()
+        .filter_map(|(index, deposit)| {
+            let deposit = deposit.as_ref()?;
+            (deposit.kind == ResourceKind::Food).then_some(RenewableResource {
+                index,
+                kind: ResourceKind::Food,
+                capacity: deposit.amount,
+            })
+        })
+        .collect();
+    Ok(())
 }
 
 fn build_generated_world(seed: u32, parameters: BenchmarkWorld) -> Grid {
@@ -547,6 +675,7 @@ mod tests {
                 "scarcity-1000",
                 "households-1000",
                 "pathfinding-heavy-1000",
+                "long-run-1000",
             ]
         );
         assert_eq!(
@@ -687,6 +816,64 @@ mod tests {
             assert_eq!(first.summary.state_final, second.summary.state_final);
             assert_eq!(first.summary.state_peak, second.summary.state_peak);
         }
+    }
+
+    #[test]
+    fn long_run_windows_are_contiguous_complete_and_deterministic() {
+        let mut scenario = small_specialized(BenchmarkWorkload::LongRun {
+            window_count: 3,
+            food_grid_spacing: 12,
+            food_capacity: 5_000,
+        });
+        scenario.warmup_ticks = 2;
+        scenario.measured_ticks = 12;
+        let first = run_long_scenario(scenario).unwrap();
+        let second = run_long_scenario(scenario).unwrap();
+
+        assert_eq!(first.scenario, second.scenario);
+        assert_eq!(first.windows.len(), 3);
+        assert_eq!(first.windows[0].start_tick, 2);
+        assert_eq!(first.windows.last().unwrap().end_tick, 14);
+        assert!(first
+            .windows
+            .windows(2)
+            .all(|pair| pair[0].end_tick == pair[1].start_tick));
+        assert_eq!(
+            first
+                .windows
+                .iter()
+                .map(|window| window.summary.samples)
+                .sum::<u64>(),
+            first.overall.samples
+        );
+
+        let mut summed_work = crate::simulation::WorkCounters::default();
+        for (left, right) in first.windows.iter().zip(&second.windows) {
+            assert_eq!(left.index, right.index);
+            assert_eq!(left.start_tick, right.start_tick);
+            assert_eq!(left.end_tick, right.end_tick);
+            assert_eq!(left.summary.work_total, right.summary.work_total);
+            assert_eq!(left.summary.state_final, right.summary.state_final);
+            assert_eq!(left.summary.state_peak, right.summary.state_peak);
+            assert!(
+                left.summary.state_final.recent_events_len
+                    <= left.summary.state_final.recent_events_capacity
+            );
+            assert!(
+                left.summary.state_peak.recent_events_len
+                    <= left.summary.state_peak.recent_events_capacity
+            );
+            assert!(first.overall.state_peak.dominates(&left.summary.state_peak));
+            summed_work.accumulate(&left.summary.work_total);
+        }
+        assert_eq!(summed_work, first.overall.work_total);
+        assert_eq!(first.overall.work_total, second.overall.work_total);
+        assert_eq!(first.overall.state_final, second.overall.state_final);
+        assert_eq!(first.overall.state_peak, second.overall.state_peak);
+        assert_eq!(
+            first.overall.state_final,
+            first.windows.last().unwrap().summary.state_final
+        );
     }
 
     #[test]

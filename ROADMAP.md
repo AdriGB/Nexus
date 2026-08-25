@@ -328,7 +328,7 @@ La auditoría viva se encuentra en
 * [x] Crear escenarios deterministas con seed, mundo, población y duración
 * [x] Registrar baseline 100, 1.000 y 10.000 para ejecución local reproducible
 * [x] Cubrir dense-social, scarcity, households y pathfinding-heavy
-* [ ] Añadir escenario long-run
+* [x] Añadir escenario long-run
 * [ ] Añadir `scripts/bench.ps1`
 * [ ] Ejecutar benchmarks baratos en PR y completos de forma nightly/manual
 
