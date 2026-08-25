@@ -478,9 +478,7 @@ impl Simulation {
         Some(id)
     }
 
-    fn update_autonomy(&mut self, world: &mut Grid) -> (u64, bool) {
-        dependents::snap_infants_to_caregivers(&mut self.entities);
-        self.rebuild_population_index(world);
+    fn execute_autonomy(&mut self, world: &mut Grid) -> (u64, bool, Vec<(u32, u16)>) {
         let (
             consumed,
             world_changed,
@@ -499,13 +497,7 @@ impl Simulation {
         self.process_food_share_attempts(food_share_attempts);
         self.process_household_deposit_attempts(household_deposit_attempts);
         self.process_household_withdraw_attempts(household_withdraw_attempts);
-        dependents::snap_infants_to_caregivers(&mut self.entities);
-
-        for (id, amount) in consumer_ids {
-            dependents::feed_infants_of(&mut self.entities, id, amount);
-        }
-
-        (consumed, world_changed)
+        (consumed, world_changed, consumer_ids)
     }
 
     fn run_autonomy(&mut self, world: &mut Grid) -> AutonomyRunResult {
