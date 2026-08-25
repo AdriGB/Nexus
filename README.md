@@ -171,3 +171,24 @@ Run the same validation used by CI from the repository root:
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the Issue, branch, pull request, validation, and roadmap workflow.
+
+## Performance benchmarks
+
+Nexus provides two complementary benchmark layers. `nexus-bench` runs deterministic,
+end-to-end simulation scenarios and writes versioned JSON results. Criterion measures
+focused pathfinding, spatial-index, and autonomy workloads.
+
+Use the repository-level orchestrator from any working directory:
+
+```powershell
+./scripts/bench.ps1                       # quick: cheap scenarios + Criterion --quick
+./scripts/bench.ps1 -Suite micro          # full Criterion microbenchmarks
+./scripts/bench.ps1 -Suite scenarios      # all regular end-to-end scenarios
+./scripts/bench.ps1 -Suite full           # every scenario, long-run, and Criterion
+./scripts/bench.ps1 -Scenario scarcity-1000
+```
+
+Scenario JSON files are stored under `target/nexus-bench/` by default; use
+`-OutputDir` to choose another disposable location. Criterion keeps its normal output
+under Cargo's target directory. Local timings are observations, not official baselines
+or regression thresholds.

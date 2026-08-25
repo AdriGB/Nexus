@@ -1,5 +1,6 @@
 # Rust
 engine/target/
+target/
 
 # WASM build output (rebuilt from engine source)
 web/src/wasm/
