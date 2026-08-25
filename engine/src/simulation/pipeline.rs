@@ -32,6 +32,11 @@ impl TickInstrumentation for NoopInstrumentation {
     fn record(&mut self, _phase: TickPhase, _elapsed_us: u64) {}
 }
 
+struct ExecutionInstrumentation<'a, Phases> {
+    phases: Phases,
+    autonomy: Option<&'a mut AutonomyProfile>,
+}
+
 struct PhaseInstrumentation {
     profile: PhaseProfile,
     total_start: Instant,
@@ -87,23 +92,36 @@ where
 }
 
 pub(super) fn run_step(simulation: &mut Simulation, world: &mut Grid) {
-    execute_step(simulation, world, &mut NoopInstrumentation);
+    execute_step(
+        simulation,
+        world,
+        &mut ExecutionInstrumentation {
+            phases: NoopInstrumentation,
+            autonomy: None,
+        },
+    );
 }
 
 pub(super) fn run_profiled_step(simulation: &mut Simulation, world: &mut Grid) -> PhaseProfile {
-    let mut instrumentation = PhaseInstrumentation::new();
+    let mut instrumentation = ExecutionInstrumentation {
+        phases: PhaseInstrumentation::new(),
+        autonomy: None,
+    };
     execute_step(simulation, world, &mut instrumentation);
-    instrumentation.finish()
+    instrumentation.phases.finish()
 }
 
-fn execute_step<I>(simulation: &mut Simulation, world: &mut Grid, instrumentation: &mut I)
-where
+fn execute_step<I>(
+    simulation: &mut Simulation,
+    world: &mut Grid,
+    instrumentation: &mut ExecutionInstrumentation<'_, I>,
+) where
     I: TickInstrumentation,
 {
     simulation.tick = simulation.tick.saturating_add(1);
     simulation.regenerate_renewable_resources(world);
 
-    instrument(instrumentation, TickPhase::Physiology, || {
+    instrument(&mut instrumentation.phases, TickPhase::Physiology, || {
         physiology::advance(&mut simulation.entities);
     });
 
@@ -116,13 +134,18 @@ where
         simulation.tick,
     );
 
-    instrument(instrumentation, TickPhase::PopulationIndex, || {
-        simulation.rebuild_population_index(world);
-    });
+    instrument(
+        &mut instrumentation.phases,
+        TickPhase::PopulationIndex,
+        || {
+            simulation.rebuild_population_index(world);
+        },
+    );
 
+    let autonomy_profile = instrumentation.autonomy.as_deref_mut();
     let (consumed_this_tick, world_changed, consumer_ids) =
-        instrument(instrumentation, TickPhase::Autonomy, || {
-            simulation.execute_autonomy(world)
+        instrument(&mut instrumentation.phases, TickPhase::Autonomy, || {
+            simulation.execute_autonomy(world, autonomy_profile)
         });
 
     dependents::snap_infants_to_caregivers(&mut simulation.entities);
@@ -130,19 +153,23 @@ where
         dependents::feed_infants_of(&mut simulation.entities, id, amount);
     }
 
-    instrument(instrumentation, TickPhase::Starvation, || {
+    instrument(&mut instrumentation.phases, TickPhase::Starvation, || {
         physiology::resolve_starvation(&mut simulation.entities);
     });
 
-    instrument(instrumentation, TickPhase::ResourceChanges, || {
-        simulation.record_resource_changes(consumed_this_tick, world_changed);
-    });
+    instrument(
+        &mut instrumentation.phases,
+        TickPhase::ResourceChanges,
+        || {
+            simulation.record_resource_changes(consumed_this_tick, world_changed);
+        },
+    );
 
-    let deaths = instrument(instrumentation, TickPhase::RemoveDead, || {
+    let deaths = instrument(&mut instrumentation.phases, TickPhase::RemoveDead, || {
         simulation.remove_dead_entities()
     });
 
-    instrument(instrumentation, TickPhase::Pregnancies, || {
+    instrument(&mut instrumentation.phases, TickPhase::Pregnancies, || {
         grief::process_witnessed_deaths(
             &mut simulation.entities,
             &simulation.genealogy,
@@ -178,7 +205,7 @@ where
 
     simulation.run_daily_relationship_decay();
 
-    instrument(instrumentation, TickPhase::Conceptions, || {
+    instrument(&mut instrumentation.phases, TickPhase::Conceptions, || {
         simulation.try_daily_conceptions();
     });
 }
@@ -187,80 +214,15 @@ pub(super) fn run_profiled_autonomy_step(
     simulation: &mut Simulation,
     world: &mut Grid,
 ) -> AutonomyProfile {
-    simulation.tick = simulation.tick.saturating_add(1);
-    simulation.regenerate_renewable_resources(world);
-    physiology::advance(&mut simulation.entities);
-    dependents::clear_graduated_caregivers(&mut simulation.entities);
-    dependents::snap_infants_to_caregivers(&mut simulation.entities);
-    households::plan_daily_household_migrations(
-        &simulation.entities,
-        &mut simulation.households,
-        world,
-        simulation.tick,
-    );
-    simulation.rebuild_population_index(world);
-
     let mut profile = AutonomyProfile::default();
-    let (
-        consumed_this_tick,
-        world_changed,
-        consumer_ids,
-        discoveries,
-        encounters,
-        interactions,
-        food_share_attempts,
-        household_deposit_attempts,
-        household_withdraw_attempts,
-        household_conflict_attempts,
-    ) = simulation.run_autonomy(world, Some(&mut profile));
-    simulation.record_resource_discoveries(discoveries);
-    simulation.record_entity_encounters(encounters);
-    simulation.record_food_consumptions(&consumer_ids);
-    simulation.record_social_interactions(interactions);
-    simulation.process_food_share_attempts(food_share_attempts);
-    simulation.process_household_deposit_attempts(household_deposit_attempts);
-    simulation.process_household_withdraw_attempts(household_withdraw_attempts);
-    simulation.process_household_conflict_attempts(household_conflict_attempts);
-
-    dependents::snap_infants_to_caregivers(&mut simulation.entities);
-    for (id, amount) in consumer_ids {
-        dependents::feed_infants_of(&mut simulation.entities, id, amount);
-    }
-
-    physiology::resolve_starvation(&mut simulation.entities);
-    simulation.record_resource_changes(consumed_this_tick, world_changed);
-    let deaths = simulation.remove_dead_entities();
-    grief::process_witnessed_deaths(
-        &mut simulation.entities,
-        &simulation.genealogy,
-        &deaths,
-        simulation.tick,
+    execute_step(
+        simulation,
+        world,
+        &mut ExecutionInstrumentation {
+            phases: NoopInstrumentation,
+            autonomy: Some(&mut profile),
+        },
     );
-    dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
-    simulation.update_pregnancies(world);
-    households::synchronize_dependent_memberships(&mut simulation.entities, &simulation.households);
-    households::settle_completed_migrations(
-        &simulation.entities,
-        &mut simulation.households,
-        simulation.tick,
-    );
-    let dissolutions = households::dissolve_empty_households(
-        &simulation.entities,
-        &mut simulation.households,
-        simulation.tick,
-    );
-    households::settle_basic_inheritances(
-        &mut simulation.entities,
-        &mut simulation.households,
-        &simulation.genealogy,
-        &deaths,
-        &dissolutions,
-        simulation.tick,
-    );
-    // Covers both newly reassigned infants and newborns assigned to their mother.
-    dependents::snap_infants_to_caregivers(&mut simulation.entities);
-    simulation.run_daily_relationship_decay();
-    simulation.try_daily_conceptions();
 
     profile
 }

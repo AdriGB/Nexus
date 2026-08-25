@@ -480,7 +480,11 @@ impl Simulation {
         Some(id)
     }
 
-    fn execute_autonomy(&mut self, world: &mut Grid) -> (u64, bool, Vec<(u32, u16)>) {
+    fn execute_autonomy(
+        &mut self,
+        world: &mut Grid,
+        profile: Option<&mut AutonomyProfile>,
+    ) -> (u64, bool, Vec<(u32, u16)>) {
         let (
             consumed,
             world_changed,
@@ -492,7 +496,7 @@ impl Simulation {
             household_deposit_attempts,
             household_withdraw_attempts,
             household_conflict_attempts,
-        ) = self.run_autonomy(world, None);
+        ) = self.run_autonomy(world, profile);
         self.record_resource_discoveries(discoveries);
         self.record_entity_encounters(encounters);
         self.record_food_consumptions(&consumer_ids);

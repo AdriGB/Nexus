@@ -306,12 +306,12 @@ La auditoría viva se encuentra en
 
 ## Phase 2.11.2 — One simulation pipeline
 
-* [ ] Unificar `run_step` y `run_profiled_step`
-* [ ] Hacer opcional la instrumentación sobre el mismo camino de ejecución
-* [ ] Mantener una sola definición del orden del tick
-* [ ] Mantener una sola definición del pipeline de autonomía
+* [x] Unificar `run_step` y `run_profiled_step`
+* [x] Hacer opcional la instrumentación sobre el mismo camino de ejecución
+* [x] Mantener una sola definición del orden del tick
+* [x] Mantener una sola definición del pipeline de autonomía
 * [ ] Nombrar y estabilizar las fases del pipeline
-* [ ] Conservar tests de paridad como defensa adicional
+* [x] Conservar tests de paridad como defensa adicional
 
 ## Phase 2.11.3 — Performance observatory
 
