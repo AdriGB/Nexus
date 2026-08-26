@@ -61,7 +61,7 @@ jobs:
       - name: Emit performance warnings
         if: ${{ success() && steps.suite.outputs.value != 'micro' }}
         shell: pwsh
-        run: ./scripts/emit-benchmark-warnings.ps1 -ComparisonPath target/nexus-bench/benchmark-comparison.json
+        run: ./scripts/emit-benchmark-warnings.ps1 -ComparisonPath target/nexus-bench/benchmark-comparison.json -CandidateGateThresholdPercent 30
 
       - name: Inspect scenario output
         if: ${{ always() }}
@@ -76,36 +76,6 @@ jobs:
           "raw_present=$($null -ne $rawPresent)".ToLowerInvariant() >> $env:GITHUB_OUTPUT
           "aggregate_present=$aggregatePresent".ToLowerInvariant() >> $env:GITHUB_OUTPUT
           "comparison_present=$comparisonPresent".ToLowerInvariant() >> $env:GITHUB_OUTPUT
-
-      - name: Upload raw scenario results
-        if: ${{ always() && steps.results.outputs.raw_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nexus-benchmark-raw-results-${{ steps.suite.outputs.value }}
-          path: |
-            target/nexus-bench/*.json
-            !target/nexus-bench/benchmark-results.json
-            !target/nexus-bench/benchmark-comparison.json
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Upload aggregate benchmark results
-        if: ${{ always() && steps.results.outputs.aggregate_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nexus-benchmark-results-${{ steps.suite.outputs.value }}
-          path: target/nexus-bench/benchmark-results.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload benchmark comparison
-        if: ${{ always() && steps.results.outputs.comparison_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nexus-benchmark-comparison-${{ steps.suite.outputs.value }}
-          path: target/nexus-bench/benchmark-comparison.json
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Write benchmark summary
         if: ${{ always() }}
@@ -157,3 +127,39 @@ jobs:
 
           $informationalSummary
           "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Run performance gate
+        if: ${{ success() && steps.suite.outputs.value != 'micro' && steps.results.outputs.comparison_present == 'true' }}
+        shell: pwsh
+        run: ./scripts/run-benchmark-gate.ps1 -ComparisonPath target/nexus-bench/benchmark-comparison.json -RetryOutputDir target/nexus-bench/retry
+
+      - name: Upload raw scenario results
+        if: ${{ always() && steps.results.outputs.raw_present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-benchmark-raw-results-${{ steps.suite.outputs.value }}
+          path: |
+            target/nexus-bench/*.json
+            !target/nexus-bench/benchmark-results.json
+            !target/nexus-bench/benchmark-comparison.json
+            target/nexus-bench/retry/**
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload aggregate benchmark results
+        if: ${{ always() && steps.results.outputs.aggregate_present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-benchmark-results-${{ steps.suite.outputs.value }}
+          path: target/nexus-bench/benchmark-results.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload benchmark comparison
+        if: ${{ always() && steps.results.outputs.comparison_present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nexus-benchmark-comparison-${{ steps.suite.outputs.value }}
+          path: target/nexus-bench/benchmark-comparison.json
+          if-no-files-found: error
+          retention-days: 7

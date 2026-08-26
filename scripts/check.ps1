@@ -50,6 +50,9 @@ function Test-Engine {
         Invoke-CheckStep "Benchmark regression report tests" {
             & (Join-Path $repoRoot "scripts/test-benchmark-regression-report.ps1")
         }
+        Invoke-CheckStep "Benchmark gate tests" {
+            & (Join-Path $repoRoot "scripts/test-benchmark-gate.ps1")
+        }
         Invoke-CheckStep "Rust clippy (WASM)" {
             cargo clippy --target wasm32-unknown-unknown -- -D warnings
         }

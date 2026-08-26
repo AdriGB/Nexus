@@ -79,8 +79,14 @@ function ConvertTo-GitHubWorkflowCommandValue {
 }
 
 function Write-GitHubBenchmarkWarningAnnotations {
-    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Observations)
-    foreach ($item in @($Observations | Where-Object Level -eq "Warning")) {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Observations,
+        [double]$ExcludeCandidatesAbovePercent = 0
+    )
+    foreach ($item in @($Observations | Where-Object {
+        $_.Level -eq "Warning" -and
+        ($ExcludeCandidatesAbovePercent -le 0 -or [double]$_.MeanDeltaPercent -le $ExcludeCandidatesAbovePercent)
+    })) {
         $message = "$($item.Name): total mean $(Format-Percent $item.MeanDeltaPercent) ($(Format-Milliseconds $item.BaselineMeanUs) -> $(Format-Milliseconds $item.CurrentMeanUs))"
         Write-Output "::warning title=$(ConvertTo-GitHubWorkflowCommandValue 'Potential performance slowdown')::$(ConvertTo-GitHubWorkflowCommandValue $message)"
     }
