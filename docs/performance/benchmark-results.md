@@ -66,8 +66,10 @@ remain informational. A warning means a potential slowdown worth attention, not
 a confirmed regression: GitHub-hosted runner noise can still contribute.
 
 Warnings are emitted once per scenario in Actions and include total mean delta,
-baseline mean, and current mean. Local runs print ordinary `WARNING:` text
-instead. Neither form changes the benchmark exit code.
+baseline mean, and current mean. Scenarios already announced as performance
+gate candidates are excluded from this generic warning so each scenario
+receives at most one pre-retry annotation. Local runs print ordinary `WARNING:`
+text instead. Neither form changes the benchmark exit code.
 
 ## Performance gate
 
@@ -112,8 +114,10 @@ Performance differences alone therefore produce a non-zero exit code only for
 confirmed regressions or technical failures; warnings never block. The gate is
 skipped for the Criterion-only `micro` suite because it has no aggregate or
 comparison. Retry outputs are preserved inside the raw results artifact for
-auditability. Baselines are never updated automatically: an intentional
-slowdown is absorbed later by an explicit baseline-update PR.
+auditability: the gate runs before artifact upload, so `retry/` is included
+whenever a confirmation run happens. Baselines are never updated
+automatically: an intentional slowdown is absorbed later by an explicit
+baseline-update PR.
 
 One confirmation run is required before blocking because shared GitHub-hosted
 runners are noisy. Reproduction on a second run is an operational confirmation

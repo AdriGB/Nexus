@@ -47,6 +47,22 @@ try {
     if ($annotations[0] -notmatch '^::warning title=Potential performance slowdown::alpha%3A total mean \+25\.00%') { throw "Warning annotation is malformed." }
     if ($annotations -match "info-a") { throw "Informational scenarios emitted warnings." }
 
+    # Gate candidates above the exclusion threshold are announced by the gate instead.
+    $withCandidate = @(
+        (New-Scenario "generic-only" 25),
+        (New-Scenario "gate-candidate" 35.2),
+        (New-Scenario "boundary-thirty" 30),
+        (New-Scenario "info" 15)
+    )
+    Write-Comparison $path $withCandidate
+    $mixed = @(Get-BenchmarkPerformanceObservations $path)
+    $deduplicated = @(Write-GitHubBenchmarkWarningAnnotations -Observations $mixed -ExcludeCandidatesAbovePercent 30)
+    Assert-Equal 2 $deduplicated.Count "Only non-candidate warnings must remain when candidates are excluded."
+    Assert-True ($deduplicated[0] -match '^::warning title=Potential performance slowdown::boundary-thirty') "Exclusion kept the wrong warning."
+    Assert-True ($deduplicated[1] -match '^::warning title=Potential performance slowdown::generic-only') "Exclusion kept the wrong warning."
+    Assert-True ((@($deduplicated | Where-Object { $_ -match "gate-candidate" })).Count -eq 0) "Candidate warning was not suppressed."
+    Assert-Equal 3 @(Write-GitHubBenchmarkWarningAnnotations -Observations $mixed).Count "Without exclusion every warning must be emitted."
+
     Write-Comparison $path @((New-Scenario "none" 10))
     $none = @(Get-BenchmarkPerformanceObservations $path)
     Assert-Equal 0 $none.Count "Zero-report case differs."
