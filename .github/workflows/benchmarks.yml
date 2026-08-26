@@ -58,6 +58,11 @@ jobs:
         shell: pwsh
         run: ./scripts/bench.ps1 -Suite "${{ steps.suite.outputs.value }}"
 
+      - name: Emit performance warnings
+        if: ${{ success() && steps.suite.outputs.value != 'micro' }}
+        shell: pwsh
+        run: ./scripts/emit-benchmark-warnings.ps1 -ComparisonPath target/nexus-bench/benchmark-comparison.json
+
       - name: Inspect scenario output
         if: ${{ always() }}
         id: results
@@ -121,8 +126,8 @@ jobs:
           if ("${{ steps.results.outputs.comparison_present }}" -eq "true") {
             $comparison = Get-Content "target/nexus-bench/benchmark-comparison.json" -Raw | ConvertFrom-Json
             . ./scripts/benchmark-regression-report.ps1
-            $slowdowns = @(Get-ReportableBenchmarkSlowdowns -ComparisonPath "target/nexus-bench/benchmark-comparison.json")
-            $informationalSummary = Get-InformationalBenchmarkMarkdown -Slowdowns $slowdowns
+            $observations = @(Get-BenchmarkPerformanceObservations -ComparisonPath "target/nexus-bench/benchmark-comparison.json")
+            $informationalSummary = Get-InformationalBenchmarkMarkdown -Slowdowns $observations
             $comparisonSummary = @"
           - Baseline: benchmarks/baselines/github-ubuntu-x64/benchmark-results.json (schema 1)
           - Compared scenarios: $($comparison.summary.compared_scenarios)
