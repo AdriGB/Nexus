@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "benchmark-regression-report.ps1")
 
 function Assert-Equal($Expected, $Actual, [string]$Message) { if ($Expected -cne $Actual) { throw "$Message Expected '$Expected', got '$Actual'." } }
+function Assert-True($Value, [string]$Message) { if (-not $Value) { throw $Message } }
 function Assert-Throws([scriptblock]$Action, [string]$Message) { try { & $Action | Out-Null } catch { return }; throw $Message }
 function New-Scenario([string]$Name, $MeanDelta, [double]$BaselineMean = 1000, [double]$CurrentMean = 1100, [double]$P95Delta = 4, [double]$PhaseDelta = 0) {
     [ordered]@{ name = $Name; timings = [ordered]@{
