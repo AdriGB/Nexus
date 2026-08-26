@@ -22,8 +22,7 @@ timestamps, host details, paths, commit IDs, and other volatile provenance.
 The `quick`, `scenarios`, and `full` suites create the aggregate, as does a
 single-scenario execution. The Criterion-only `micro` suite does not. Raw
 scenario files remain diagnostic outputs, while `benchmark-results.json` is the
-canonical input for future baseline comparison. No baseline, regression
-comparison, threshold, or performance gate exists yet.
+canonical input for baseline comparison and the performance gate.
 
 ## Baseline and comparison
 
@@ -56,8 +55,8 @@ noise.
 Calibration during PR #160 illustrates that noise: three GitHub-hosted Quick
 runs measured `baseline-1000` total mean at 33,686.65 us (+14.189944%),
 30,422.18 us (+3.124146%), and 34,560.62 us (+17.152500%) against the same
-29,500.54 us baseline. Therefore the report neither changes exit codes nor uses
-GitHub warning annotations. The future 20% and 30% policies remain separate.
+29,500.54 us baseline. Therefore the informational level changes neither exit
+codes nor job status.
 
 ## Significant slowdown warnings
 
@@ -68,5 +67,54 @@ a confirmed regression: GitHub-hosted runner noise can still contribute.
 
 Warnings are emitted once per scenario in Actions and include total mean delta,
 baseline mean, and current mean. Local runs print ordinary `WARNING:` text
-instead. Neither form changes the benchmark exit code; the future 30% gate is a
-separate policy.
+instead. Neither form changes the benchmark exit code.
+
+## Performance gate
+
+The gate is the blocking layer of the policy ladder:
+
+| Total mean delta | Classification | Job effect |
+| --- | --- | --- |
+| <= 10% | None | Success |
+| > 10%, <= 20% | Informational | Success |
+| > 20%, <= 30% | Warning | Success |
+| > 30% | Candidate regression | Pending confirmation |
+| Candidate reproduced above 30% | Confirmed regression | Failure |
+| Candidate not reproduced above 30% | Recovered | Success |
+
+The signal is strictly `scenario.timings.total.mean.delta_percent`. Exactly
+30.000000% is not a candidate; 30.000001% is. Phase timings, p95, p99, max, and
+the comparison summary never activate or soften the gate; they remain diagnostic
+context.
+
+A candidate regression must be reproduced before it blocks. The gate re-runs
+only the candidate scenario — through the ordinary single-scenario benchmark
+entry point with identical scenario metadata (seed, population, warmup,
+measured ticks, workload) — into an isolated output directory
+(`target/nexus-bench/retry/`, including its own aggregate and comparison files)
+and compares that second measurement against the same Full baseline. Nothing
+else is re-run: Quick retries one candidate scenario, nightly Full retries for
+example only `long-run-1000`. Each candidate receives exactly one confirmation
+run; there are no retry loops, medians of N, or other aggregation.
+
+Outcomes:
+
+- **Recovered** — the retry measures at or below 30%. The job stays green, a
+  warning annotation notes that the candidate was not reproduced, and the
+  summary row reads `Recovered`.
+- **Confirmed** — the retry also measures strictly above 30%. The job fails,
+  one error annotation names the confirmed scenario, and the summary row reads
+  `Confirmed`.
+- **Technical failure** — the confirmation run itself breaks (build, execution,
+  invalid output). This is a broken benchmark, not a recovery: the job fails.
+
+Performance differences alone therefore produce a non-zero exit code only for
+confirmed regressions or technical failures; warnings never block. The gate is
+skipped for the Criterion-only `micro` suite because it has no aggregate or
+comparison. Retry outputs are preserved inside the raw results artifact for
+auditability. Baselines are never updated automatically: an intentional
+slowdown is absorbed later by an explicit baseline-update PR.
+
+One confirmation run is required before blocking because shared GitHub-hosted
+runners are noisy. Reproduction on a second run is an operational confirmation
+policy, not a statistical guarantee or proof.

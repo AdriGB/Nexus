@@ -196,7 +196,8 @@ or regression thresholds.
 GitHub Actions runs the `quick` suite for pull requests, the `full` suite nightly,
 and a selected suite (`quick`, `micro`, `scenarios`, or `full`) on manual dispatch.
 Raw scenario JSON is retained for seven days as a diagnostic artifact; it is not an
-official baseline. Benchmark timings do not have regression thresholds yet.
+official baseline. Only confirmed total-mean regressions above 30% block a job,
+and only after one confirmation run.
 
 Suites with end-to-end scenarios also produce the stable aggregate contract
 `benchmark-results.json`; see
@@ -204,5 +205,9 @@ Suites with end-to-end scenarios also produce the stable aggregate contract
 `micro` runs are not included.
 
 Scenario runs are also compared mathematically with the reviewed GitHub Ubuntu
-Full baseline. The resulting `benchmark-comparison.json` reports timing deltas but
-does not classify or gate performance; baseline updates remain explicit PR changes.
+Full baseline. The resulting `benchmark-comparison.json` reports timing deltas.
+Total-mean slowdowns above 10% are reported as informational observations,
+above 20% as warnings, and above 30% as candidate regressions that must be
+reproduced on a second, isolated confirmation run before the job fails; see
+[Aggregate benchmark results](docs/performance/benchmark-results.md). Baseline
+updates remain explicit PR changes.

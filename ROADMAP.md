@@ -338,7 +338,7 @@ La auditoría viva se encuentra en
 * [x] Comparar cada escenario con un baseline versionado
 * [x] Informar regresiones superiores al 10 %
 * [x] Marcar warning por encima del 20 %
-* [ ] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
+* [x] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
 * [ ] Mostrar la fase y los contadores que explican cada regresión
 
 ## Phase 2.11.6 — Scalability and multi-rate simulation

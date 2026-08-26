@@ -86,6 +86,7 @@ jobs:
             target/nexus-bench/*.json
             !target/nexus-bench/benchmark-results.json
             !target/nexus-bench/benchmark-comparison.json
+            target/nexus-bench/retry/**
           if-no-files-found: warn
           retention-days: 7
 
@@ -157,3 +158,8 @@ jobs:
 
           $informationalSummary
           "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Run performance gate
+        if: ${{ success() && steps.suite.outputs.value != 'micro' && steps.results.outputs.comparison_present == 'true' }}
+        shell: pwsh
+        run: ./scripts/run-benchmark-gate.ps1 -ComparisonPath target/nexus-bench/benchmark-comparison.json -RetryOutputDir target/nexus-bench/retry
