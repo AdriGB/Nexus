@@ -205,9 +205,11 @@ Suites with end-to-end scenarios also produce the stable aggregate contract
 `micro` runs are not included.
 
 Scenario runs are also compared mathematically with the reviewed GitHub Ubuntu
-Full baseline. The resulting `benchmark-comparison.json` reports timing deltas.
-Total-mean slowdowns above 10% are reported as informational observations,
-above 20% as warnings, and above 30% as candidate regressions that must be
-reproduced on a second, isolated confirmation run before the job fails; see
+Full baseline. The resulting `benchmark-comparison.json` reports timing, work,
+and state-peak deltas. Total-mean slowdowns above 10% are reported as
+informational observations, above 20% as warnings, and above 30% as candidate
+regressions that must be reproduced on a second, isolated confirmation run
+before the job fails. Reported slowdowns name the phases and counters that
+explain the total-mean increase; see
 [Aggregate benchmark results](docs/performance/benchmark-results.md). Baseline
 updates remain explicit PR changes.

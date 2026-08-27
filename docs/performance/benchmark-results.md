@@ -36,13 +36,15 @@ Runs containing scenarios compare their current aggregate with that Full
 baseline and write `benchmark-comparison.json` schema v1. Each current scenario
 must have identical deterministic scenario metadata in the baseline. The output
 contains baseline/current values and `((current - baseline) / baseline) * 100`
-for total and every canonical phase across mean, median, p95, p99, and max.
-Positive values are slower and negative values are faster. A nonzero current
-value over a zero baseline has a `null` delta. Long-run comparisons use the
-complete input but currently compare its `overall` summary, not each window.
+for total and every canonical phase across mean, median, p95, p99, and max,
+plus the same percent delta for each `work_total` counter and `state_peak`
+gauge. Positive timing values are slower and negative values are faster. A
+nonzero current value over a zero baseline has a `null` delta. Long-run
+comparisons use the complete input but currently compare its `overall` summary,
+not each window.
 
-The comparison is mathematical only: there are no thresholds, classifications,
-warnings, or performance gates.
+The comparison itself is mathematical. Classification, GitHub annotations, and
+the performance gate are separate reporting layers that consume it.
 
 ## Informational slowdown report
 
@@ -85,9 +87,9 @@ The gate is the blocking layer of the policy ladder:
 | Candidate not reproduced above 30% | Recovered | Success |
 
 The signal is strictly `scenario.timings.total.mean.delta_percent`. Exactly
-30.000000% is not a candidate; 30.000001% is. Phase timings, p95, p99, max, and
-the comparison summary never activate or soften the gate; they remain diagnostic
-context.
+30.000000% is not a candidate; 30.000001% is. Phase timings, p95, p99, max,
+work counters, state gauges, and the comparison summary never activate or
+soften the gate; they remain diagnostic context.
 
 A candidate regression must be reproduced before it blocks. The gate re-runs
 only the candidate scenario — through the ordinary single-scenario benchmark
@@ -122,3 +124,17 @@ baseline-update PR.
 One confirmation run is required before blocking because shared GitHub-hosted
 runners are noisy. Reproduction on a second run is an operational confirmation
 policy, not a statistical guarantee or proof.
+
+## Regression attribution
+
+When a scenario is reported — informational, warning, candidate, or confirmed —
+the report names the canonical phases and the work/state counters that explain
+the `total.mean` increase. Attribution ranks absolute increases, not
+percentages: a 4 µs phase that jumped 400% does not outrank a 200 µs autonomy
+increase. Unchanged or decreased values are omitted. At most three items of
+each kind are shown, with ordinal name as the tie-break.
+
+A phase or counter spike without a `total.mean` slowdown never creates an
+observation, annotation, or candidate. The gate still blocks only on a
+confirmed `total.mean` retry. Attribution appears in local output, GitHub
+annotations, and the job summary as an `Explained by` column.

@@ -11,6 +11,51 @@ function New-Scenario([string]$Name, $MeanDelta, [double]$BaselineMean = 1000, [
         households = [ordered]@{ mean = [ordered]@{ delta_percent = $PhaseDelta } }
     }}
 }
+function New-PhaseMean([double]$Baseline, [double]$Current) {
+    [ordered]@{ mean = [ordered]@{ baseline_us = $Baseline; current_us = $Current; delta_percent = if ($Baseline -eq 0) { if ($Current -eq 0) { 0 } else { $null } } else { [math]::Round((($Current - $Baseline) / $Baseline) * 100.0, 6) } } }
+}
+function New-Count([double]$Baseline, [double]$Current) {
+    [ordered]@{ baseline = $Baseline; current = $Current; delta_percent = if ($Baseline -eq 0) { if ($Current -eq 0) { 0 } else { $null } } else { [math]::Round((($Current - $Baseline) / $Baseline) * 100.0, 6) } }
+}
+function New-AttributedScenario {
+    param(
+        [string]$Name,
+        [double]$MeanDelta = 25,
+        [double]$BaselineMean = 1000,
+        [double]$CurrentMean = 1250,
+        [double]$AutonomyBaseline = 800,
+        [double]$AutonomyCurrent = 1000,
+        [double]$HouseholdsBaseline = 1,
+        [double]$HouseholdsCurrent = 5,
+        [double]$NodesBaseline = 10000,
+        [double]$NodesCurrent = 22000,
+        [double]$GoalBaseline = 10,
+        [double]$GoalCurrent = 11,
+        [double]$KnownBaseline = 100,
+        [double]$KnownCurrent = 150
+    )
+    [ordered]@{
+        name = $Name
+        timings = [ordered]@{
+            total = [ordered]@{
+                mean = [ordered]@{ baseline_us = $BaselineMean; current_us = $CurrentMean; delta_percent = $MeanDelta }
+                p95 = [ordered]@{ baseline_us = 1200; current_us = 1248; delta_percent = 4 }
+            }
+            autonomy = New-PhaseMean $AutonomyBaseline $AutonomyCurrent
+            households = New-PhaseMean $HouseholdsBaseline $HouseholdsCurrent
+            physiology = New-PhaseMean 10 10
+        }
+        work = [ordered]@{
+            pathfinding_nodes_expanded = New-Count $NodesBaseline $NodesCurrent
+            goal_changes = New-Count $GoalBaseline $GoalCurrent
+            actions_executed = New-Count 100 90
+        }
+        state_peak = [ordered]@{
+            known_entities_total = New-Count $KnownBaseline $KnownCurrent
+            entities_alive = New-Count 100 100
+        }
+    }
+}
 function Write-Comparison([string]$Path, [array]$Scenarios, [int]$Schema = 1) { [IO.File]::WriteAllText($Path, ([ordered]@{ schema_version = $Schema; scenarios = $Scenarios } | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false)) }
 
 $root = Join-Path ([IO.Path]::GetTempPath()) "nexus-report-$([guid]::NewGuid())"
@@ -35,6 +80,7 @@ try {
     Assert-Equal 1000 $items[3].BaselineMeanUs "Baseline mean was not preserved."
     Assert-Equal 1200.1 $items[3].CurrentMeanUs "Current mean was not preserved."
     Assert-Equal 7 $items[3].P95DeltaPercent "p95 context was not preserved."
+    Assert-Equal "" $items[0].Explanation "Scenarios without counters must still report with empty attribution."
 
     Write-Comparison $path @((New-Scenario "zeta" 25), (New-Scenario "alpha" 25), (New-Scenario "info-z" 15), (New-Scenario "info-a" 15))
     $ties = @(Get-BenchmarkPerformanceObservations $path)
@@ -74,6 +120,45 @@ try {
     $malformed = New-Scenario "malformed" 11; $malformed.timings.total.p95 = $null
     Write-Comparison $path @($malformed)
     Assert-Throws { Get-BenchmarkPerformanceObservations $path } "Malformed timing was accepted."
+
+    # Attribution ranks absolute microseconds, not a tiny phase's percentage spike.
+    Write-Comparison $path @(
+        (New-AttributedScenario "explained"),
+        (New-AttributedScenario "phase-only-noise" -MeanDelta 5 -BaselineMean 1000 -CurrentMean 1050)
+    )
+    $attributed = @(Get-BenchmarkPerformanceObservations $path)
+    Assert-Equal 1 $attributed.Count "A phase spike without a total-mean slowdown must not be reported."
+    Assert-Equal "explained" $attributed[0].Name "Attributed scenario differs."
+    Assert-Equal 2 @($attributed[0].Attribution.Phases).Count "Phase attribution count differs."
+    Assert-Equal "autonomy" $attributed[0].Attribution.Phases[0].Name "Absolute microseconds must outrank a tiny high-percent phase."
+    Assert-Equal 200 $attributed[0].Attribution.Phases[0].AbsoluteDelta "Autonomy absolute delta differs."
+    Assert-Equal "households" $attributed[0].Attribution.Phases[1].Name "Secondary phase order differs."
+    Assert-Equal "pathfinding_nodes_expanded" $attributed[0].Attribution.Work[0].Name "Work attribution must rank absolute count increases."
+    Assert-Equal 12000 $attributed[0].Attribution.Work[0].AbsoluteDelta "Work absolute delta differs."
+    Assert-Equal "goal_changes" $attributed[0].Attribution.Work[1].Name "Secondary work order differs."
+    Assert-Equal 1 @($attributed[0].Attribution.State).Count "Single grown state gauge must not unwrap."
+    Assert-Equal "known_entities_total" $attributed[0].Attribution.State[0].Name "Grown state gauges must appear."
+    Assert-Equal 0 @($attributed[0].Attribution.State | Where-Object Name -eq "entities_alive").Count "Unchanged state gauges must be omitted."
+    Assert-True ($attributed[0].Explanation -match "autonomy \+200\.00 us") "Explanation must name the dominant phase."
+    Assert-True ($attributed[0].Explanation -match "pathfinding_nodes_expanded \+12000") "Explanation must name the dominant counter."
+    Assert-True ($attributed[0].Explanation -notmatch "physiology") "Unchanged phases must be omitted."
+    Assert-True ($attributed[0].Explanation -notmatch "actions_executed") "Decreased counters must be omitted."
+    $explainedMarkdown = Get-InformationalBenchmarkMarkdown $attributed
+    Assert-True ($explainedMarkdown -match "Explained by") "Markdown must include attribution."
+    Assert-True ($explainedMarkdown -match "autonomy \+200\.00 us") "Markdown attribution differs."
+    $explainedAnnotations = @(Write-GitHubBenchmarkWarningAnnotations $attributed)
+    Assert-True ($explainedAnnotations[0] -match "autonomy \+200\.00 us") "Warning annotations must include attribution."
+
+    # Attribution limit is stable and uses ordinal name ties after absolute delta.
+    $tied = New-AttributedScenario "ties" -AutonomyBaseline 100 -AutonomyCurrent 150 -HouseholdsBaseline 10 -HouseholdsCurrent 60
+    $tied.timings.mortality = New-PhaseMean 20 70
+    $tied.timings.lifecycle = New-PhaseMean 0 1
+    $attribution = Get-BenchmarkRegressionAttribution -Scenario $tied
+    Assert-Equal 3 @($attribution.Phases).Count "Attribution must cap phases."
+    Assert-Equal "autonomy" $attribution.Phases[0].Name "Tied absolute deltas must keep ordinal order."
+    Assert-Equal "households" $attribution.Phases[1].Name "Tied absolute deltas must keep ordinal order."
+    Assert-Equal "mortality" $attribution.Phases[2].Name "Tied absolute deltas must keep ordinal order."
+    Assert-Equal 0 @($attribution.Phases | Where-Object Name -eq "lifecycle").Count "The fourth phase must be dropped by the cap."
 
     Write-Host "Benchmark regression report tests passed." -ForegroundColor Green
 }
