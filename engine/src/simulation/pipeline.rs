@@ -165,6 +165,9 @@ fn execute_step<I>(
             simulation.tick,
         );
     });
+    if let Some(work) = instrumentation.work.as_deref_mut() {
+        work.household_migration_scans += 1;
+    }
 
     instrument(&mut instrumentation.phases, TickPhase::SpatialIndex, || {
         simulation.rebuild_population_index(world);
@@ -213,6 +216,10 @@ fn execute_step<I>(
         );
         dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     });
+    if let Some(work) = instrumentation.work.as_deref_mut() {
+        // A08: mide scan global de reasignación de huérfanos (O(N))
+        work.orphan_reassignment_scans += simulation.entities.len() as u64;
+    }
 
     instrument(&mut instrumentation.phases, TickPhase::Lifecycle, || {
         simulation.update_pregnancies(world);
@@ -242,6 +249,10 @@ fn execute_step<I>(
             simulation.tick,
         );
     });
+    if let Some(work) = instrumentation.work.as_deref_mut() {
+        work.household_sync_scans +=
+            (simulation.entities.len() + simulation.households.len()) as u64;
+    }
 
     instrument(
         &mut instrumentation.phases,
@@ -258,6 +269,12 @@ fn execute_step<I>(
     instrument(&mut instrumentation.phases, TickPhase::Reproduction, || {
         simulation.try_daily_conceptions();
     });
+    if let Some(work) = instrumentation.work.as_deref_mut() {
+        // A08: conception scan — O(N) cada día, 0 si no es día de reproducción
+        if simulation.tick.is_multiple_of(super::time::TICKS_PER_DAY) {
+            work.conception_scans += simulation.entities.len() as u64;
+        }
+    }
 
     if let Some(work) = instrumentation.work.as_deref_mut() {
         work.spatial_queries = simulation.spatial_grid.counted_queries();

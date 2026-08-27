@@ -127,6 +127,11 @@ pub(crate) struct WorkCounters {
     pub pathfinding_searches: u64,
     pub pathfinding_nodes_expanded: u64,
     pub events_created: u64,
+    // A08 — maintenance scans (global, sin pathfinding) para medir antes de event-driven
+    pub orphan_reassignment_scans: u64,
+    pub household_sync_scans: u64,
+    pub household_migration_scans: u64,
+    pub conception_scans: u64,
 }
 
 impl WorkCounters {
@@ -152,6 +157,16 @@ impl WorkCounters {
             .pathfinding_nodes_expanded
             .saturating_add(other.pathfinding_nodes_expanded);
         self.events_created = self.events_created.saturating_add(other.events_created);
+        self.orphan_reassignment_scans = self
+            .orphan_reassignment_scans
+            .saturating_add(other.orphan_reassignment_scans);
+        self.household_sync_scans = self
+            .household_sync_scans
+            .saturating_add(other.household_sync_scans);
+        self.household_migration_scans = self
+            .household_migration_scans
+            .saturating_add(other.household_migration_scans);
+        self.conception_scans = self.conception_scans.saturating_add(other.conception_scans);
     }
 }
 
