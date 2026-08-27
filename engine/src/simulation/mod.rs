@@ -1414,26 +1414,21 @@ impl Simulation {
     }
 
     fn remove_dead_entities(&mut self) -> Vec<DeathContext> {
-        let deaths: Vec<_> = self
-            .entities
+        // A04: regla de causa de muerte extraída a `lifecycle::collect_dead_entities`
+        let records = lifecycle::collect_dead_entities(&self.entities);
+        let deaths: Vec<_> = records
             .iter()
-            .filter(|entity| entity.health <= 0.0)
-            .map(|entity| {
-                let cause = if entity.age_ticks >= entity.lifespan_ticks {
-                    SimulationEventCause::NaturalDeath
-                } else {
-                    SimulationEventCause::Starvation
-                };
+            .map(|record| {
                 (
                     DeathContext {
-                        entity_id: entity.id,
-                        household_id: entity.household_id,
-                        partner_id: entity.partner_id,
-                        caregiver_id: entity.caregiver_id,
+                        entity_id: record.entity_id,
+                        household_id: record.household_id,
+                        partner_id: record.partner_id,
+                        caregiver_id: record.caregiver_id,
                     },
-                    entity.x,
-                    entity.y,
-                    cause,
+                    record.position.0,
+                    record.position.1,
+                    record.cause,
                 )
             })
             .collect();

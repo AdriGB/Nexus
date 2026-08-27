@@ -29,6 +29,38 @@ pub(super) struct PendingBirth {
     pub father_id: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct DeathRecord {
+    pub entity_id: u32,
+    pub household_id: Option<u32>,
+    pub partner_id: Option<u32>,
+    pub caregiver_id: Option<u32>,
+    pub position: (u32, u32),
+    pub cause: super::SimulationEventCause,
+}
+
+pub(super) fn collect_dead_entities(entities: &[Entity]) -> Vec<DeathRecord> {
+    entities
+        .iter()
+        .filter(|entity| entity.health <= 0.0)
+        .map(|entity| {
+            let cause = if entity.age_ticks >= entity.lifespan_ticks {
+                super::SimulationEventCause::NaturalDeath
+            } else {
+                super::SimulationEventCause::Starvation
+            };
+            DeathRecord {
+                entity_id: entity.id,
+                household_id: entity.household_id,
+                partner_id: entity.partner_id,
+                caregiver_id: entity.caregiver_id,
+                position: (entity.x, entity.y),
+                cause,
+            }
+        })
+        .collect()
+}
+
 pub(super) fn sex_for(seed: u64, id: u32) -> Sex {
     if entity_random(seed, id, SEX_SALT) & 1 == 0 {
         Sex::Female
