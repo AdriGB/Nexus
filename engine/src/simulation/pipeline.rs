@@ -217,7 +217,9 @@ fn execute_step<I>(
         dependents::reassign_orphaned_dependents(&mut simulation.entities, world);
     });
     if let Some(work) = instrumentation.work.as_deref_mut() {
-        // A08: mide scan global de reasignación de huérfanos (O(N))
+        // A08: mide scan O(N) cada tick (incluye ticks sin huérfanos) para
+        // visibilizar coste desperdiciado; gate por `!deaths.is_empty()` ocultaría
+        // el trabajo real (Hy3 review). Se mantiene conteo por tick.
         work.orphan_reassignment_scans += simulation.entities.len() as u64;
     }
 

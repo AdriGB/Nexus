@@ -55,6 +55,10 @@ struct WorkCountersDto {
     pathfinding_searches: u64,
     pathfinding_nodes_expanded: u64,
     events_created: u64,
+    orphan_reassignment_scans: u64,
+    household_sync_scans: u64,
+    household_migration_scans: u64,
+    conception_scans: u64,
 }
 
 impl From<&WorkCounters> for WorkCountersDto {
@@ -71,6 +75,10 @@ impl From<&WorkCounters> for WorkCountersDto {
             pathfinding_searches: work.pathfinding_searches,
             pathfinding_nodes_expanded: work.pathfinding_nodes_expanded,
             events_created: work.events_created,
+            orphan_reassignment_scans: work.orphan_reassignment_scans,
+            household_sync_scans: work.household_sync_scans,
+            household_migration_scans: work.household_migration_scans,
+            conception_scans: work.conception_scans,
         }
     }
 }
