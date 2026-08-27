@@ -20,11 +20,13 @@ pub(crate) const RESENTMENT_DELTA: i16 = -15;
 
 /// Resultado explícito de un intento (contrato A03). `moved` es la cantidad
 /// realmente transferida (0 si `willing` fue false o sin stock/capacidad).
+/// Visibilidad estrechada a `pub(super)` tras sweep A11 — solo `food_sharing` lo usa
+/// internamente; futuros consumidores deberán justificar `pub(crate)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FoodShareOutcome {
-    pub attempt: FoodShareAttempt,
-    pub willing: bool,
-    pub moved: u16,
+struct FoodShareOutcome {
+    attempt: FoodShareAttempt,
+    willing: bool,
+    moved: u16,
 }
 
 /// Pure willingness rule: feeds-own-dependent is always willing; otherwise
