@@ -166,7 +166,10 @@ fn execute_step<I>(
         );
     });
     if let Some(work) = instrumentation.work.as_deref_mut() {
-        work.household_migration_scans += 1;
+        // Solo día de migración: evita sobreconteo de invocaciones vacías (Spark-C Xhigh)
+        if simulation.tick.is_multiple_of(super::time::TICKS_PER_DAY) {
+            work.household_migration_scans += 1;
+        }
     }
 
     instrument(&mut instrumentation.phases, TickPhase::SpatialIndex, || {
