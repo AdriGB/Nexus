@@ -155,11 +155,11 @@ fn deposit_action_uses_deferred_attempt() {
     let mut simulation = simulation((2, 0), 35, 0);
     let mut world = plain_grid(3, 1);
     simulation.rebuild_population_index(&world);
-    let (_, _, _, _, _, _, _, attempts, _, _) = simulation.run_autonomy(&mut world, None, None);
+    let outcome = simulation.run_autonomy(&mut world, None, None);
     assert_eq!(simulation.entities[0].inventory.amount(ItemKind::Food), 35);
     assert_eq!(simulation.households[0].storage.amount(ItemKind::Food), 0);
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].amount, 15);
+    assert_eq!(outcome.household_deposit_attempts.len(), 1);
+    assert_eq!(outcome.household_deposit_attempts[0].amount, 15);
 }
 
 #[test]
