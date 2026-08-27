@@ -149,6 +149,55 @@ try {
     Assert-True ($outcomeAnnotations[0] -match '^::warning title=Performance candidate not reproduced::') "Recovered stays a warning."
     Assert-True ($outcomeAnnotations[1] -match '^::error title=Confirmed performance regression::Confirmed performance regression%3A beta total mean \+44\.80%25\.') "Confirmed annotation format differs."
 
+    # Attribution is diagnostic: it never selects a candidate or changes the verdict.
+    $attributed = [ordered]@{
+        name = "explained"
+        timings = [ordered]@{
+            total = [ordered]@{ mean = [ordered]@{ baseline_us = 1000; current_us = 1400; delta_percent = 40 } }
+            autonomy = [ordered]@{ mean = [ordered]@{ baseline_us = 800; current_us = 1100; delta_percent = 37.5 } }
+            households = [ordered]@{ mean = [ordered]@{ baseline_us = 1; current_us = 5; delta_percent = 400 } }
+        }
+        work = [ordered]@{
+            pathfinding_nodes_expanded = [ordered]@{ baseline = 10000; current = 22000; delta_percent = 120 }
+            actions_executed = [ordered]@{ baseline = 100; current = 90; delta_percent = -10 }
+        }
+        state_peak = [ordered]@{
+            known_entities_total = [ordered]@{ baseline = 100; current = 150; delta_percent = 50 }
+        }
+    }
+    $workSpike = [ordered]@{
+        name = "work-spike"
+        timings = [ordered]@{
+            total = [ordered]@{ mean = [ordered]@{ baseline_us = 1000; current_us = 1050; delta_percent = 5 } }
+        }
+        work = [ordered]@{
+            pathfinding_nodes_expanded = [ordered]@{ baseline = 100; current = 100000; delta_percent = 99900 }
+        }
+    }
+    Write-Comparison $comparisonPath @($attributed, $workSpike)
+    $attributedCandidates = @(Get-BenchmarkGateCandidates -ComparisonPath $comparisonPath)
+    Assert-Equal 1 $attributedCandidates.Count "Work-counter spikes must not create candidates."
+    Assert-Equal "explained" $attributedCandidates[0].Name "Attributed candidate differs."
+    Assert-True ($attributedCandidates[0].Explanation -match "autonomy \+300\.00 us") "Candidate explanation must rank absolute microseconds."
+    Assert-True ($attributedCandidates[0].Explanation -match "pathfinding_nodes_expanded \+12000") "Candidate explanation must name the dominant counter."
+    Assert-True ($attributedCandidates[0].Explanation -notmatch "actions_executed") "Decreased counters must be omitted."
+
+    Reset-RetryScriptState
+    $script:FailingRetry = $false
+    $script:RetryDeltas["explained"] = 41.0
+    $result = Invoke-BenchmarkGate -ComparisonPath $comparisonPath -RetryOutputDir (Join-Path $root "attributed-retry") `
+        -RetryScript (Get-CountingRetryScript)
+    Assert-Equal 1 $result.Candidates.Count "Gate must still retry only total.mean candidates."
+    Assert-Equal "Confirmed" $result.Outcomes[0].Verdict "Attributed candidate must still gate only on total.mean."
+    Assert-True ($result.Outcomes[0].Explanation -match "autonomy \+300\.00 us") "Confirmed outcome must keep first-run attribution when retry has none."
+    $gateMarkdown = Get-BenchmarkGateMarkdown -Outcomes $result.Outcomes
+    Assert-True ($gateMarkdown -match "Explained by") "Gate markdown must include attribution."
+    Assert-True ($gateMarkdown -match "autonomy \+300\.00 us") "Gate markdown attribution differs."
+    $attributedAnnouncements = @(Write-GitHubBenchmarkCandidateAnnouncements -Candidates $attributedCandidates)
+    Assert-True ($attributedAnnouncements[0] -match "autonomy \+300\.00 us") "Candidate announcements must include attribution."
+    $confirmedAnnotations = @(Write-GitHubBenchmarkGateOutcomeAnnotations -Outcomes $result.Outcomes)
+    Assert-True ($confirmedAnnotations[0] -match "autonomy \+300\.00 us") "Confirmed annotations must include attribution."
+
     # Invalid comparisons are rejected instead of silently passing.
     Write-Comparison $comparisonPath @((New-Scenario "bad-schema" 31)) 2
     Assert-Throws { Get-BenchmarkGateCandidates -ComparisonPath $comparisonPath } "Invalid comparison schema was accepted."

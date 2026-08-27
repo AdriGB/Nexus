@@ -12,9 +12,17 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
 function New-Stats([double]$Value) {
     [ordered]@{ mean_us = $Value; median_us = $Value; p95_us = $Value; p99_us = $Value; max_us = $Value }
 }
+function New-CountMap([string[]]$Names, [double]$Value) {
+    $map = [ordered]@{}
+    foreach ($name in $Names) { $map[$name] = $Value }
+    return $map
+}
 function New-Summary([double]$Value) {
     $summary = [ordered]@{ samples = 10 }
     foreach ($category in $script:TimingCategories) { $summary[$category] = New-Stats $Value }
+    $summary.work_total = New-CountMap $script:WorkCounters $Value
+    $summary.state_peak = New-CountMap $script:StateGauges $Value
+    $summary.state_final = New-CountMap $script:StateGauges $Value
     return $summary
 }
 function New-Result([string]$Name, [double]$Value, [bool]$LongRun = $false) {
@@ -59,8 +67,24 @@ try {
             Assert-Equal 110 $comparison.scenarios[0].timings.$category.$stat.current_us "Current timing differs."
         }
     }
+    Assert-Equal 100 $comparison.scenarios[0].work.pathfinding_nodes_expanded.baseline "Work baseline differs."
+    Assert-Equal 110 $comparison.scenarios[0].work.pathfinding_nodes_expanded.current "Work current differs."
+    Assert-Equal 10 $comparison.scenarios[0].work.pathfinding_nodes_expanded.delta_percent "Work delta differs."
+    Assert-Equal 100 $comparison.scenarios[0].state_peak.known_entities_total.baseline "State baseline differs."
+    Assert-Equal 10 $comparison.scenarios[0].state_peak.known_entities_total.delta_percent "State delta differs."
     $bytes = [IO.File]::ReadAllBytes($outputPath)
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { throw "Comparison has a BOM." }
+
+    $current = New-Result "alpha" 110
+    $current.summary.work_total.pathfinding_nodes_expanded = 200
+    $current.summary.state_peak.known_entities_total = 150
+    Write-Aggregate $baselinePath "full" @((New-Result "alpha" 100))
+    Write-Aggregate $currentPath "quick" @($current)
+    Write-BenchmarkComparison $baselinePath $currentPath $outputPath | Out-Null
+    $counts = Get-Content $outputPath -Raw | ConvertFrom-Json
+    Assert-Equal 100 $counts.scenarios[0].work.pathfinding_nodes_expanded.delta_percent "Independent work delta differs."
+    Assert-Equal 50 $counts.scenarios[0].state_peak.known_entities_total.delta_percent "Independent state delta differs."
+    Assert-Equal 10 $counts.scenarios[0].work.actions_executed.delta_percent "Unchanged sibling work counter differs."
 
     Write-Aggregate $currentPath "scenario:alpha" @((New-Result "alpha" 100))
     Write-BenchmarkComparison $baselinePath $currentPath $outputPath | Out-Null
@@ -74,11 +98,13 @@ try {
     $zero = Get-Content $outputPath -Raw | ConvertFrom-Json
     if ($null -ne $zero.scenarios[0].timings.total.mean.delta_percent) { throw "Nonzero over zero must be null." }
     Assert-Equal 0 $zero.scenarios[1].timings.total.mean.delta_percent "Zero over zero differs."
+    if ($null -ne $zero.scenarios[0].work.actions_executed.delta_percent) { throw "Nonzero work over zero must be null." }
 
     Write-Aggregate $baselinePath "full" @((New-Result "long" 100 $true))
     Write-Aggregate $currentPath "full" @((New-Result "long" 110 $true))
     Write-BenchmarkComparison $baselinePath $currentPath $outputPath | Out-Null
     Assert-Equal 10 ((Get-Content $outputPath -Raw | ConvertFrom-Json).scenarios[0].timings.total.mean.delta_percent) "Long-run overall differs."
+    Assert-Equal 10 ((Get-Content $outputPath -Raw | ConvertFrom-Json).scenarios[0].work.events_created.delta_percent) "Long-run work differs."
 
     Write-Aggregate $baselinePath "full" @((New-Result "alpha" 100))
     Write-Aggregate $currentPath "quick" @((New-Result "missing" 100))
@@ -87,6 +113,19 @@ try {
     Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Duplicate scenario was accepted."
     Write-Aggregate $currentPath "quick" @((New-Result "alpha" 100)) 2
     Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Aggregate schema mismatch was accepted."
+
+    $missingWork = New-Result "alpha" 100
+    $missingWork.summary.Remove("work_total")
+    Write-Aggregate $currentPath "quick" @($missingWork)
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Missing work_total was accepted."
+    $missingCounter = New-Result "alpha" 100
+    $missingCounter.summary.work_total.Remove("pathfinding_nodes_expanded")
+    Write-Aggregate $currentPath "quick" @($missingCounter)
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Missing work counter was accepted."
+    $missingState = New-Result "alpha" 100
+    $missingState.summary.Remove("state_peak")
+    Write-Aggregate $currentPath "quick" @($missingState)
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Missing state_peak was accepted."
 
     foreach ($field in @("seed", "population", "measured_ticks", "workload")) {
         $base = New-Result "alpha" 100

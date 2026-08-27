@@ -13,6 +13,17 @@ $script:TimingStatistics = [ordered]@{
     p99 = "p99_us"
     max = "max_us"
 }
+$script:WorkCounters = @(
+    "entities_processed", "entities_perceived", "goal_evaluations", "goal_changes",
+    "plans_created", "actions_executed", "social_interactions", "spatial_queries",
+    "pathfinding_searches", "pathfinding_nodes_expanded", "events_created"
+)
+$script:StateGauges = @(
+    "entities_alive", "known_entities_total", "known_entities_max_per_entity",
+    "known_resources_total", "known_resources_max_per_entity", "known_dead_entities_total",
+    "active_grief_states", "recent_events_len", "recent_events_capacity",
+    "households_active", "genealogy_links"
+)
 
 function Read-BenchmarkAggregate {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -79,6 +90,37 @@ function Get-DeltaPercent {
     return [math]::Round((($Current - $Baseline) / $Baseline) * 100.0, 6)
 }
 
+function Get-RequiredCountMap {
+    param($Summary, [string]$ScenarioName, [string]$Field, [string[]]$Names)
+    if ($Summary.PSObject.Properties.Name -notcontains $Field -or $null -eq $Summary.$Field) {
+        throw "Scenario '$ScenarioName' has no $Field."
+    }
+    $source = $Summary.$Field
+    $map = [ordered]@{}
+    foreach ($name in $Names) {
+        if ($source.PSObject.Properties.Name -notcontains $name) {
+            throw "Scenario '$ScenarioName' $Field has no '$name'."
+        }
+        $map[$name] = [double]$source.$name
+    }
+    return $map
+}
+
+function ConvertTo-CountComparison {
+    param($BaselineMap, $CurrentMap)
+    $comparison = [ordered]@{}
+    foreach ($name in $BaselineMap.Keys) {
+        $baselineValue = $BaselineMap[$name]
+        $currentValue = $CurrentMap[$name]
+        $comparison[$name] = [ordered]@{
+            baseline = $baselineValue
+            current = $currentValue
+            delta_percent = Get-DeltaPercent $baselineValue $currentValue
+        }
+    }
+    return $comparison
+}
+
 function Write-BenchmarkComparison {
     param(
         [Parameter(Mandatory = $true)][string]$BaselinePath,
@@ -127,7 +169,18 @@ function Write-BenchmarkComparison {
             }
             $timings[$category] = $stats
         }
-        $scenarios += [ordered]@{ name = $name; timings = $timings }
+        $work = ConvertTo-CountComparison `
+            (Get-RequiredCountMap $baselineSummary $name "work_total" $script:WorkCounters) `
+            (Get-RequiredCountMap $currentSummary $name "work_total" $script:WorkCounters)
+        $statePeak = ConvertTo-CountComparison `
+            (Get-RequiredCountMap $baselineSummary $name "state_peak" $script:StateGauges) `
+            (Get-RequiredCountMap $currentSummary $name "state_peak" $script:StateGauges)
+        $scenarios += [ordered]@{
+            name = $name
+            timings = $timings
+            work = $work
+            state_peak = $statePeak
+        }
     }
 
     $largestPositive = if ($deltas.Count -eq 0) { $null } else { ($deltas | Measure-Object -Maximum).Maximum }

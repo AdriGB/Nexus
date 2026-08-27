@@ -17,10 +17,7 @@ $result = Invoke-BenchmarkGate `
     -CandidateThresholdPercent $CandidateThresholdPercent `
     -RetryScript $RetryScript
 
-$candidates = @($result.Outcomes | ForEach-Object {
-    [pscustomobject]@{ Name = $_.Name; FirstMeanDeltaPercent = $_.FirstMeanDeltaPercent }
-})
-Write-GitHubBenchmarkCandidateAnnouncements -Candidates $candidates
+Write-GitHubBenchmarkCandidateAnnouncements -Candidates @($result.Candidates)
 Write-GitHubBenchmarkGateOutcomeAnnotations -Outcomes $result.Outcomes
 
 $markdown = Get-BenchmarkGateMarkdown `

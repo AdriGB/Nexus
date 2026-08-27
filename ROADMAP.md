@@ -339,7 +339,7 @@ La auditoría viva se encuentra en
 * [x] Informar regresiones superiores al 10 %
 * [x] Marcar warning por encima del 20 %
 * [x] Bloquear inicialmente por encima del 30 %, ajustando con datos reales
-* [ ] Mostrar la fase y los contadores que explican cada regresión
+* [x] Mostrar la fase y los contadores que explican cada regresión
 
 ## Phase 2.11.6 — Scalability and multi-rate simulation
 
@@ -711,10 +711,11 @@ Además:
 Aunque el roadmap sea enorme, el trabajo actual permanece muy acotado:
 
 1. Completar la auditoría arquitectónica incremental
-2. Unificar el pipeline normal y el perfilado
-3. Estabilizar la instrumentación y los escenarios deterministas
-4. Automatizar benchmarks y establecer mediciones baseline
-5. Optimizar únicamente los hotspots demostrados
+2. Optimizar únicamente los hotspots demostrados
+
+La Phase 2.11.5 ya informa, avisa, bloquea con confirmación y atribuye la fase
+y los contadores que explican cada regresión. Phase 2.11.6 solo comienza sobre
+hotspots medidos.
 
 `Conflictos dentro del hogar` queda pospuesto hasta que las reglas, normas y
 consecuencias sociales puedan modelarlo sin introducir una mecánica aislada.
