@@ -39,8 +39,8 @@ pub(crate) use self::kinship::{
     FamilyTree, KinshipGeneration, KinshipRelation,
 };
 use self::lifecycle::{
-    founder_age_for, lifespan_for, personality_for, process_due_pregnancies, sex_for,
-    spawn_candidates, try_conceptions, DAILY_CONCEPTION_THRESHOLD,
+    founder_age_for, lifespan_for, personality_for, sex_for, spawn_candidates, try_conceptions,
+    DAILY_CONCEPTION_THRESHOLD,
 };
 pub(crate) use self::performance::{PerformanceRun, PerformanceSummary};
 use self::spatial::{EntitySnapshot, SpatialGrid};
@@ -1455,41 +1455,8 @@ impl Simulation {
     }
 
     fn update_pregnancies(&mut self, world: &Grid) {
-        let capacity = MAX_POPULATION.saturating_sub(self.entities.len());
-        let births = process_due_pregnancies(&mut self.entities, world, self.tick, capacity);
-        for birth in births {
-            if let Some(child_id) = self.push_entity_with_parentage(
-                birth.position,
-                0,
-                Some(birth.mother_id),
-                Some(birth.father_id),
-            ) {
-                if let Some(child) = self.entities.last_mut() {
-                    child.caregiver_id = Some(birth.mother_id);
-                }
-                households::assign_newborn(
-                    &mut self.entities,
-                    &self.households,
-                    child_id,
-                    birth.mother_id,
-                );
-                self.births = self.births.saturating_add(1);
-                self.push_event(PendingSimulationEvent {
-                    caused_by_event_id: None,
-                    tick: self.tick,
-                    location: EventLocation {
-                        x: birth.position.0,
-                        y: birth.position.1,
-                    },
-                    actor_id: birth.mother_id,
-                    target_id: None,
-                    related_entity_ids: vec![birth.mother_id, child_id],
-                    kind: SimulationEventKind::Birth,
-                    cause: SimulationEventCause::Born,
-                    details: SimulationEventDetails::Birth { child_id },
-                });
-            }
-        }
+        // A04: lifecycle owns PendingBirth → materialización + evento Birth
+        lifecycle::apply_births(self, world);
     }
 
     /// Daily maintenance: cools relationship affinity toward neutral for

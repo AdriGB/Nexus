@@ -250,6 +250,47 @@ pub(super) fn process_due_pregnancies(
     births
 }
 
+/// Aplica nacimientos pendientes: materializa entidades, asigna caregiver y hogar,
+/// y registra evento `Birth`. Extraído de `Simulation::update_pregnancies` (A04).
+pub(crate) fn apply_births(simulation: &mut super::Simulation, world: &Grid) {
+    let capacity = super::config::MAX_POPULATION.saturating_sub(simulation.entities.len());
+    let births =
+        process_due_pregnancies(&mut simulation.entities, world, simulation.tick, capacity);
+    for birth in births {
+        if let Some(child_id) = simulation.push_entity_with_parentage(
+            birth.position,
+            0,
+            Some(birth.mother_id),
+            Some(birth.father_id),
+        ) {
+            if let Some(child) = simulation.entities.last_mut() {
+                child.caregiver_id = Some(birth.mother_id);
+            }
+            super::households::assign_newborn(
+                &mut simulation.entities,
+                &simulation.households,
+                child_id,
+                birth.mother_id,
+            );
+            simulation.births = simulation.births.saturating_add(1);
+            simulation.push_event(super::events::PendingSimulationEvent {
+                caused_by_event_id: None,
+                tick: simulation.tick,
+                location: super::events::EventLocation {
+                    x: birth.position.0,
+                    y: birth.position.1,
+                },
+                actor_id: birth.mother_id,
+                target_id: None,
+                related_entity_ids: vec![birth.mother_id, child_id],
+                kind: super::SimulationEventKind::Birth,
+                cause: super::SimulationEventCause::Born,
+                details: super::SimulationEventDetails::Birth { child_id },
+            });
+        }
+    }
+}
+
 pub(super) fn conception_roll(seed: u64, female_id: u32, male_id: u32, tick: u64) -> u64 {
     let value = seed
         ^ u64::from(female_id).wrapping_mul(0x9e37_79b9_7f4a_7c15)
