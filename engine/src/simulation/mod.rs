@@ -3,6 +3,7 @@ mod config;
 mod dependents;
 mod entity;
 mod events;
+mod food_sharing;
 mod genealogy;
 mod grief;
 mod households;
@@ -60,18 +61,20 @@ pub(super) struct DeathContext {
 
 pub const INITIAL_POPULATION: u32 = 10;
 
-type AutonomyRunResult = (
-    u64,
-    bool,
-    Vec<(u32, u16)>,
-    Vec<autonomy::ResourceDiscovery>,
-    Vec<autonomy::EntityEncounter>,
-    Vec<autonomy::SocialInteraction>,
-    Vec<autonomy::FoodShareAttempt>,
-    Vec<autonomy::HouseholdDepositAttempt>,
-    Vec<autonomy::HouseholdWithdrawAttempt>,
-    Vec<autonomy::HouseholdConflictAttempt>,
-);
+/// Named outcome of one autonomy tick (A07). Replaces positional tuple.
+#[derive(Debug, Default)]
+struct AutonomyTickOutcome {
+    consumed: u64,
+    world_changed: bool,
+    consumer_ids: Vec<(u32, u16)>,
+    discoveries: Vec<autonomy::ResourceDiscovery>,
+    encounters: Vec<autonomy::EntityEncounter>,
+    interactions: Vec<autonomy::SocialInteraction>,
+    food_share_attempts: Vec<autonomy::FoodShareAttempt>,
+    household_deposit_attempts: Vec<autonomy::HouseholdDepositAttempt>,
+    household_withdraw_attempts: Vec<autonomy::HouseholdWithdrawAttempt>,
+    household_conflict_attempts: Vec<autonomy::HouseholdConflictAttempt>,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct PopulationStats {
@@ -634,27 +637,20 @@ impl Simulation {
         profile: Option<&mut AutonomyProfile>,
         work: Option<&mut WorkCounters>,
     ) -> (u64, bool, Vec<(u32, u16)>) {
-        let (
-            consumed,
-            world_changed,
-            consumer_ids,
-            discoveries,
-            encounters,
-            interactions,
-            food_share_attempts,
-            household_deposit_attempts,
-            household_withdraw_attempts,
-            household_conflict_attempts,
-        ) = self.run_autonomy(world, profile, work);
-        self.record_resource_discoveries(discoveries);
-        self.record_entity_encounters(encounters);
-        self.record_food_consumptions(&consumer_ids);
-        self.record_social_interactions(interactions);
-        self.process_food_share_attempts(food_share_attempts);
-        self.process_household_deposit_attempts(household_deposit_attempts);
-        self.process_household_withdraw_attempts(household_withdraw_attempts);
-        self.process_household_conflict_attempts(household_conflict_attempts);
-        (consumed, world_changed, consumer_ids)
+        let outcome = self.run_autonomy(world, profile, work);
+        self.record_resource_discoveries(outcome.discoveries);
+        self.record_entity_encounters(outcome.encounters);
+        self.record_food_consumptions(&outcome.consumer_ids);
+        self.record_social_interactions(outcome.interactions);
+        self.process_food_share_attempts(outcome.food_share_attempts);
+        self.process_household_deposit_attempts(outcome.household_deposit_attempts);
+        self.process_household_withdraw_attempts(outcome.household_withdraw_attempts);
+        self.process_household_conflict_attempts(outcome.household_conflict_attempts);
+        (
+            outcome.consumed,
+            outcome.world_changed,
+            outcome.consumer_ids,
+        )
     }
 
     fn run_autonomy(
@@ -662,7 +658,7 @@ impl Simulation {
         world: &mut Grid,
         mut profile: Option<&mut AutonomyProfile>,
         mut work: Option<&mut WorkCounters>,
-    ) -> AutonomyRunResult {
+    ) -> AutonomyTickOutcome {
         let tick = self.tick;
         let population_cache = &self.population_cache;
         let spatial_grid = &self.spatial_grid;
@@ -758,7 +754,7 @@ impl Simulation {
                 .as_micros() as u64;
         }
 
-        (
+        AutonomyTickOutcome {
             consumed,
             world_changed,
             consumer_ids,
@@ -769,7 +765,7 @@ impl Simulation {
             household_deposit_attempts,
             household_withdraw_attempts,
             household_conflict_attempts,
-        )
+        }
     }
 
     fn process_household_deposit_attempts(
@@ -1064,9 +1060,6 @@ impl Simulation {
     }
 
     fn process_food_share_attempts(&mut self, attempts: Vec<autonomy::FoodShareAttempt>) {
-        const GRATITUDE_DELTA: i16 = 20;
-        const RESENTMENT_DELTA: i16 = -15;
-
         for attempt in attempts {
             let Ok(actor_index) = self
                 .entities
@@ -1081,27 +1074,13 @@ impl Simulation {
                 continue;
             };
 
-            let willing = {
-                let actor = &self.entities[actor_index];
-                let feeds_own_dependent =
-                    self.entities[target_index].caregiver_id == Some(attempt.actor_id);
-                feeds_own_dependent || {
-                    let affinity = actor
-                        .mind
-                        .memory
-                        .affinity_to(attempt.target_id)
-                        .unwrap_or(0);
-                    let role = autonomy::close_relationship_role_between(
-                        autonomy::RelationshipIdentity::from_entity(actor),
-                        autonomy::RelationshipIdentity::from_entity(&self.entities[target_index]),
-                    );
-                    relationship_food_share_willingness(
-                        actor.personality.cooperativeness,
-                        affinity,
-                        role,
-                    )
-                }
-            };
+            let target_is_dependent =
+                self.entities[target_index].caregiver_id == Some(attempt.actor_id);
+            let willing = food_sharing::is_willing(
+                &self.entities[actor_index],
+                &self.entities[target_index],
+                target_is_dependent,
+            );
 
             let moved = if willing {
                 self.transfer_item(
@@ -1135,7 +1114,7 @@ impl Simulation {
                     &mut self.entities[target_index],
                     attempt.actor_id,
                     self.tick,
-                    GRATITUDE_DELTA,
+                    food_sharing::GRATITUDE_DELTA,
                 ) {
                     self.record_affinity_change(
                         attempt.target_id,
@@ -1166,7 +1145,7 @@ impl Simulation {
                     &mut self.entities[target_index],
                     attempt.actor_id,
                     self.tick,
-                    RESENTMENT_DELTA,
+                    food_sharing::RESENTMENT_DELTA,
                 ) {
                     self.record_affinity_change(
                         attempt.target_id,
@@ -1690,13 +1669,10 @@ impl Simulation {
 
 #[cfg(test)]
 fn food_share_willingness(cooperativeness: f32, affinity: i16) -> bool {
-    relationship_food_share_willingness(
-        cooperativeness,
-        affinity,
-        autonomy::CloseRelationshipRole::Other,
-    )
+    food_sharing::willingness_for_test(cooperativeness, affinity)
 }
 
+#[cfg(test)]
 fn relationship_food_share_willingness(
     cooperativeness: f32,
     affinity: i16,
