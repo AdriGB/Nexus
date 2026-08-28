@@ -14,7 +14,10 @@ export interface SimulationBenchmark {
   ticksPerSecond: number;
 }
 
-interface SimulationPhaseProfile {
+// `work` and `state` arrive flattened into the parent object, so the profiles
+// extend these rather than nest them. Keeping the fields in one place stops the
+// two profiles from drifting apart the way the Rust DTO did in #178 and #194.
+interface SimulationStateGauges {
   entities_alive: number;
   known_entities_total: number;
   known_entities_max_per_entity: number;
@@ -26,17 +29,52 @@ interface SimulationPhaseProfile {
   recent_events_capacity: number;
   households_active: number;
   genealogy_links: number;
-    entities_processed: number;
-    entities_perceived: number;
-    goal_evaluations: number;
-    goal_changes: number;
-    plans_created: number;
-    actions_executed: number;
-    social_interactions: number;
-    spatial_queries: number;
-    pathfinding_searches: number;
-    pathfinding_nodes_expanded: number;
-    events_created: number;
+}
+
+interface SimulationWorkCounters {
+  entities_processed: number;
+  entities_perceived: number;
+  goal_evaluations: number;
+  goal_changes: number;
+  plans_created: number;
+  actions_executed: number;
+  social_interactions: number;
+  social_pairs_scanned: number;
+  social_pairs_in_radius: number;
+  social_pairs_mutual: number;
+  social_pairs_due: number;
+  encounters_recorded: number;
+  discoveries_recorded: number;
+  food_consumptions_recorded: number;
+  food_share_attempts: number;
+  household_deposit_attempts: number;
+  household_withdraw_attempts: number;
+  household_conflict_attempts: number;
+  spatial_queries: number;
+  pathfinding_searches: number;
+  pathfinding_nodes_expanded: number;
+  events_created: number;
+  orphan_reassignment_scans: number;
+  household_sync_scans: number;
+  household_migration_scans: number;
+  conception_scans: number;
+}
+
+interface SimulationPostPassProfile {
+  resource_discoveries_us: number;
+  entity_encounters_us: number;
+  food_consumptions_us: number;
+  social_interactions_us: number;
+  food_share_us: number;
+  household_deposit_us: number;
+  household_withdraw_us: number;
+  household_conflict_us: number;
+  total_us: number;
+}
+
+interface SimulationPhaseProfile
+  extends SimulationStateGauges,
+    SimulationWorkCounters {
   world_maintenance_us: number;
   physiology_us: number;
   dependent_care_us: number;
@@ -51,29 +89,9 @@ interface SimulationPhaseProfile {
   total_us: number;
 }
 
-interface SimulationAutonomyProfile {
-  entities_alive: number;
-  known_entities_total: number;
-  known_entities_max_per_entity: number;
-  known_resources_total: number;
-  known_resources_max_per_entity: number;
-  known_dead_entities_total: number;
-  active_grief_states: number;
-  recent_events_len: number;
-  recent_events_capacity: number;
-  households_active: number;
-  genealogy_links: number;
-    entities_processed: number;
-    entities_perceived: number;
-    goal_evaluations: number;
-    goal_changes: number;
-    plans_created: number;
-    actions_executed: number;
-    social_interactions: number;
-    spatial_queries: number;
-    pathfinding_searches: number;
-    pathfinding_nodes_expanded: number;
-    events_created: number;
+interface SimulationAutonomyProfile
+  extends SimulationStateGauges,
+    SimulationWorkCounters {
   resource_perception_us: number;
   entity_perception_us: number;
   plan_validation_us: number;
@@ -88,6 +106,9 @@ interface SimulationAutonomyProfile {
   sampled_known_resources_max: number;
   visible_resources_seen: number;
   social_us: number;
+  entity_pass_us: number;
+  step_total_us: number;
+  post_pass: SimulationPostPassProfile;
 }
 
 export function benchmarkSimulation(

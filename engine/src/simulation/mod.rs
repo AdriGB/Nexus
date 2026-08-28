@@ -125,8 +125,15 @@ pub(crate) struct WorkCounters {
     pub social_interactions: u64,
     // Funnel del social pass (#192). Cada etapa es un subconjunto de la anterior,
     // así que la relación entre ellas distingue "demasiados pares candidatos" de
-    // "demasiado trabajo por par". Solo se puebla en runs perfilados: la ruta de
-    // producción pasa `None`, así que no añade coste al camino caliente.
+    // "demasiado trabajo por par".
+    //
+    // Ojo con lo que significa "no añade coste": la ruta de producción de
+    // `step()` pasa `None`, así que estos contadores no tocan el camino caliente
+    // normal. Pero el camino que el benchmark cronometra es `profile_run`, que
+    // sí los incrementa: cuatro sumas por par candidato, unas 556k por tick a
+    // 10k. No mueve el reparto del 30% sin atribuir, pero forma parte del
+    // 1.25x-1.6x que el pass perfilado ya paga de más, así que el funnel y el
+    // tiempo medido en esa misma pasada no son independientes.
     /// Pares candidatos que superan el desempate `a_id < b_id`.
     pub social_pairs_scanned: u64,
     /// Pares dentro de `SOCIAL_RADIUS` con el objetivo vivo y no infantil.

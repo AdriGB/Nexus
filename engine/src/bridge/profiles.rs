@@ -52,6 +52,17 @@ struct WorkCountersDto {
     plans_created: u64,
     actions_executed: u64,
     social_interactions: u64,
+    social_pairs_scanned: u64,
+    social_pairs_in_radius: u64,
+    social_pairs_mutual: u64,
+    social_pairs_due: u64,
+    encounters_recorded: u64,
+    discoveries_recorded: u64,
+    food_consumptions_recorded: u64,
+    food_share_attempts: u64,
+    household_deposit_attempts: u64,
+    household_withdraw_attempts: u64,
+    household_conflict_attempts: u64,
     spatial_queries: u64,
     pathfinding_searches: u64,
     pathfinding_nodes_expanded: u64,
@@ -72,6 +83,17 @@ impl From<&WorkCounters> for WorkCountersDto {
             plans_created: work.plans_created,
             actions_executed: work.actions_executed,
             social_interactions: work.social_interactions,
+            social_pairs_scanned: work.social_pairs_scanned,
+            social_pairs_in_radius: work.social_pairs_in_radius,
+            social_pairs_mutual: work.social_pairs_mutual,
+            social_pairs_due: work.social_pairs_due,
+            encounters_recorded: work.encounters_recorded,
+            discoveries_recorded: work.discoveries_recorded,
+            food_consumptions_recorded: work.food_consumptions_recorded,
+            food_share_attempts: work.food_share_attempts,
+            household_deposit_attempts: work.household_deposit_attempts,
+            household_withdraw_attempts: work.household_withdraw_attempts,
+            household_conflict_attempts: work.household_conflict_attempts,
             spatial_queries: work.spatial_queries,
             pathfinding_searches: work.pathfinding_searches,
             pathfinding_nodes_expanded: work.pathfinding_nodes_expanded,
@@ -228,4 +250,59 @@ pub(crate) fn population_stats_json(stats: PopulationStats) -> String {
         average_hunger: stats.average_hunger,
         food_consumed: stats.food_consumed,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The DTOs are hand-written projections, so nothing stops one from silently
+    /// drifting out of sync when a field is added upstream. Both sides of each
+    /// projection are `Serialize`, so comparing key sets catches the drift here
+    /// instead of in the UI. `WorkCountersDto` has fallen behind twice already,
+    /// after #178 and after #194.
+    fn assert_same_keys(what: &str, source: &serde_json::Value, projected: &serde_json::Value) {
+        let source_keys = source.as_object().expect("source must be an object");
+        let projected_keys = projected.as_object().expect("projection must be an object");
+
+        let missing: Vec<&String> = source_keys
+            .keys()
+            .filter(|key| !projected_keys.contains_key(*key))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{what} is missing {missing:?}; map them in the DTO struct and in its From impl"
+        );
+
+        let stale: Vec<&String> = projected_keys
+            .keys()
+            .filter(|key| !source_keys.contains_key(*key))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "{what} projects {stale:?}, which no longer exist upstream"
+        );
+    }
+
+    #[test]
+    fn work_counters_dto_covers_every_work_counter() {
+        let counters = WorkCounters::default();
+        assert_same_keys(
+            "WorkCountersDto",
+            &serde_json::to_value(&counters).expect("WorkCounters serializes"),
+            &serde_json::to_value(WorkCountersDto::from(&counters))
+                .expect("WorkCountersDto serializes"),
+        );
+    }
+
+    #[test]
+    fn state_gauges_dto_covers_every_state_gauge() {
+        let gauges = StateGauges::default();
+        assert_same_keys(
+            "StateGaugesDto",
+            &serde_json::to_value(&gauges).expect("StateGauges serializes"),
+            &serde_json::to_value(StateGaugesDto::from(&gauges))
+                .expect("StateGaugesDto serializes"),
+        );
+    }
 }
