@@ -170,19 +170,30 @@ const AUTONOMY_PROFILE_TICKS: u32 = 32;
 
 /// Mean per-tick microseconds spent inside the autonomy phase, by sub-phase.
 ///
+/// **Use the ratios, not the absolute values.** Every number here comes from a
+/// second pass run with the per-entity profiler switched on. That pass is
+/// measurably slower than the phase run (roughly 1.25x–1.6x depending on the
+/// scenario), because profiling also computes the `sampled_known_resources_*`
+/// and `visible_resources_seen` gauges, which walk each sampled entity's
+/// memory. So `social_pass_us` and `entity_pass_us` overstate what the phase
+/// run pays. They are still the right basis for deciding *where* the time goes,
+/// because they are all inflated the same way and share a denominator.
+///
 /// Two populations are timed and they must not be added together:
 ///
-/// * `social_pass_us` covers the whole population. It is measured with a single
-///   timer around the social resolution pass, so it is directly comparable to
-///   `summary.autonomy.mean_us`.
+/// * `social_pass_us` and `entity_pass_us` cover the **whole population**. Each
+///   is measured with a single timer around one pass, so they need no sampling
+///   correction.
 /// * Every other sub-phase is timed per entity and only for the sampled
 ///   entities, so those values cover `sampled_fraction` of the population.
 ///
 /// `sampled_subphases_extrapolated_us` scales the sampled total by
-/// `sampled_fraction` to approximate the full cost. The sample is not
-/// representative: across the registered scenarios the extrapolated total
-/// landed between 71% and 147% of the measured autonomy time, so treat it as a
-/// ranking signal, not as a budget.
+/// `sampled_fraction` to approximate the full cost. Measured against
+/// `entity_pass_us`, which covers the same work without sampling, the
+/// extrapolation lands at 91%–98%, so the sample is representative. An earlier
+/// reading of 71%–147% was an artefact of comparing it against the whole
+/// autonomy phase, which also contains the social pass — a different
+/// denominator, not a biased sample.
 ///
 /// `resource_perception_us` is intentionally absent from this struct: the
 /// engine defines it as `memory_reconciliation_us + visible_scan_us`, so
@@ -194,6 +205,18 @@ struct AutonomyBreakdown {
     sampled_entities_per_tick: f64,
     sampled_fraction: f64,
     social_pass_us: f64,
+    /// Bucle por-entidad completo, población completa, sin muestreo.
+    entity_pass_us: f64,
+    /// `social_pass_us + entity_pass_us`: coste atribuido con medidas fiables.
+    attributed_passes_us: f64,
+    /// Muro de cada tick perfilado, medido dentro de la misma pasada.
+    ///
+    /// Es el denominador correcto para `attributed_passes_us`: los dos pases se
+    /// cronometran en la **misma** pasada, así que la comparación es válida
+    /// aunque esa pasada sea más lenta que la de fases (los temporizadores por
+    /// entidad sólo están activos aquí). No vale comparar contra
+    /// `summary.autonomy.mean_us`, que sale de otra pasada distinta.
+    profiled_step_total_us: f64,
     entity_perception_us: f64,
     visible_scan_us: f64,
     memory_reconciliation_us: f64,
@@ -202,6 +225,17 @@ struct AutonomyBreakdown {
     action_us: f64,
     sampled_subphases_us: f64,
     sampled_subphases_extrapolated_us: f64,
+    /// Funnel del social pass por tick (#192). Cada etapa es subconjunto de la
+    /// anterior; el descenso entre ellas dice si el coste viene de generar
+    /// demasiados pares o del trabajo hecho por cada par.
+    social_pairs_scanned: f64,
+    social_pairs_in_radius: f64,
+    social_pairs_mutual: f64,
+    social_pairs_due: f64,
+    social_interactions: f64,
+    /// Encuentros por tick entregados al sort+dedup de `record_entity_encounters`.
+    encounters_recorded: f64,
+    discoveries_recorded: f64,
 }
 
 #[derive(Serialize)]
@@ -289,6 +323,7 @@ fn profile_autonomy_breakdown(
     for _ in 0..ticks {
         let profile = simulation.profile_autonomy_step(world);
         totals.work.accumulate(&profile.work);
+        totals.step_total_us += profile.step_total_us;
         totals.entity_perception_us += profile.entity_perception_us;
         totals.visible_scan_us += profile.visible_scan_us;
         totals.memory_reconciliation_us += profile.memory_reconciliation_us;
@@ -296,6 +331,7 @@ fn profile_autonomy_breakdown(
         totals.planning_us += profile.planning_us;
         totals.action_us += profile.action_us;
         totals.social_us += profile.social_us;
+        totals.entity_pass_us += profile.entity_pass_us;
         totals.sampled_entities += profile.sampled_entities;
     }
 
@@ -320,6 +356,9 @@ fn profile_autonomy_breakdown(
         sampled_entities_per_tick,
         sampled_fraction,
         social_pass_us: mean(totals.social_us),
+        entity_pass_us: mean(totals.entity_pass_us),
+        attributed_passes_us: mean(totals.social_us) + mean(totals.entity_pass_us),
+        profiled_step_total_us: mean(totals.step_total_us),
         entity_perception_us: mean(totals.entity_perception_us),
         visible_scan_us: mean(totals.visible_scan_us),
         memory_reconciliation_us: mean(totals.memory_reconciliation_us),
@@ -332,6 +371,13 @@ fn profile_autonomy_breakdown(
         } else {
             0.0
         },
+        social_pairs_scanned: totals.work.social_pairs_scanned as f64 / tick_count,
+        social_pairs_in_radius: totals.work.social_pairs_in_radius as f64 / tick_count,
+        social_pairs_mutual: totals.work.social_pairs_mutual as f64 / tick_count,
+        social_pairs_due: totals.work.social_pairs_due as f64 / tick_count,
+        social_interactions: totals.work.social_interactions as f64 / tick_count,
+        encounters_recorded: totals.work.encounters_recorded as f64 / tick_count,
+        discoveries_recorded: totals.work.discoveries_recorded as f64 / tick_count,
     }
 }
 

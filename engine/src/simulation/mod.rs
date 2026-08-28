@@ -123,6 +123,24 @@ pub(crate) struct WorkCounters {
     pub plans_created: u64,
     pub actions_executed: u64,
     pub social_interactions: u64,
+    // Funnel del social pass (#192). Cada etapa es un subconjunto de la anterior,
+    // así que la relación entre ellas distingue "demasiados pares candidatos" de
+    // "demasiado trabajo por par". Solo se puebla en runs perfilados: la ruta de
+    // producción pasa `None`, así que no añade coste al camino caliente.
+    /// Pares candidatos que superan el desempate `a_id < b_id`.
+    pub social_pairs_scanned: u64,
+    /// Pares dentro de `SOCIAL_RADIUS` con el objetivo vivo y no infantil.
+    pub social_pairs_in_radius: u64,
+    /// Pares con visibilidad mutua confirmada.
+    pub social_pairs_mutual: u64,
+    /// Pares que además han cumplido el intervalo de interacción.
+    pub social_pairs_due: u64,
+    /// Encuentros entregados a `record_entity_encounters`, que los ordena y
+    /// deduplica enteros en cada tick. Si esta cifra crece con la población
+    /// más rápido que `entities_processed`, ese sort es el coste oculto.
+    pub encounters_recorded: u64,
+    /// Descubrimientos entregados a `record_resource_discoveries`.
+    pub discoveries_recorded: u64,
     pub spatial_queries: u64,
     pub pathfinding_searches: u64,
     pub pathfinding_nodes_expanded: u64,
@@ -149,6 +167,22 @@ impl WorkCounters {
         self.social_interactions = self
             .social_interactions
             .saturating_add(other.social_interactions);
+        self.social_pairs_scanned = self
+            .social_pairs_scanned
+            .saturating_add(other.social_pairs_scanned);
+        self.social_pairs_in_radius = self
+            .social_pairs_in_radius
+            .saturating_add(other.social_pairs_in_radius);
+        self.social_pairs_mutual = self
+            .social_pairs_mutual
+            .saturating_add(other.social_pairs_mutual);
+        self.social_pairs_due = self.social_pairs_due.saturating_add(other.social_pairs_due);
+        self.encounters_recorded = self
+            .encounters_recorded
+            .saturating_add(other.encounters_recorded);
+        self.discoveries_recorded = self
+            .discoveries_recorded
+            .saturating_add(other.discoveries_recorded);
         self.spatial_queries = self.spatial_queries.saturating_add(other.spatial_queries);
         self.pathfinding_searches = self
             .pathfinding_searches
@@ -650,9 +684,13 @@ impl Simulation {
         &mut self,
         world: &mut Grid,
         profile: Option<&mut AutonomyProfile>,
-        work: Option<&mut WorkCounters>,
+        mut work: Option<&mut WorkCounters>,
     ) -> (u64, bool, Vec<(u32, u16)>) {
-        let outcome = self.run_autonomy(world, profile, work);
+        let outcome = self.run_autonomy(world, profile, work.as_deref_mut());
+        if let Some(work) = work {
+            work.encounters_recorded += outcome.encounters.len() as u64;
+            work.discoveries_recorded += outcome.discoveries.len() as u64;
+        }
         self.record_resource_discoveries(outcome.discoveries);
         self.record_entity_encounters(outcome.encounters);
         self.record_food_consumptions(&outcome.consumer_ids);
@@ -690,6 +728,7 @@ impl Simulation {
         let mut household_withdraw_attempts = Vec::new();
         let mut household_conflict_attempts = Vec::new();
 
+        let entity_pass_start = profile.as_ref().map(|_| Instant::now());
         for (index, entity) in self
             .entities
             .iter_mut()
@@ -753,11 +792,19 @@ impl Simulation {
             }
         }
 
+        if let Some(profile) = profile.as_deref_mut() {
+            profile.entity_pass_us += entity_pass_start
+                .expect("profile timer must exist")
+                .elapsed()
+                .as_micros() as u64;
+        }
+
         let social_start = profile.as_ref().map(|_| Instant::now());
         let interactions = autonomy::process_social_interactions(
             &mut self.entities,
             &self.population_cache,
             self.tick,
+            work.as_deref_mut(),
         );
         if let Some(work) = work {
             work.social_interactions += interactions.len() as u64;
