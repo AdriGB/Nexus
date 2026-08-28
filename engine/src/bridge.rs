@@ -579,6 +579,7 @@ mod tests {
             social_us: 250,
             entity_pass_us: 1750,
             step_total_us: 2100,
+            post_pass: Default::default(),
         };
 
         let payload = autonomy_profile_json(&profile);
@@ -591,6 +592,7 @@ mod tests {
         assert_eq!(json["social_us"], 250);
         assert_eq!(json["entity_pass_us"], 1750);
         assert_eq!(json["step_total_us"], 2100);
+        assert_eq!(json["post_pass"]["total_us"], 0);
         assert_eq!(json["spatial_queries"], 0);
         assert_eq!(json["events_created"], 0);
     }

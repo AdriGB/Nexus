@@ -20,7 +20,7 @@ mod time;
 
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
-pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal};
+pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal, PostPassProfile};
 pub(crate) use self::config::MAX_POPULATION;
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
@@ -141,6 +141,16 @@ pub(crate) struct WorkCounters {
     pub encounters_recorded: u64,
     /// Descubrimientos entregados a `record_resource_discoveries`.
     pub discoveries_recorded: u64,
+    /// Volumen de cada una de las llamadas posteriores al bucle por-entidad
+    /// (#195). El coste de esas llamadas se cronometra en
+    /// `AutonomyProfile::post_pass`; estos contadores dicen *por qué* cuestan lo
+    /// que cuestan. `social_interactions` ya existía y cubre
+    /// `record_social_interactions`.
+    pub food_consumptions_recorded: u64,
+    pub food_share_attempts: u64,
+    pub household_deposit_attempts: u64,
+    pub household_withdraw_attempts: u64,
+    pub household_conflict_attempts: u64,
     pub spatial_queries: u64,
     pub pathfinding_searches: u64,
     pub pathfinding_nodes_expanded: u64,
@@ -183,6 +193,21 @@ impl WorkCounters {
         self.discoveries_recorded = self
             .discoveries_recorded
             .saturating_add(other.discoveries_recorded);
+        self.food_consumptions_recorded = self
+            .food_consumptions_recorded
+            .saturating_add(other.food_consumptions_recorded);
+        self.food_share_attempts = self
+            .food_share_attempts
+            .saturating_add(other.food_share_attempts);
+        self.household_deposit_attempts = self
+            .household_deposit_attempts
+            .saturating_add(other.household_deposit_attempts);
+        self.household_withdraw_attempts = self
+            .household_withdraw_attempts
+            .saturating_add(other.household_withdraw_attempts);
+        self.household_conflict_attempts = self
+            .household_conflict_attempts
+            .saturating_add(other.household_conflict_attempts);
         self.spatial_queries = self.spatial_queries.saturating_add(other.spatial_queries);
         self.pathfinding_searches = self
             .pathfinding_searches
@@ -680,30 +705,109 @@ impl Simulation {
         Some(id)
     }
 
+    /// Cronometra una de las llamadas posteriores al bucle por-entidad.
+    ///
+    /// `profile` se pasa aparte porque `operation` necesita `&mut self` y las dos
+    /// cosas no pueden prestarse a la vez desde un único closure.
+    fn time_post_pass(
+        &mut self,
+        profile: &mut Option<&mut AutonomyProfile>,
+        slot: fn(&mut PostPassProfile) -> &mut u64,
+        operation: impl FnOnce(&mut Self),
+    ) {
+        let start = profile.as_ref().map(|_| Instant::now());
+        operation(self);
+        if let Some(profile) = profile.as_deref_mut() {
+            *slot(&mut profile.post_pass) += start
+                .expect("profile timer must exist")
+                .elapsed()
+                .as_micros() as u64;
+        }
+    }
+
     fn execute_autonomy(
         &mut self,
         world: &mut Grid,
-        profile: Option<&mut AutonomyProfile>,
+        mut profile: Option<&mut AutonomyProfile>,
         mut work: Option<&mut WorkCounters>,
     ) -> (u64, bool, Vec<(u32, u16)>) {
-        let outcome = self.run_autonomy(world, profile, work.as_deref_mut());
+        let outcome = self.run_autonomy(world, profile.as_deref_mut(), work.as_deref_mut());
         if let Some(work) = work {
-            work.encounters_recorded += outcome.encounters.len() as u64;
             work.discoveries_recorded += outcome.discoveries.len() as u64;
+            work.encounters_recorded += outcome.encounters.len() as u64;
+            work.food_consumptions_recorded += outcome.consumer_ids.len() as u64;
+            work.food_share_attempts += outcome.food_share_attempts.len() as u64;
+            work.household_deposit_attempts += outcome.household_deposit_attempts.len() as u64;
+            work.household_withdraw_attempts += outcome.household_withdraw_attempts.len() as u64;
+            work.household_conflict_attempts += outcome.household_conflict_attempts.len() as u64;
         }
-        self.record_resource_discoveries(outcome.discoveries);
-        self.record_entity_encounters(outcome.encounters);
-        self.record_food_consumptions(&outcome.consumer_ids);
-        self.record_social_interactions(outcome.interactions);
-        self.process_food_share_attempts(outcome.food_share_attempts);
-        self.process_household_deposit_attempts(outcome.household_deposit_attempts);
-        self.process_household_withdraw_attempts(outcome.household_withdraw_attempts);
-        self.process_household_conflict_attempts(outcome.household_conflict_attempts);
-        (
-            outcome.consumed,
-            outcome.world_changed,
-            outcome.consumer_ids,
-        )
+
+        let discoveries = outcome.discoveries;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.resource_discoveries_us,
+            |sim| {
+                sim.record_resource_discoveries(discoveries);
+            },
+        );
+        let encounters = outcome.encounters;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.entity_encounters_us,
+            |sim| {
+                sim.record_entity_encounters(encounters);
+            },
+        );
+        let consumer_ids = outcome.consumer_ids;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.food_consumptions_us,
+            |sim| {
+                sim.record_food_consumptions(&consumer_ids);
+            },
+        );
+        let interactions = outcome.interactions;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.social_interactions_us,
+            |sim| {
+                sim.record_social_interactions(interactions);
+            },
+        );
+        let food_share_attempts = outcome.food_share_attempts;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.food_share_us,
+            |sim| {
+                sim.process_food_share_attempts(food_share_attempts);
+            },
+        );
+        let household_deposit_attempts = outcome.household_deposit_attempts;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.household_deposit_us,
+            |sim| {
+                sim.process_household_deposit_attempts(household_deposit_attempts);
+            },
+        );
+        let household_withdraw_attempts = outcome.household_withdraw_attempts;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.household_withdraw_us,
+            |sim| {
+                sim.process_household_withdraw_attempts(household_withdraw_attempts);
+            },
+        );
+        let household_conflict_attempts = outcome.household_conflict_attempts;
+        self.time_post_pass(
+            &mut profile,
+            |p| &mut p.household_conflict_us,
+            |sim| {
+                sim.process_household_conflict_attempts(household_conflict_attempts);
+            },
+        );
+
+        (outcome.consumed, outcome.world_changed, consumer_ids)
     }
 
     fn run_autonomy(

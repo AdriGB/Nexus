@@ -198,6 +198,26 @@ const AUTONOMY_PROFILE_TICKS: u32 = 32;
 /// `resource_perception_us` is intentionally absent from this struct: the
 /// engine defines it as `memory_reconciliation_us + visible_scan_us`, so
 /// reporting it alongside its own components double counts.
+/// Mean per-tick microseconds of the work `Simulation::execute_autonomy` runs
+/// after the per-entity loop and the social pass (#195).
+///
+/// These eight calls were the unattributed remainder. They are timed one by one
+/// because the volumes they receive differ wildly between them; the matching
+/// `*_recorded` / `*_attempts` counters in the breakdown say how much work each
+/// one was handed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+struct PostPassBreakdown {
+    resource_discoveries_us: f64,
+    entity_encounters_us: f64,
+    food_consumptions_us: f64,
+    social_interactions_us: f64,
+    food_share_us: f64,
+    household_deposit_us: f64,
+    household_withdraw_us: f64,
+    household_conflict_us: f64,
+    total_us: f64,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 struct AutonomyBreakdown {
     profiled_ticks: u32,
@@ -236,6 +256,13 @@ struct AutonomyBreakdown {
     /// Encuentros por tick entregados al sort+dedup de `record_entity_encounters`.
     encounters_recorded: f64,
     discoveries_recorded: f64,
+    /// Volumen entregado a cada llamada posterior al bucle (#195).
+    food_consumptions_recorded: f64,
+    food_share_attempts: f64,
+    household_deposit_attempts: f64,
+    household_withdraw_attempts: f64,
+    household_conflict_attempts: f64,
+    post_pass: PostPassBreakdown,
 }
 
 #[derive(Serialize)]
@@ -323,6 +350,7 @@ fn profile_autonomy_breakdown(
     for _ in 0..ticks {
         let profile = simulation.profile_autonomy_step(world);
         totals.work.accumulate(&profile.work);
+        totals.post_pass.accumulate(&profile.post_pass);
         totals.step_total_us += profile.step_total_us;
         totals.entity_perception_us += profile.entity_perception_us;
         totals.visible_scan_us += profile.visible_scan_us;
@@ -378,6 +406,22 @@ fn profile_autonomy_breakdown(
         social_interactions: totals.work.social_interactions as f64 / tick_count,
         encounters_recorded: totals.work.encounters_recorded as f64 / tick_count,
         discoveries_recorded: totals.work.discoveries_recorded as f64 / tick_count,
+        food_consumptions_recorded: totals.work.food_consumptions_recorded as f64 / tick_count,
+        food_share_attempts: totals.work.food_share_attempts as f64 / tick_count,
+        household_deposit_attempts: totals.work.household_deposit_attempts as f64 / tick_count,
+        household_withdraw_attempts: totals.work.household_withdraw_attempts as f64 / tick_count,
+        household_conflict_attempts: totals.work.household_conflict_attempts as f64 / tick_count,
+        post_pass: PostPassBreakdown {
+            resource_discoveries_us: mean(totals.post_pass.resource_discoveries_us),
+            entity_encounters_us: mean(totals.post_pass.entity_encounters_us),
+            food_consumptions_us: mean(totals.post_pass.food_consumptions_us),
+            social_interactions_us: mean(totals.post_pass.social_interactions_us),
+            food_share_us: mean(totals.post_pass.food_share_us),
+            household_deposit_us: mean(totals.post_pass.household_deposit_us),
+            household_withdraw_us: mean(totals.post_pass.household_withdraw_us),
+            household_conflict_us: mean(totals.post_pass.household_conflict_us),
+            total_us: mean(totals.post_pass.total_us()),
+        },
     }
 }
 

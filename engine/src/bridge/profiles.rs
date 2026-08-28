@@ -2,7 +2,8 @@ use serde::Serialize;
 
 use super::to_json;
 use crate::simulation::{
-    AutonomyProfile, PerformanceSummary, PhaseProfile, PopulationStats, StateGauges, WorkCounters,
+    AutonomyProfile, PerformanceSummary, PhaseProfile, PopulationStats, PostPassProfile,
+    StateGauges, WorkCounters,
 };
 
 pub(crate) fn performance_summary_json(summary: &PerformanceSummary) -> String {
@@ -144,6 +145,36 @@ struct AutonomyProfileDto {
     social_us: u64,
     entity_pass_us: u64,
     step_total_us: u64,
+    post_pass: PostPassProfileDto,
+}
+
+#[derive(Serialize)]
+struct PostPassProfileDto {
+    resource_discoveries_us: u64,
+    entity_encounters_us: u64,
+    food_consumptions_us: u64,
+    social_interactions_us: u64,
+    food_share_us: u64,
+    household_deposit_us: u64,
+    household_withdraw_us: u64,
+    household_conflict_us: u64,
+    total_us: u64,
+}
+
+impl From<&PostPassProfile> for PostPassProfileDto {
+    fn from(post_pass: &PostPassProfile) -> Self {
+        Self {
+            resource_discoveries_us: post_pass.resource_discoveries_us,
+            entity_encounters_us: post_pass.entity_encounters_us,
+            food_consumptions_us: post_pass.food_consumptions_us,
+            social_interactions_us: post_pass.social_interactions_us,
+            food_share_us: post_pass.food_share_us,
+            household_deposit_us: post_pass.household_deposit_us,
+            household_withdraw_us: post_pass.household_withdraw_us,
+            household_conflict_us: post_pass.household_conflict_us,
+            total_us: post_pass.total_us(),
+        }
+    }
 }
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
@@ -166,6 +197,7 @@ pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
         social_us: profile.social_us,
         entity_pass_us: profile.entity_pass_us,
         step_total_us: profile.step_total_us,
+        post_pass: (&profile.post_pass).into(),
     })
 }
 
