@@ -22,6 +22,6 @@ pub(crate) struct AutonomyProfile {
     pub social_us: u64,
 }
 
-pub(crate) fn should_profile_entity(index: usize) -> bool {
+pub(in crate::simulation) fn should_profile_entity(index: usize) -> bool {
     index.is_multiple_of(PROFILE_SAMPLE_RATE)
 }
