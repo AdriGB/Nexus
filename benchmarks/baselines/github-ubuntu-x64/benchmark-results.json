@@ -29,14 +29,14 @@
           "max_us": 534
         },
         "world_maintenance": {
-          "mean_us": 0.0,
+          "mean_us": 0,
           "median_us": 0,
           "p95_us": 0,
           "p99_us": 0,
           "max_us": 0
         },
         "physiology": {
-          "mean_us": 0.0,
+          "mean_us": 0,
           "median_us": 0,
           "p95_us": 0,
           "p99_us": 0,
@@ -50,7 +50,7 @@
           "max_us": 38
         },
         "households": {
-          "mean_us": 4.0,
+          "mean_us": 4,
           "median_us": 4,
           "p95_us": 4,
           "p99_us": 4,
@@ -71,7 +71,7 @@
           "max_us": 510
         },
         "survival": {
-          "mean_us": 0.0,
+          "mean_us": 0,
           "median_us": 0,
           "p95_us": 0,
           "p99_us": 0,
@@ -116,7 +116,11 @@
           "spatial_queries": 10000,
           "pathfinding_searches": 821,
           "pathfinding_nodes_expanded": 29973,
-          "events_created": 8935
+          "events_created": 8935,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 100,
@@ -229,7 +233,7 @@
           "max_us": 293
         },
         "lifecycle": {
-          "mean_us": 23.0,
+          "mean_us": 23,
           "median_us": 22,
           "p95_us": 29,
           "p99_us": 35,
@@ -260,7 +264,11 @@
           "spatial_queries": 100000,
           "pathfinding_searches": 8353,
           "pathfinding_nodes_expanded": 356667,
-          "events_created": 393756
+          "events_created": 393756,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 1000,
@@ -404,7 +412,11 @@
           "spatial_queries": 1000000,
           "pathfinding_searches": 64900,
           "pathfinding_nodes_expanded": 5951196,
-          "events_created": 4391811
+          "events_created": 4391811,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 10000,
@@ -550,7 +562,11 @@
           "spatial_queries": 100000,
           "pathfinding_searches": 28951,
           "pathfinding_nodes_expanded": 27887205,
-          "events_created": 712374
+          "events_created": 712374,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 1000,
@@ -696,7 +712,11 @@
           "spatial_queries": 100000,
           "pathfinding_searches": 7095,
           "pathfinding_nodes_expanded": 475519,
-          "events_created": 363235
+          "events_created": 363235,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 1000,
@@ -843,7 +863,11 @@
           "spatial_queries": 6488458,
           "pathfinding_searches": 296332,
           "pathfinding_nodes_expanded": 30248396,
-          "events_created": 6464488
+          "events_created": 6464488,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 740,
@@ -974,7 +998,11 @@
               "spatial_queries": 727378,
               "pathfinding_searches": 50284,
               "pathfinding_nodes_expanded": 2301125,
-              "events_created": 1220068
+              "events_created": 1220068,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 983,
@@ -1105,7 +1133,11 @@
               "spatial_queries": 613004,
               "pathfinding_searches": 34971,
               "pathfinding_nodes_expanded": 2138432,
-              "events_created": 731598
+              "events_created": 731598,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 758,
@@ -1236,7 +1268,11 @@
               "spatial_queries": 537431,
               "pathfinding_searches": 25790,
               "pathfinding_nodes_expanded": 2087792,
-              "events_created": 593869
+              "events_created": 593869,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 722,
@@ -1367,7 +1403,11 @@
               "spatial_queries": 526469,
               "pathfinding_searches": 21858,
               "pathfinding_nodes_expanded": 1894563,
-              "events_created": 520158
+              "events_created": 520158,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 718,
@@ -1498,7 +1538,11 @@
               "spatial_queries": 524140,
               "pathfinding_searches": 19644,
               "pathfinding_nodes_expanded": 1934187,
-              "events_created": 482258
+              "events_created": 482258,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 718,
@@ -1629,7 +1673,11 @@
               "spatial_queries": 522678,
               "pathfinding_searches": 19420,
               "pathfinding_nodes_expanded": 2146214,
-              "events_created": 450802
+              "events_created": 450802,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 710,
@@ -1760,7 +1808,11 @@
               "spatial_queries": 516345,
               "pathfinding_searches": 19022,
               "pathfinding_nodes_expanded": 2333170,
-              "events_created": 431639
+              "events_created": 431639,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 707,
@@ -1891,7 +1943,11 @@
               "spatial_queries": 514524,
               "pathfinding_searches": 19111,
               "pathfinding_nodes_expanded": 2843080,
-              "events_created": 408456
+              "events_created": 408456,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 701,
@@ -2022,7 +2078,11 @@
               "spatial_queries": 509293,
               "pathfinding_searches": 19935,
               "pathfinding_nodes_expanded": 2880510,
-              "events_created": 402531
+              "events_created": 402531,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 696,
@@ -2153,7 +2213,11 @@
               "spatial_queries": 504705,
               "pathfinding_searches": 21781,
               "pathfinding_nodes_expanded": 3017036,
-              "events_created": 403806
+              "events_created": 403806,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 707,
@@ -2284,7 +2348,11 @@
               "spatial_queries": 500934,
               "pathfinding_searches": 22593,
               "pathfinding_nodes_expanded": 3120664,
-              "events_created": 413451
+              "events_created": 413451,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 723,
@@ -2415,7 +2483,11 @@
               "spatial_queries": 491557,
               "pathfinding_searches": 21923,
               "pathfinding_nodes_expanded": 3551623,
-              "events_created": 405852
+              "events_created": 405852,
+              "orphan_reassignment_scans": 0,
+              "household_sync_scans": 0,
+              "household_migration_scans": 0,
+              "conception_scans": 0
             },
             "state_final": {
               "entities_alive": 740,
@@ -2477,7 +2549,7 @@
           "max_us": 177091
         },
         "world_maintenance": {
-          "mean_us": 0.0,
+          "mean_us": 0,
           "median_us": 0,
           "p95_us": 0,
           "p99_us": 0,
@@ -2564,7 +2636,11 @@
           "spatial_queries": 100000,
           "pathfinding_searches": 28075,
           "pathfinding_nodes_expanded": 26784035,
-          "events_created": 689104
+          "events_created": 689104,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 1000,
@@ -2709,7 +2785,11 @@
           "spatial_queries": 100000,
           "pathfinding_searches": 6767,
           "pathfinding_nodes_expanded": 585162,
-          "events_created": 412644
+          "events_created": 412644,
+          "orphan_reassignment_scans": 0,
+          "household_sync_scans": 0,
+          "household_migration_scans": 0,
+          "conception_scans": 0
         },
         "state_final": {
           "entities_alive": 1000,

@@ -16,7 +16,8 @@ $script:TimingStatistics = [ordered]@{
 $script:WorkCounters = @(
     "entities_processed", "entities_perceived", "goal_evaluations", "goal_changes",
     "plans_created", "actions_executed", "social_interactions", "spatial_queries",
-    "pathfinding_searches", "pathfinding_nodes_expanded", "events_created"
+    "pathfinding_searches", "pathfinding_nodes_expanded", "events_created",
+    "orphan_reassignment_scans", "household_sync_scans", "household_migration_scans", "conception_scans"
 )
 $script:StateGauges = @(
     "entities_alive", "known_entities_total", "known_entities_max_per_entity",
