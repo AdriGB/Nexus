@@ -47,7 +47,7 @@ pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(in crate::simulation) use self::mind::{GRIEF_MAX_DURATION_TICKS, GRIEF_MIN_DURATION_TICKS};
 pub(super) use self::profiling::should_profile_entity;
-pub(crate) use self::profiling::AutonomyProfile;
+pub(crate) use self::profiling::{AutonomyProfile, PostPassProfile};
 pub(in crate::simulation) use self::relationships::{
     close_relationship_role_between, CloseRelationshipRole, RelationshipIdentity,
 };
