@@ -61,10 +61,10 @@ use crate::pathfinding::PathfindingWorkspace;
 use crate::world::Grid;
 use web_time::Instant;
 
-pub(crate) const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
+const HOUSEHOLD_PERSONAL_FOOD_RESERVE: u16 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct HouseholdAutonomyContext {
+pub(in crate::simulation) struct HouseholdAutonomyContext {
     pub residence: (u32, u32),
     pub migration_target: Option<(u32, u32)>,
     pub storage_remaining_capacity: u16,
