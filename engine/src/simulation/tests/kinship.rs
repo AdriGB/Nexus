@@ -595,3 +595,78 @@ fn unknown_and_malformed_family_trees_are_safe() {
         1
     );
 }
+
+#[test]
+fn children_index_matches_a_full_record_scan() {
+    let genealogy = genealogy(vec![
+        biological_child(1, None, None),
+        biological_child(2, None, None),
+        biological_child(3, Some(1), Some(2)),
+        biological_child(4, Some(1), Some(2)),
+        biological_child(5, Some(1), None),
+        biological_child(6, None, Some(2)),
+        biological_child(7, Some(3), Some(6)),
+        biological_child(8, None, None),
+    ]);
+
+    for candidate in 0..=10u32 {
+        let scanned: Vec<u32> = genealogy
+            .records()
+            .iter()
+            .filter(|record| {
+                record.mother_id == Some(candidate) || record.father_id == Some(candidate)
+            })
+            .map(|record| record.entity_id)
+            .collect();
+        assert_eq!(
+            children_of(&genealogy, candidate),
+            scanned,
+            "index disagrees with a record scan for parent {candidate}"
+        );
+    }
+}
+
+#[test]
+fn mother_and_father_collapse_to_one_parent_when_they_are_the_same_entity() {
+    let genealogy = genealogy(vec![
+        biological_child(1, None, None),
+        biological_child(2, Some(1), Some(1)),
+    ]);
+
+    assert_eq!(children_of(&genealogy, 1), vec![2]);
+}
+
+#[test]
+fn childless_entities_resolve_to_no_children() {
+    let genealogy = genealogy(vec![
+        biological_child(1, None, None),
+        biological_child(2, Some(1), None),
+    ]);
+
+    assert!(children_of(&genealogy, 2).is_empty());
+    assert!(children_of(&genealogy, 99).is_empty());
+}
+
+#[test]
+fn descendant_traversal_walks_the_index_across_generations() {
+    let genealogy = genealogy(vec![
+        biological_child(1, None, None),
+        biological_child(2, None, None),
+        biological_child(3, Some(1), Some(2)),
+        biological_child(4, Some(3), Some(2)),
+    ]);
+
+    assert_eq!(
+        descendants_of(&genealogy, 1),
+        vec![
+            KinshipGeneration {
+                entity_id: 3,
+                generation: 1,
+            },
+            KinshipGeneration {
+                entity_id: 4,
+                generation: 2,
+            },
+        ]
+    );
+}
