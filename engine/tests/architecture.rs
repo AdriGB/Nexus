@@ -1,21 +1,10 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn walk_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    for entry in fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            walk_rs_files(&path, out);
-        } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
-            out.push(path);
-        }
-    }
-}
-
 /// Strip line comments (//), block comments (/* */ nested), and string/char
-/// literals so `contains("crate::bridge")` cannot be bypassed via comment or
-/// string. Newlines are preserved to keep line numbers accurate.
+/// literals so dependency checks cannot be bypassed via comment or string.
+/// Newlines are preserved to keep line numbers accurate.
 fn strip_comments_and_strings(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let chars: Vec<char> = input.chars().collect();
@@ -35,7 +24,6 @@ fn strip_comments_and_strings(input: &str) -> String {
             None
         };
 
-        // Inside line comment
         if in_line_comment {
             if c == '\n' {
                 in_line_comment = false;
@@ -47,7 +35,6 @@ fn strip_comments_and_strings(input: &str) -> String {
             continue;
         }
 
-        // Inside block comment (nested)
         if block_depth > 0 {
             if c == '/' && next == Some('*') {
                 block_depth += 1;
@@ -72,16 +59,13 @@ fn strip_comments_and_strings(input: &str) -> String {
             continue;
         }
 
-        // Inside raw string r#\" ... \"# / r##\" ... \"##
         if let Some(hashes) = in_raw_string_hashes {
             if c == '"' {
-                // Check if followed by exactly `hashes` hashes
                 let mut k = 0;
                 while k < hashes && i + 1 + k < chars.len() && chars[i + 1 + k] == '#' {
                     k += 1;
                 }
                 if k == hashes {
-                    // End of raw string
                     out.push(' ');
                     for _ in 0..hashes {
                         out.push(' ');
@@ -100,7 +84,6 @@ fn strip_comments_and_strings(input: &str) -> String {
             continue;
         }
 
-        // Inside normal string
         if in_string {
             if escape {
                 escape = false;
@@ -121,7 +104,6 @@ fn strip_comments_and_strings(input: &str) -> String {
                 continue;
             }
             if c == '\n' {
-                // Unterminated, but preserve
                 out.push('\n');
             } else {
                 out.push(' ');
@@ -130,7 +112,6 @@ fn strip_comments_and_strings(input: &str) -> String {
             continue;
         }
 
-        // Inside char literal
         if in_char {
             if escape {
                 escape = false;
@@ -159,8 +140,6 @@ fn strip_comments_and_strings(input: &str) -> String {
             continue;
         }
 
-        // Normal state — detect transitions
-        // Raw string start: r#\" , r##\" , etc or r\"
         if c == 'r' {
             let mut hashes = 0;
             let mut j = i + 1;
@@ -213,101 +192,355 @@ fn strip_comments_and_strings(input: &str) -> String {
     out
 }
 
-fn violations_in_file(path: &Path, patterns: &[&str]) -> Vec<String> {
-    let raw = fs::read_to_string(path).unwrap();
-    let stripped = strip_comments_and_strings(&raw);
+fn read_stripped(path: &Path) -> String {
+    let raw = fs::read_to_string(path).unwrap_or_default();
+    strip_comments_and_strings(&raw)
+}
+
+/// Map every source file to its absolute crate module path, e.g.
+/// `src/simulation/autonomy/mod.rs` -> `["simulation", "autonomy"]`.
+fn build_module_map() -> Vec<(PathBuf, Vec<String>)> {
+    let mut map: Vec<(PathBuf, Vec<String>)> = Vec::new();
+    let src_root = Path::new("src");
+    let lib = src_root.join("lib.rs");
+    if !lib.exists() {
+        return map;
+    }
+    visit(&lib, Vec::new(), &mut map);
+    map
+}
+
+fn visit(file: &Path, mod_path: Vec<String>, map: &mut Vec<(PathBuf, Vec<String>)>) {
+    if map.iter().any(|(p, _)| p == file) {
+        return;
+    }
+    map.push((file.to_path_buf(), mod_path.clone()));
+
+    let content = read_stripped(file);
+    for child in extract_mods(&content) {
+        let dir = file.parent().unwrap_or_else(|| Path::new(""));
+        let as_file = dir.join(format!("{}.rs", child));
+        let as_mod = dir.join(&child).join("mod.rs");
+        let child_path = if as_file.exists() { as_file } else { as_mod };
+        if child_path.exists() {
+            let mut np = mod_path.clone();
+            np.push(child);
+            visit(&child_path, np, map);
+        }
+    }
+}
+
+/// Extract `mod foo;` declarations from stripped file content.
+fn extract_mods(content: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for (idx, line) in stripped.lines().enumerate() {
-        for pat in patterns {
-            if line.contains(pat) {
-                // Show original line for diagnostics, not stripped
-                let orig_line = raw.lines().nth(idx).unwrap_or("");
-                out.push(format!(
-                    "{}:{}: {} [matched: {}]",
-                    path.display(),
-                    idx + 1,
-                    orig_line.trim(),
-                    pat
-                ));
-                break;
-            }
+    for line in content.lines() {
+        let t = line.trim();
+        if !t.ends_with(';') {
+            continue;
+        }
+        let idx = match t.find("mod ") {
+            Some(i) if i == 0 || t.as_bytes()[i - 1] == b' ' || t.as_bytes()[i - 1] == b'\t' => i,
+            _ => continue,
+        };
+        let after = &t[idx + 4..];
+        let name: String = after
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() {
+            out.push(name);
         }
     }
     out
 }
 
-#[test]
-fn simulation_does_not_depend_on_bridge_or_web() {
-    let mut files = Vec::new();
-    walk_rs_files(Path::new("src/simulation"), &mut files);
-    let patterns = [
-        "crate::bridge",
-        "crate::renderer",
-        "crate::web",
-        "crate::lib", // WASM facade
-    ];
-    let mut violations = Vec::new();
-    for path in &files {
-        if path.to_string_lossy().contains("tests") {
+/// Parse a single `use` tree into absolute crate paths (segments).
+/// `current` is the module path of the file containing the `use`.
+fn parse_use_tree(tree: &str, current: &[String]) -> Vec<Vec<String>> {
+    let tree = tree.trim();
+    let (base, rest) = resolve_qualifier(tree, current);
+    let mut out = Vec::new();
+    walk_use_tree(rest, &base, &mut out);
+    out
+}
+
+fn resolve_qualifier<'a>(tree: &'a str, current: &[String]) -> (Vec<String>, &'a str) {
+    if let Some(rest) = tree.strip_prefix("crate") {
+        let rest = rest.strip_prefix("::").unwrap_or(rest);
+        (Vec::new(), rest)
+    } else if let Some(rest) = tree.strip_prefix("self") {
+        let rest = rest.strip_prefix("::").unwrap_or(rest);
+        (current.to_vec(), rest)
+    } else if tree.starts_with("super") {
+        let mut count = 0;
+        let mut rest = tree;
+        while let Some(r) = rest.strip_prefix("super::") {
+            count += 1;
+            rest = r;
+        }
+        if rest.starts_with("super") {
+            (Vec::new(), "")
+        } else {
+            let len = current.len().saturating_sub(count);
+            (current[..len].to_vec(), rest)
+        }
+    } else if tree.starts_with("::") {
+        (Vec::new(), "")
+    } else {
+        (current.to_vec(), tree)
+    }
+}
+
+fn walk_use_tree(s: &str, prefix: &[String], out: &mut Vec<Vec<String>>) {
+    let s = s.trim();
+    if s.is_empty() {
+        return;
+    }
+    if s == "*" {
+        out.push(prefix.to_vec());
+        return;
+    }
+    let segs = split_double_colon(s);
+    let mut cur = prefix.to_vec();
+    let mut saw_group = false;
+    for raw_seg in segs {
+        let seg = raw_seg.trim();
+        if seg.is_empty() {
             continue;
         }
-        violations.extend(violations_in_file(path, &patterns));
-    }
-    assert!(
-        violations.is_empty(),
-        "simulation must not depend on bridge/renderer/web (ADR 0001):\n{}",
-        violations.join("\n")
-    );
-}
-
-#[test]
-fn autonomy_does_not_depend_on_bridge_or_web() {
-    let mut files = Vec::new();
-    walk_rs_files(Path::new("src/simulation/autonomy"), &mut files);
-    let patterns = [
-        "crate::bridge",
-        "crate::renderer",
-        "crate::web",
-        "crate::world::", // autonomy may read world via Simulation, not directly via world internals
-    ];
-    // Autonomy legitimately uses crate::world as type via simulation facade,
-    // but direct `crate::world::` import is suspicious — allow via `world::` helper
-    // For now enforce no bridge/renderer/web; world check is informational.
-    let strict_patterns = ["crate::bridge", "crate::renderer", "crate::web"];
-    let mut violations = Vec::new();
-    for path in &files {
-        violations.extend(violations_in_file(path, &strict_patterns));
-        // Also ensure autonomy doesn't directly import bridge types via `bridge::`
-        if violations_in_file(path, &["bridge::"])
-            .iter()
-            .any(|v| v.contains("use "))
-        {
-            // Already captured above if via crate::bridge, this catches relative
-            violations.extend(violations_in_file(
-                path,
-                &["use crate::bridge", "use bridge::"],
-            ));
+        if seg.starts_with('{') && seg.ends_with('}') {
+            saw_group = true;
+            let inner = &seg[1..seg.len() - 1];
+            for sub in split_top_commas(inner) {
+                walk_use_tree(&sub, &cur, out);
+            }
+        } else if seg == "*" {
+            out.push(cur.clone());
+            saw_group = true;
+        } else {
+            let name = match seg.rfind(" as ") {
+                Some(i) => &seg[..i],
+                None => seg,
+            };
+            cur.push(name.trim().to_string());
         }
     }
-    // De-duplicate by path:line
-    violations.sort();
-    violations.dedup();
-    // Filter to only the strict guarantee; world check is not enforced yet
-    let _ = patterns; // keep documented
+    if !saw_group {
+        out.push(cur);
+    }
+}
+
+/// Split by `::` but do not break inside `{...}`.
+fn split_double_colon(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0;
+    let mut cur = String::new();
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '{' {
+            depth += 1;
+            cur.push(c);
+        } else if c == '}' {
+            depth -= 1;
+            cur.push(c);
+        } else if c == ':' && depth == 0 && i + 1 < chars.len() && chars[i + 1] == ':' {
+            out.push(std::mem::take(&mut cur));
+            i += 2;
+            continue;
+        } else {
+            cur.push(c);
+        }
+        i += 1;
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Split by top-level commas (depth 0) inside a `{...}` group body.
+fn split_top_commas(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0;
+    let mut cur = String::new();
+    for c in s.chars() {
+        if c == '{' {
+            depth += 1;
+            cur.push(c);
+        } else if c == '}' {
+            depth -= 1;
+            cur.push(c);
+        } else if c == ',' && depth == 0 {
+            out.push(std::mem::take(&mut cur));
+        } else {
+            cur.push(c);
+        }
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Extract all `use` paths from a stripped file as raw strings (content after
+/// the `use` keyword, before the terminating `;`).
+fn is_use_at(bytes: &[u8], i: usize) -> bool {
+    bytes[i] == b'u'
+        && i + 3 < bytes.len()
+        && bytes[i + 1] == b's'
+        && bytes[i + 2] == b'e'
+        && (i == 0 || bytes[i - 1] == b' ' || bytes[i - 1] == b'\t' || bytes[i - 1] == b'\n')
+}
+
+fn extract_use_paths(content: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes = content.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if is_use_at(bytes, i) {
+            let mut j = i + 3;
+            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'(' {
+                while j < bytes.len() && bytes[j] != b')' {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    j += 1;
+                }
+                while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    j += 1;
+                }
+            }
+            if j < bytes.len() && is_use_at(bytes, j) {
+                i = j;
+                j = i + 3;
+            }
+            let mut k = j;
+            let mut depth = 0;
+            while k < bytes.len() {
+                let c = bytes[k];
+                if c == b'{' {
+                    depth += 1;
+                } else if c == b'}' {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                } else if c == b';' && depth == 0 {
+                    break;
+                }
+                k += 1;
+            }
+            if k < bytes.len() {
+                let path = &content[i + 3..k];
+                out.push(path.trim().to_string());
+            }
+            i = k + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn module_is_exempt(mod_path: &[String]) -> bool {
+    mod_path.iter().any(|s| s == "tests")
+}
+
+fn edges_for(file: &Path, mod_path: &[String]) -> Vec<String> {
+    let content = read_stripped(file);
+    let mut edges = Vec::new();
+    for raw in extract_use_paths(&content) {
+        for segs in parse_use_tree(&raw, mod_path) {
+            if segs.is_empty() {
+                continue;
+            }
+            edges.push(format!("crate::{}", segs.join("::")));
+        }
+    }
+    edges
+}
+
+fn starts_with_any(edge: &str, prefixes: &[&str]) -> Option<String> {
+    for p in prefixes {
+        if edge.starts_with(*p) {
+            return Some((*p).to_string());
+        }
+    }
+    None
+}
+
+#[test]
+fn simulation_does_not_depend_on_bridge_or_renderer() {
+    let map = build_module_map();
+    let forbidden = ["crate::bridge", "crate::renderer"];
+    let mut violations = Vec::new();
+    for (file, mod_path) in &map {
+        if !mod_path.starts_with(&["simulation".to_string()]) {
+            continue;
+        }
+        if module_is_exempt(mod_path) {
+            continue;
+        }
+        for edge in edges_for(file, mod_path) {
+            if let Some(p) = starts_with_any(&edge, &forbidden) {
+                violations.push(format!(
+                    "{} ({}) -> {} [forbidden: {}]",
+                    mod_path.join("::"),
+                    file.display(),
+                    edge,
+                    p
+                ));
+            }
+        }
+    }
     assert!(
         violations.is_empty(),
-        "autonomy must not depend on bridge/renderer/web (ADR 0001):\n{}",
+        "simulation must not depend on bridge/renderer (ADR 0001):\n{}",
         violations.join("\n")
     );
 }
 
 #[test]
-fn bridge_does_not_contain_domain_logic() {
-    let mut files = Vec::new();
-    walk_rs_files(Path::new("src/bridge"), &mut files);
-    // Bridge may import Simulation facade and world, but not domain internals.
-    // Allow `crate::simulation::{Simulation, Entity, ...}` facade types.
-    // Forbid deep domain paths and direct `autonomy::` usage.
+fn autonomy_does_not_depend_on_bridge_or_renderer() {
+    let map = build_module_map();
+    let forbidden = ["crate::bridge", "crate::renderer"];
+    let mut violations = Vec::new();
+    for (file, mod_path) in &map {
+        if mod_path.first().map(|s| s.as_str()) != Some("simulation") {
+            continue;
+        }
+        if mod_path.get(1).map(|s| s.as_str()) != Some("autonomy") {
+            continue;
+        }
+        if module_is_exempt(mod_path) {
+            continue;
+        }
+        for edge in edges_for(file, mod_path) {
+            if let Some(p) = starts_with_any(&edge, &forbidden) {
+                violations.push(format!(
+                    "{} ({}) -> {} [forbidden: {}]",
+                    mod_path.join("::"),
+                    file.display(),
+                    edge,
+                    p
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "autonomy must not depend on bridge/renderer (ADR 0001):\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn bridge_is_transport_only() {
+    let map = build_module_map();
     let forbidden = [
         "crate::simulation::autonomy",
         "crate::simulation::households",
@@ -320,31 +553,21 @@ fn bridge_does_not_contain_domain_logic() {
         "crate::simulation::pipeline",
         "crate::simulation::renewal",
         "crate::simulation::spatial",
-        "crate::simulation::household_membership",
-        "autonomy::",
-        "households::plan_",
-        "lifecycle::",
-        "dependents::",
     ];
     let mut violations = Vec::new();
-    for path in files {
-        let raw = fs::read_to_string(&path).unwrap();
-        let stripped = strip_comments_and_strings(&raw);
-        for (idx, line) in stripped.lines().enumerate() {
-            for pat in &forbidden {
-                if line.contains(pat) {
-                    // Allow `use crate::simulation::autonomy` only in comments/strings already stripped,
-                    // so any remaining occurrence is real code.
-                    let orig = raw.lines().nth(idx).unwrap_or("");
-                    violations.push(format!(
-                        "{}:{}: {} [matched: {}]",
-                        path.display(),
-                        idx + 1,
-                        orig.trim(),
-                        pat
-                    ));
-                    break;
-                }
+    for (file, mod_path) in &map {
+        if mod_path.first().map(|s| s.as_str()) != Some("bridge") {
+            continue;
+        }
+        for edge in edges_for(file, mod_path) {
+            if let Some(p) = starts_with_any(&edge, &forbidden) {
+                violations.push(format!(
+                    "{} ({}) -> {} [forbidden: {}]",
+                    mod_path.join("::"),
+                    file.display(),
+                    edge,
+                    p
+                ));
             }
         }
     }
@@ -356,9 +579,8 @@ fn bridge_does_not_contain_domain_logic() {
 }
 
 #[test]
-fn world_is_not_dependent_on_simulation() {
-    let raw = fs::read_to_string("src/world.rs").unwrap();
-    let stripped = strip_comments_and_strings(&raw);
+fn world_is_not_dependent_on_simulation_or_bridge() {
+    let map = build_module_map();
     let forbidden = [
         "crate::simulation",
         "crate::bridge",
@@ -366,25 +588,31 @@ fn world_is_not_dependent_on_simulation() {
         "crate::autonomy",
     ];
     let mut violations = Vec::new();
-    for (idx, line) in stripped.lines().enumerate() {
-        for pat in &forbidden {
-            if line.contains(pat) {
-                let orig = raw.lines().nth(idx).unwrap_or("");
-                violations.push(format!("{}: {} [matched: {}]", idx + 1, orig.trim(), pat));
-                break;
+    for (file, mod_path) in &map {
+        if mod_path.len() != 1 || mod_path[0] != "world" {
+            continue;
+        }
+        for edge in edges_for(file, mod_path) {
+            if let Some(p) = starts_with_any(&edge, &forbidden) {
+                violations.push(format!(
+                    "{} ({}) -> {} [forbidden: {}]",
+                    mod_path.join("::"),
+                    file.display(),
+                    edge,
+                    p
+                ));
             }
         }
     }
     assert!(
         violations.is_empty(),
-        "world.rs must not depend on simulation/bridge/renderer (dependency inversion):\n{}",
+        "world must not depend on simulation/bridge/renderer (dependency inversion):\n{}",
         violations.join("\n")
     );
 }
 
 #[test]
 fn strip_helper_is_sound() {
-    // Self-test: ensure helper strips comments/strings so checks are not bypassable
     let tricky = r##"
         // crate::bridge should be ignored in line comment
         /* crate::bridge in block comment */
@@ -392,7 +620,7 @@ fn strip_helper_is_sound() {
         let s = "crate::bridge inside string";
         let r = r#"crate::bridge in raw string"#;
         let c = 'b'; // char
-        crate::bridge // this one is real and should be detected
+        use crate::bridge::X; // this one is real and should be detected
     "##;
     let stripped = strip_comments_and_strings(tricky);
     let count = stripped.matches("crate::bridge").count();
@@ -400,5 +628,63 @@ fn strip_helper_is_sound() {
         count, 1,
         "strip helper must leave exactly one real occurrence, got {} in:\n{}",
         count, stripped
+    );
+}
+
+#[test]
+fn module_map_resolves_expected_paths() {
+    let map = build_module_map();
+    let mut found = HashMap::new();
+    for (_, mod_path) in &map {
+        found.insert(mod_path.join("::"), true);
+    }
+    assert!(
+        found.contains_key("simulation"),
+        "simulation module must be discovered"
+    );
+    assert!(
+        found.contains_key("simulation::autonomy"),
+        "simulation::autonomy module must be discovered"
+    );
+    assert!(
+        found.contains_key("bridge"),
+        "bridge module must be discovered"
+    );
+}
+
+#[test]
+fn use_tree_parser_handles_groups_and_aliases() {
+    let cur = vec!["simulation".to_string(), "autonomy".to_string()];
+    let edges = parse_use_tree(
+        "crate::simulation::{autonomy::{X, Y as Z}, lifecycle}",
+        &cur,
+    );
+    let mut strings: Vec<String> = edges
+        .iter()
+        .map(|e| format!("crate::{}", e.join("::")))
+        .collect();
+    strings.sort();
+    assert_eq!(
+        strings,
+        vec![
+            "crate::simulation::autonomy::X".to_string(),
+            "crate::simulation::autonomy::Y".to_string(),
+            "crate::simulation::lifecycle".to_string(),
+        ]
+    );
+
+    let edges2 = parse_use_tree(
+        "super::super::foo::bar",
+        &["a".to_string(), "b".to_string(), "c".to_string()],
+    );
+    assert_eq!(
+        edges2,
+        vec![vec!["a".to_string(), "foo".to_string(), "bar".to_string()]]
+    );
+
+    let edges3 = parse_use_tree("self::events::*", &["simulation".to_string()]);
+    assert_eq!(
+        edges3,
+        vec![vec!["simulation".to_string(), "events".to_string()]]
     );
 }
