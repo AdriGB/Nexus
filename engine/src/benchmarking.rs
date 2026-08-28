@@ -287,6 +287,21 @@ struct LongRunResult {
     scenario: BenchmarkScenario,
     overall: PerformanceSummary,
     windows: Vec<LongRunWindow>,
+    /// Autonomy breakdown measured **after** the last window, not averaged over
+    /// the run.
+    ///
+    /// This is deliberate. The long scenario is the only one that runs longer
+    /// than `GESTATION_TICKS` (6,720 ticks against 8,784 here), so it is the
+    /// only one where kinship has real lineage to walk: `genealogy_links`
+    /// reaches 142 where every short scenario reports 0. That data only exists
+    /// at the end, so profiling at the start would reproduce the blind spot the
+    /// short scenarios already have, where `children_of` always returns
+    /// nothing.
+    ///
+    /// Consequence: `overall` averages the whole run while this describes the
+    /// smaller, older population the windows leave behind (1,000 entities at
+    /// the start, 740 at the end). They are not directly comparable.
+    autonomy_breakdown: AutonomyBreakdown,
 }
 
 pub fn scenario_names() -> impl Iterator<Item = &'static str> {
@@ -464,11 +479,17 @@ fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, Strin
             summary,
         });
     }
+    let overall_summary = overall.summarize();
+    // Profiled after the windows, so the breakdown sees the population and the
+    // lineage the run actually produced. See the field docs on `LongRunResult`.
+    let autonomy_breakdown =
+        profile_autonomy_breakdown(&mut simulation, &mut world, AUTONOMY_PROFILE_TICKS);
     Ok(LongRunResult {
         schema_version: BENCHMARK_SCHEMA_VERSION,
         scenario,
-        overall: overall.summarize(),
+        overall: overall_summary,
         windows,
+        autonomy_breakdown,
     })
 }
 
@@ -1070,6 +1091,45 @@ mod tests {
         assert_eq!(
             first.overall.state_final,
             first.windows.last().unwrap().summary.state_final
+        );
+    }
+
+    #[test]
+    fn long_run_autonomy_breakdown_is_profiled_and_deterministic() {
+        let mut scenario = small_specialized(BenchmarkWorkload::LongRun {
+            window_count: 3,
+            food_grid_spacing: 12,
+            food_capacity: 5_000,
+        });
+        scenario.warmup_ticks = 2;
+        scenario.measured_ticks = 12;
+        let first = run_long_scenario(scenario).unwrap();
+        let second = run_long_scenario(scenario).unwrap();
+
+        assert_eq!(
+            first.autonomy_breakdown.profiled_ticks,
+            AUTONOMY_PROFILE_TICKS
+        );
+        assert!(first.autonomy_breakdown.entities_per_tick > 0.0);
+
+        // Only the counters are compared. The `*_us` timings are wall-clock and
+        // are not reproducible across runs, so asserting on them would be a
+        // flake waiting to happen.
+        assert_eq!(
+            first.autonomy_breakdown.entities_per_tick,
+            second.autonomy_breakdown.entities_per_tick
+        );
+        assert_eq!(
+            first.autonomy_breakdown.sampled_entities_per_tick,
+            second.autonomy_breakdown.sampled_entities_per_tick
+        );
+        assert_eq!(
+            first.autonomy_breakdown.social_pairs_scanned,
+            second.autonomy_breakdown.social_pairs_scanned
+        );
+        assert_eq!(
+            first.autonomy_breakdown.social_interactions,
+            second.autonomy_breakdown.social_interactions
         );
     }
 
