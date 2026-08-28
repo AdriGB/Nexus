@@ -194,7 +194,7 @@ El usuario selecciona una relación y Nexus explica cuándo se conocieron, qué 
 
 ---
 
-# Phase 2.9 — Material Survival
+# Phase 2.9 — Material Survival ✅
 
 Objetivo: reemplazar el consumo directo por un ciclo económico mínimo.
 
@@ -298,8 +298,8 @@ demostradas mediante mediciones.
 * [ ] Reducir visibilidad `pub(crate)` sin consumidores reales
 * [ ] Separar commands y queries donde clarifique los contratos
 * [ ] Revisar los límites de `autonomy`, `households` y `events`
-* [ ] Mantener `Simulation` como composition root y contenedor de estado
-* [ ] Añadir tests de arquitectura e invariantes donde sean mantenibles
+* [x] Mantener `Simulation` como composition root y contenedor de estado
+* [x] Añadir tests de arquitectura e invariantes donde sean mantenibles
 
 La auditoría viva se encuentra en
 [`docs/architecture/2.11-audit.md`](docs/architecture/2.11-audit.md).
