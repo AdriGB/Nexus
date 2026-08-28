@@ -81,8 +81,9 @@ pub(super) fn process_social_interactions(
     entities: &mut [Entity],
     population: &[EntitySnapshot],
     tick: u64,
+    work: Option<&mut crate::simulation::WorkCounters>,
 ) -> Vec<SocialInteraction> {
-    social::process_social_interactions(entities, population, tick)
+    social::process_social_interactions(entities, population, tick, work)
 }
 
 pub(in crate::simulation) fn record_directed_affinity(

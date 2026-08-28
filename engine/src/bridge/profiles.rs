@@ -142,6 +142,8 @@ struct AutonomyProfileDto {
     sampled_known_resources_max: u32,
     visible_resources_seen: u32,
     social_us: u64,
+    entity_pass_us: u64,
+    step_total_us: u64,
 }
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
@@ -162,6 +164,8 @@ pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
         sampled_known_resources_max: profile.sampled_known_resources_max,
         visible_resources_seen: profile.visible_resources_seen,
         social_us: profile.social_us,
+        entity_pass_us: profile.entity_pass_us,
+        step_total_us: profile.step_total_us,
     })
 }
 

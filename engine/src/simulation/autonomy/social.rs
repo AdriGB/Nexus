@@ -2,6 +2,7 @@ use super::super::config::{MAX_HEALTH, MAX_HUNGER};
 use super::super::entity::{Entity, EntityActivity, LifeStage, Personality};
 use super::super::spatial::EntitySnapshot;
 use super::super::time::TICKS_PER_DAY;
+use super::super::WorkCounters;
 use super::exploration::plan_exploration;
 use super::mind::{manhattan, Action, AffinityChangeRecord, Goal, KnownEntity, Mind};
 use super::relationships::{close_relationship_role, CloseRelationshipRole, RelationshipIdentity};
@@ -459,10 +460,17 @@ pub(super) fn plan_socialize(
     }
 }
 
+/// Resuelve las interacciones sociales del tick.
+///
+/// `work` solo se puebla en runs perfilados; la ruta de producción pasa `None`.
+/// Cuando está presente se rellena el funnel `social_pairs_*`, que permite
+/// atribuir el coste de esta función a "demasiados pares" o a "demasiado
+/// trabajo por par" (#192).
 pub(super) fn process_social_interactions(
     entities: &mut [Entity],
     population: &[EntitySnapshot],
     tick: u64,
+    mut work: Option<&mut WorkCounters>,
 ) -> Vec<SocialInteraction> {
     let id_to_index: HashMap<u32, usize> = entities
         .iter()
@@ -487,6 +495,9 @@ pub(super) fn process_social_interactions(
         for &b_id in &entity.mind.visible_entities {
             if a_id >= b_id {
                 continue;
+            }
+            if let Some(work) = work.as_deref_mut() {
+                work.social_pairs_scanned += 1;
             }
 
             let b_index = match id_to_index.get(&b_id) {
@@ -521,6 +532,9 @@ pub(super) fn process_social_interactions(
             {
                 continue;
             }
+            if let Some(work) = work.as_deref_mut() {
+                work.social_pairs_in_radius += 1;
+            }
 
             if entities[b_index]
                 .mind
@@ -529,6 +543,9 @@ pub(super) fn process_social_interactions(
                 .is_err()
             {
                 continue;
+            }
+            if let Some(work) = work.as_deref_mut() {
+                work.social_pairs_mutual += 1;
             }
 
             let last_a_to_b = entities[entity_index]
@@ -561,6 +578,9 @@ pub(super) fn process_social_interactions(
 
             if last_interaction != 0 && tick.saturating_sub(last_interaction) < interval {
                 continue;
+            }
+            if let Some(work) = work.as_deref_mut() {
+                work.social_pairs_due += 1;
             }
 
             let compatibility = personality_compatibility(

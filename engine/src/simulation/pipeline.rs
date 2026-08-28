@@ -299,6 +299,7 @@ pub(super) fn run_profiled_autonomy_step(
 ) -> AutonomyProfile {
     let mut profile = AutonomyProfile::default();
     let mut work = WorkCounters::default();
+    let start = Instant::now();
     execute_step(
         simulation,
         world,
@@ -308,6 +309,7 @@ pub(super) fn run_profiled_autonomy_step(
             work: Some(&mut work),
         },
     );
+    profile.step_total_us = start.elapsed().as_micros() as u64;
 
     profile.work = work;
     profile.state = simulation.state_gauges();

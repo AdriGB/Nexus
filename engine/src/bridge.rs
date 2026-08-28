@@ -577,6 +577,8 @@ mod tests {
             sampled_known_resources_max: 50,
             visible_resources_seen: 100,
             social_us: 250,
+            entity_pass_us: 1750,
+            step_total_us: 2100,
         };
 
         let payload = autonomy_profile_json(&profile);
@@ -587,6 +589,8 @@ mod tests {
         assert_eq!(json["sampled_known_resources_max"], 50);
         assert_eq!(json["known_resources_max_per_entity"], 0);
         assert_eq!(json["social_us"], 250);
+        assert_eq!(json["entity_pass_us"], 1750);
+        assert_eq!(json["step_total_us"], 2100);
         assert_eq!(json["spatial_queries"], 0);
         assert_eq!(json["events_created"], 0);
     }

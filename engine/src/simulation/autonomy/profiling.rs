@@ -20,6 +20,25 @@ pub(crate) struct AutonomyProfile {
     pub sampled_known_resources_max: u32,
     pub visible_resources_seen: u32,
     pub social_us: u64,
+    /// Bucle por-entidad completo, medido sobre **toda** la población.
+    ///
+    /// Es el equivalente de `social_us` para la otra mitad de la fase: un único
+    /// cronómetro sin filtrar, así que no depende del muestreo de
+    /// `PROFILE_SAMPLE_RATE` (#191) ni de su extrapolación.
+    ///
+    /// Ojo: NO es comparable con `summary.autonomy.mean_us`. Ese número sale de
+    /// la pasada de fases, donde los temporizadores por entidad están apagados;
+    /// éste sale de la pasada perfilada, que es más lenta. Comparar los dos
+    /// mezcla medidas de mundos distintos. El denominador correcto es
+    /// `step_total_us`.
+    pub entity_pass_us: u64,
+    /// Muro del paso completo, medido sólo alrededor de `execute_step`.
+    ///
+    /// Excluye `state_gauges()`, que la pasada perfilada calcula después y que no
+    /// forma parte del paso de simulación. Es el denominador que convierte
+    /// `social_us + entity_pass_us` en una fracción: los tres se cronometran
+    /// dentro de la misma pasada.
+    pub step_total_us: u64,
 }
 
 pub(in crate::simulation) fn should_profile_entity(index: usize) -> bool {

@@ -141,8 +141,12 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
             is_infant: false,
         },
     ];
-    let interactions =
-        crate::simulation::autonomy::process_social_interactions(&mut entities, &population, 100);
+    let interactions = crate::simulation::autonomy::process_social_interactions(
+        &mut entities,
+        &population,
+        100,
+        None,
+    );
 
     assert_eq!(interactions.len(), 1);
     assert_eq!(entities[0].mind.memory.affinity_to(2), Some(103));
@@ -155,6 +159,82 @@ fn process_social_interactions_mutates_once_and_reports_directed_crossings() {
     assert_eq!(actor_change.new_affinity, 103);
     assert_eq!(actor_change.delta, 4);
     assert_eq!(interactions[0].target_affinity_change, None);
+}
+
+#[test]
+fn social_funnel_counts_each_stage() {
+    fn snapshot(id: u32, x: u32, y: u32) -> crate::simulation::spatial::EntitySnapshot {
+        crate::simulation::spatial::EntitySnapshot {
+            id,
+            x,
+            y,
+            hunger: 0.0,
+            caregiver_id: None,
+            household_id: None,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
+            is_child: false,
+            is_infant: false,
+        }
+    }
+
+    fn remember(mind: &mut crate::simulation::autonomy::Mind, id: u32) {
+        mind.memory
+            .known_entities
+            .push(crate::simulation::autonomy::KnownEntity {
+                id,
+                first_seen_tick: 0,
+                last_seen_tick: 0,
+                last_seen_x: 0,
+                last_seen_y: 0,
+                observed_ticks: 1,
+                affinity: 0,
+                last_interaction_tick: 0,
+                interaction_count: 0,
+                seek_retry_after_tick: None,
+            });
+    }
+
+    let mut near_a = default_adult(1, 10, 10);
+    let mut near_b = default_adult(2, 10, 11);
+    let mut far = default_adult(3, 40, 40);
+    near_a.mind.visible_entities = vec![2, 3];
+    near_b.mind.visible_entities = vec![1];
+    far.mind.visible_entities = vec![1];
+    remember(&mut near_a.mind, 2);
+    remember(&mut near_b.mind, 1);
+
+    let mut entities = vec![near_a, near_b, far];
+    let population = vec![
+        snapshot(1, 10, 10),
+        snapshot(2, 10, 11),
+        snapshot(3, 40, 40),
+    ];
+
+    let mut work = crate::simulation::WorkCounters::default();
+    let interactions = crate::simulation::autonomy::process_social_interactions(
+        &mut entities,
+        &population,
+        100,
+        Some(&mut work),
+    );
+
+    assert_eq!(
+        work.social_pairs_scanned, 2,
+        "entity 1 sees two candidates and holds the lower id in both pairs"
+    );
+    assert_eq!(
+        work.social_pairs_in_radius, 1,
+        "the distant pair must be dropped by the SOCIAL_RADIUS gate"
+    );
+    assert_eq!(work.social_pairs_mutual, 1);
+    assert_eq!(
+        work.social_pairs_due, 1,
+        "the surviving pair has no interaction history, so it is due"
+    );
+    assert_eq!(interactions.len(), 1);
 }
 
 #[test]
