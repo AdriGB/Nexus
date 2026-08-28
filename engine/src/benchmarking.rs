@@ -8,7 +8,9 @@ use crate::generation::generate_world;
 use crate::pathfinding::{find_path_with_workspace, PathfindingWorkspace};
 use crate::regions::detect_regions;
 use crate::resources::generate_resources;
-use crate::simulation::{PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION};
+use crate::simulation::{
+    AutonomyProfile, PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION,
+};
 use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 use serde::Serialize;
 
@@ -159,11 +161,55 @@ const SCENARIOS: [BenchmarkScenario; 8] = [
     },
 ];
 
+/// Ticks re-measured with the sampled autonomy profiler after the phase run.
+///
+/// Autonomy sub-phases are timed per entity and only for a fixed fraction of
+/// the population, so they run in a second pass: mixing them into the phase run
+/// would perturb the very timings the regression gate compares.
+const AUTONOMY_PROFILE_TICKS: u32 = 32;
+
+/// Mean per-tick microseconds spent inside the autonomy phase, by sub-phase.
+///
+/// Two populations are timed and they must not be added together:
+///
+/// * `social_pass_us` covers the whole population. It is measured with a single
+///   timer around the social resolution pass, so it is directly comparable to
+///   `summary.autonomy.mean_us`.
+/// * Every other sub-phase is timed per entity and only for the sampled
+///   entities, so those values cover `sampled_fraction` of the population.
+///
+/// `sampled_subphases_extrapolated_us` scales the sampled total by
+/// `sampled_fraction` to approximate the full cost. The sample is not
+/// representative: across the registered scenarios the extrapolated total
+/// landed between 71% and 147% of the measured autonomy time, so treat it as a
+/// ranking signal, not as a budget.
+///
+/// `resource_perception_us` is intentionally absent from this struct: the
+/// engine defines it as `memory_reconciliation_us + visible_scan_us`, so
+/// reporting it alongside its own components double counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+struct AutonomyBreakdown {
+    profiled_ticks: u32,
+    entities_per_tick: f64,
+    sampled_entities_per_tick: f64,
+    sampled_fraction: f64,
+    social_pass_us: f64,
+    entity_perception_us: f64,
+    visible_scan_us: f64,
+    memory_reconciliation_us: f64,
+    plan_validation_us: f64,
+    planning_us: f64,
+    action_us: f64,
+    sampled_subphases_us: f64,
+    sampled_subphases_extrapolated_us: f64,
+}
+
 #[derive(Serialize)]
 struct BenchmarkResult {
     schema_version: u32,
     scenario: BenchmarkScenario,
     summary: PerformanceSummary,
+    autonomy_breakdown: AutonomyBreakdown,
 }
 
 #[derive(Serialize)]
@@ -221,11 +267,72 @@ fn run_scenario(scenario: BenchmarkScenario) -> Result<BenchmarkResult, String> 
         simulation.step(&mut world);
     }
     let summary = simulation.profile_run(&mut world, scenario.measured_ticks);
+    let autonomy_breakdown =
+        profile_autonomy_breakdown(&mut simulation, &mut world, AUTONOMY_PROFILE_TICKS);
     Ok(BenchmarkResult {
         schema_version: BENCHMARK_SCHEMA_VERSION,
         scenario,
         summary,
+        autonomy_breakdown,
     })
+}
+
+fn profile_autonomy_breakdown(
+    simulation: &mut Simulation,
+    world: &mut Grid,
+    ticks: u32,
+) -> AutonomyBreakdown {
+    if ticks == 0 {
+        return AutonomyBreakdown::default();
+    }
+    let mut totals = AutonomyProfile::default();
+    for _ in 0..ticks {
+        let profile = simulation.profile_autonomy_step(world);
+        totals.work.accumulate(&profile.work);
+        totals.entity_perception_us += profile.entity_perception_us;
+        totals.visible_scan_us += profile.visible_scan_us;
+        totals.memory_reconciliation_us += profile.memory_reconciliation_us;
+        totals.plan_validation_us += profile.plan_validation_us;
+        totals.planning_us += profile.planning_us;
+        totals.action_us += profile.action_us;
+        totals.social_us += profile.social_us;
+        totals.sampled_entities += profile.sampled_entities;
+    }
+
+    let tick_count = f64::from(ticks);
+    let entities_per_tick = totals.work.entities_processed as f64 / tick_count;
+    let sampled_entities_per_tick = f64::from(totals.sampled_entities) / tick_count;
+    let sampled_fraction = if entities_per_tick > 0.0 {
+        sampled_entities_per_tick / entities_per_tick
+    } else {
+        0.0
+    };
+    let mean = |micros: u64| micros as f64 / tick_count;
+    let sampled_subphases_us = mean(totals.entity_perception_us)
+        + mean(totals.visible_scan_us)
+        + mean(totals.memory_reconciliation_us)
+        + mean(totals.plan_validation_us)
+        + mean(totals.planning_us)
+        + mean(totals.action_us);
+    AutonomyBreakdown {
+        profiled_ticks: ticks,
+        entities_per_tick,
+        sampled_entities_per_tick,
+        sampled_fraction,
+        social_pass_us: mean(totals.social_us),
+        entity_perception_us: mean(totals.entity_perception_us),
+        visible_scan_us: mean(totals.visible_scan_us),
+        memory_reconciliation_us: mean(totals.memory_reconciliation_us),
+        plan_validation_us: mean(totals.plan_validation_us),
+        planning_us: mean(totals.planning_us),
+        action_us: mean(totals.action_us),
+        sampled_subphases_us,
+        sampled_subphases_extrapolated_us: if sampled_fraction > 0.0 {
+            sampled_subphases_us / sampled_fraction
+        } else {
+            0.0
+        },
+    }
 }
 
 fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, String> {
