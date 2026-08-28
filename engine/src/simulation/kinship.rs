@@ -45,12 +45,7 @@ pub(crate) struct FamilyTree {
 }
 
 pub(crate) fn children_of(genealogy: &Genealogy, parent_id: u32) -> Vec<u32> {
-    genealogy
-        .records()
-        .iter()
-        .filter(|record| record.mother_id == Some(parent_id) || record.father_id == Some(parent_id))
-        .map(|record| record.entity_id)
-        .collect()
+    genealogy.children_of(parent_id).to_vec()
 }
 
 pub(crate) fn siblings_of(genealogy: &Genealogy, entity_id: u32) -> Vec<u32> {
