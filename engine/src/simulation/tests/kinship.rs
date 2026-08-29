@@ -37,6 +37,32 @@ fn multiple_children_are_returned_in_entity_id_order() {
     assert_eq!(children_of(&genealogy(vec![later, earlier]), 1), vec![4, 9]);
 }
 
+/// #202: `children_of` must hand back the index's own storage, not a copy.
+///
+/// At 10k the copy was ~70% of the call. A unit test cannot time that — the
+/// criterion bench in `benches/kinship.rs` is where the cost is measured, and it
+/// does not gate. What a test *can* pin is the aliasing that makes the copy
+/// unnecessary: reintroducing a `.to_vec()` moves the pointer and fails here.
+#[test]
+fn children_of_borrows_the_index_rather_than_copying_it() {
+    let mother = entity(1, 0, 0, 0.0);
+    let mut first_child = entity(3, 0, 0, 0.0);
+    first_child.mother_id = Some(1);
+    let mut second_child = entity(4, 0, 0, 0.0);
+    second_child.mother_id = Some(1);
+    let genealogy = genealogy(vec![mother, first_child, second_child]);
+
+    let borrowed = children_of(&genealogy, 1);
+    let direct = genealogy.children_of(1);
+
+    assert!(
+        !direct.is_empty(),
+        "the fixture must give parent 1 children"
+    );
+    assert_eq!(borrowed, direct);
+    assert_eq!(borrowed.as_ptr(), direct.as_ptr());
+}
+
 #[test]
 fn caregiver_is_not_derived_as_a_biological_parent() {
     let caregiver = entity(8, 0, 0, 0.0);

@@ -130,7 +130,10 @@ pub(crate) fn entity_kinship_json(simulation: &Simulation, entity_id: u32) -> St
                 to_json(&EntityKinshipDto {
                     mother_id: entity.mother_id,
                     father_id: entity.father_id,
-                    children_ids: simulation::children_of(simulation.genealogy(), entity_id),
+                    // The only caller that needs ownership: this is a UI
+                    // snapshot, taken once per request. The hot path borrows.
+                    children_ids: simulation::children_of(simulation.genealogy(), entity_id)
+                        .to_vec(),
                     sibling_ids: simulation::siblings_of(simulation.genealogy(), entity_id),
                     ancestors: simulation::ancestors_of(simulation.genealogy(), entity_id)
                         .into_iter()

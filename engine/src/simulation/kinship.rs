@@ -44,8 +44,16 @@ pub(crate) struct FamilyTree {
     pub edges: Vec<FamilyTreeEdge>,
 }
 
-pub(crate) fn children_of(genealogy: &Genealogy, parent_id: u32) -> Vec<u32> {
-    genealogy.children_of(parent_id).to_vec()
+/// Children of `parent_id`, borrowed from the genealogy index.
+///
+/// Returns a slice rather than a `Vec` because the dominant caller
+/// ([`descendants_of`]) only iterates, and at 10k entities the copy was ~70% of
+/// the call — measured, not inferred: see the `children_index` against
+/// `children_index_no_copy` pair in `benches/kinship.rs`, which now agree.
+/// Callers that need ownership — the bridge DTO, which builds a serializable
+/// snapshot — pay for one `.to_vec()` at the point of use.
+pub(crate) fn children_of(genealogy: &Genealogy, parent_id: u32) -> &[u32] {
+    genealogy.children_of(parent_id)
 }
 
 pub(crate) fn siblings_of(genealogy: &Genealogy, entity_id: u32) -> Vec<u32> {
@@ -97,7 +105,7 @@ pub(crate) fn descendants_of(genealogy: &Genealogy, entity_id: u32) -> Vec<Kinsh
     let mut descendants = Vec::new();
 
     while let Some((current_id, generation)) = queue.pop_front() {
-        for child_id in children_of(genealogy, current_id) {
+        for &child_id in children_of(genealogy, current_id) {
             if visited.insert(child_id) {
                 let generation = generation.saturating_add(1);
                 descendants.push(KinshipGeneration {
