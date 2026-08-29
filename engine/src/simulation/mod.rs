@@ -20,7 +20,9 @@ mod time;
 
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
-pub(crate) use self::autonomy::{Action, AutonomyProfile, Goal, PostPassProfile};
+pub(crate) use self::autonomy::{
+    Action, AutonomyProfile, EntityPassBreakdown, Goal, PostPassProfile,
+};
 pub(crate) use self::config::MAX_POPULATION;
 use self::config::{FOOD_SEARCH_THRESHOLD, MAX_HEALTH};
 pub use self::entity::{Entity, EntityActivity, LifeStage, Personality, Sex};
@@ -840,6 +842,10 @@ impl Simulation {
         let mut household_conflict_attempts = Vec::new();
 
         let entity_pass_start = profile.as_ref().map(|_| Instant::now());
+        // Owned here rather than borrowed from `profile`: the loop needs a
+        // `&mut` to it for every entity, and `profile` is already borrowed for
+        // the sampled timings. Drained back into the profile after the loop.
+        let mut pass_breakdown = profile.as_ref().map(|_| EntityPassBreakdown::default());
         for (index, entity) in self
             .entities
             .iter_mut()
@@ -880,6 +886,7 @@ impl Simulation {
                     profile: profile
                         .as_deref_mut()
                         .filter(|_| autonomy::should_profile_entity(index)),
+                    entity_pass: pass_breakdown.as_mut(),
                 },
             );
             discoveries.extend(entity_discoveries);
@@ -908,6 +915,9 @@ impl Simulation {
                 .expect("profile timer must exist")
                 .elapsed()
                 .as_micros() as u64;
+            profile
+                .entity_pass
+                .accumulate(&pass_breakdown.take().unwrap_or_default());
         }
 
         let social_start = profile.as_ref().map(|_| Instant::now());

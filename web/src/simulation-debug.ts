@@ -72,6 +72,22 @@ interface SimulationPostPassProfile {
   total_us: number;
 }
 
+/**
+ * The per-entity loop, decomposed. Full population (#207).
+ *
+ * `attributed_us` is the sum of the four blocks; `residual_us` is what is left
+ * of `entity_pass_us` after subtracting them. Both come from the engine rather
+ * than being recomputed here, so there is one definition of the residual.
+ */
+interface SimulationEntityPassBreakdown {
+  perceive_entities_us: number;
+  plan_validation_us: number;
+  planning_us: number;
+  resource_memory_us: number;
+  attributed_us: number;
+  residual_us: number;
+}
+
 interface SimulationPhaseProfile
   extends SimulationStateGauges,
     SimulationWorkCounters {
@@ -105,6 +121,8 @@ interface SimulationAutonomyProfile
   social_us: number;
   /** Full population: one timer around the per-entity loop. */
   entity_pass_us: number;
+  /** The same loop, decomposed. Full population. Denominator is `entity_pass_us`. */
+  entity_pass: SimulationEntityPassBreakdown;
   /** `social_us + entity_pass_us`. The only total that mixes no sampled value. */
   attributed_passes_us: number;
   /** Wall clock of the profiled step, the denominator for the fields above. */
@@ -285,6 +303,9 @@ export function installPerformanceDebug(): void {
       profile.sampled_visible_scan_us;
     const sampledSafe = Math.max(sampledUs, 1);
     const stepSafe = Math.max(profile.step_total_us, 1);
+    // A third denominator: the four blocks below decompose entity_pass_us, so
+    // that is what they are percentages of. Not step_total, not the sampled sum.
+    const entityPassSafe = Math.max(profile.entity_pass_us, 1);
 
     const rows = [
       {
@@ -306,6 +327,45 @@ export function installPerformanceDebug(): void {
         phase: "attributed (social + entity_pass)",
         ms: (profile.attributed_passes_us / 1000).toFixed(3),
         percent: `${((profile.attributed_passes_us / stepSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "--- entity_pass decomposed, all entities ---",
+        ms: "---",
+        percent: "---",
+      },
+      {
+        phase: "perceive_entities",
+        ms: (profile.entity_pass.perceive_entities_us / 1000).toFixed(3),
+        percent: `${(
+          (profile.entity_pass.perceive_entities_us / entityPassSafe) *
+          100
+        ).toFixed(1)}%`,
+      },
+      {
+        phase: "plan_validation",
+        ms: (profile.entity_pass.plan_validation_us / 1000).toFixed(3),
+        percent: `${(
+          (profile.entity_pass.plan_validation_us / entityPassSafe) *
+          100
+        ).toFixed(1)}%`,
+      },
+      {
+        phase: "planning",
+        ms: (profile.entity_pass.planning_us / 1000).toFixed(3),
+        percent: `${((profile.entity_pass.planning_us / entityPassSafe) * 100).toFixed(1)}%`,
+      },
+      {
+        phase: "resource_memory",
+        ms: (profile.entity_pass.resource_memory_us / 1000).toFixed(3),
+        percent: `${(
+          (profile.entity_pass.resource_memory_us / entityPassSafe) *
+          100
+        ).toFixed(1)}%`,
+      },
+      {
+        phase: "residual (untimed blocks + timers)",
+        ms: (profile.entity_pass.residual_us / 1000).toFixed(3),
+        percent: `${((profile.entity_pass.residual_us / entityPassSafe) * 100).toFixed(1)}%`,
       },
       {
         phase: "--- sampled, 1-in-N entities ---",

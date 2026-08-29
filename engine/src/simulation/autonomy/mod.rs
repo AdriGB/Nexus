@@ -47,7 +47,7 @@ pub(crate) use self::mind::GATHER_DURATION_TICKS;
 pub(super) use self::mind::URGENT_HUNGER_THRESHOLD;
 pub(in crate::simulation) use self::mind::{GRIEF_MAX_DURATION_TICKS, GRIEF_MIN_DURATION_TICKS};
 pub(super) use self::profiling::should_profile_entity;
-pub(crate) use self::profiling::{AutonomyProfile, PostPassProfile};
+pub(crate) use self::profiling::{AutonomyProfile, EntityPassBreakdown, PostPassProfile};
 pub(in crate::simulation) use self::relationships::{
     close_relationship_role_between, CloseRelationshipRole, RelationshipIdentity,
 };
@@ -75,6 +75,11 @@ pub(super) struct EntityUpdateContext<'a> {
     pub household: Option<HouseholdAutonomyContext>,
     pub profile: Option<&'a mut AutonomyProfile>,
     pub work: Option<&'a mut crate::simulation::WorkCounters>,
+    /// Full-population accumulator for the per-entity pass. Unlike `profile`,
+    /// this one is **not** filtered by `should_profile_entity`: every entity
+    /// contributes, which is the whole point. `None` in a non-profiled tick, so
+    /// the timers cost nothing on the normal path.
+    pub entity_pass: Option<&'a mut EntityPassBreakdown>,
 }
 
 pub(super) fn process_social_interactions(
@@ -112,6 +117,7 @@ pub(super) fn update_entity(
         household: household_context,
         mut profile,
         mut work,
+        mut entity_pass,
     } = context;
     if let Some(work) = work.as_deref_mut() {
         work.entities_perceived += 1;
@@ -119,6 +125,7 @@ pub(super) fn update_entity(
     entity.mind.prune_expired_grief(tick);
     let position = (entity.x, entity.y);
 
+    let pass_start = entity_pass.as_ref().map(|_| Instant::now());
     let start = profile.as_ref().map(|_| Instant::now());
     perception::reconcile_resource_memory(&mut entity.mind, world, position, tick);
     if let Some(profile) = profile.as_deref_mut() {
@@ -145,7 +152,14 @@ pub(super) fn update_entity(
             .memory_reconciliation_us
             .saturating_add(profile.visible_scan_us);
     }
+    if let Some(breakdown) = entity_pass.as_mut() {
+        breakdown.resource_memory_ns += pass_start
+            .expect("entity pass timer must exist")
+            .elapsed()
+            .as_nanos() as u64;
+    }
 
+    let pass_start = entity_pass.as_ref().map(|_| Instant::now());
     let start = profile.as_ref().map(|_| Instant::now());
     let encounters = perception::perceive_entities(
         &mut entity.mind,
@@ -161,7 +175,14 @@ pub(super) fn update_entity(
             .elapsed()
             .as_micros() as u64;
     }
+    if let Some(breakdown) = entity_pass.as_mut() {
+        breakdown.perceive_entities_ns += pass_start
+            .expect("entity pass timer must exist")
+            .elapsed()
+            .as_nanos() as u64;
+    }
 
+    let pass_start = entity_pass.as_ref().map(|_| Instant::now());
     let start = profile.as_ref().map(|_| Instant::now());
     decision::invalidate_obsolete_food_plan(entity);
     if entity.mind.invalidate_known_dead_target_plan() {
@@ -246,7 +267,14 @@ pub(super) fn update_entity(
             .elapsed()
             .as_micros() as u64;
     }
+    if let Some(breakdown) = entity_pass.as_mut() {
+        breakdown.plan_validation_ns += pass_start
+            .expect("entity pass timer must exist")
+            .elapsed()
+            .as_nanos() as u64;
+    }
 
+    let pass_start = entity_pass.as_ref().map(|_| Instant::now());
     if entity.mind.current_action().is_none() {
         if let Some(work) = work.as_deref_mut() {
             work.goal_evaluations += 1;
@@ -312,6 +340,12 @@ pub(super) fn update_entity(
                 .elapsed()
                 .as_micros() as u64;
         }
+    }
+    if let Some(breakdown) = entity_pass.as_mut() {
+        breakdown.planning_ns += pass_start
+            .expect("entity pass timer must exist")
+            .elapsed()
+            .as_nanos() as u64;
     }
 
     let start = profile.as_ref().map(|_| Instant::now());
