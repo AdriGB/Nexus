@@ -20,8 +20,8 @@ pub(crate) use world::{region_stats_json, tile_info_json};
 
 #[cfg(test)]
 use crate::simulation::{
-    AutonomyProfile, EventId, PerformanceRun, PhaseProfile, SimulationEvent, SimulationEventCause,
-    SimulationEventDetails, SimulationEventKind,
+    AutonomyProfile, EntityPassBreakdown, EventId, PerformanceRun, PhaseProfile, SimulationEvent,
+    SimulationEventCause, SimulationEventDetails, SimulationEventKind,
 };
 #[cfg(test)]
 use crate::world::{Grid, RegionKind};
@@ -580,6 +580,14 @@ mod tests {
             entity_pass_us: 1750,
             step_total_us: 2100,
             post_pass: Default::default(),
+            entity_pass: EntityPassBreakdown {
+                // 1.75 ms of loop, 1.5 ms of it attributed: the residual is
+                // the 250 µs of untimed blocks plus timer overhead.
+                perceive_entities_ns: 600_000,
+                plan_validation_ns: 400_000,
+                planning_ns: 300_000,
+                resource_memory_ns: 200_000,
+            },
         };
 
         let payload = autonomy_profile_json(&profile);
@@ -591,6 +599,12 @@ mod tests {
         assert_eq!(json["known_resources_max_per_entity"], 0);
         assert_eq!(json["social_us"], 250);
         assert_eq!(json["entity_pass_us"], 1750);
+        assert_eq!(json["entity_pass"]["perceive_entities_us"], 600);
+        assert_eq!(json["entity_pass"]["plan_validation_us"], 400);
+        assert_eq!(json["entity_pass"]["planning_us"], 300);
+        assert_eq!(json["entity_pass"]["resource_memory_us"], 200);
+        assert_eq!(json["entity_pass"]["attributed_us"], 1500);
+        assert_eq!(json["entity_pass"]["residual_us"], 250);
         assert_eq!(json["step_total_us"], 2100);
         assert_eq!(json["post_pass"]["total_us"], 0);
         assert_eq!(json["spatial_queries"], 0);

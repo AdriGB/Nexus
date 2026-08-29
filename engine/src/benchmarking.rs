@@ -9,8 +9,8 @@ use crate::pathfinding::{find_path_with_workspace, PathfindingWorkspace};
 use crate::regions::detect_regions;
 use crate::resources::generate_resources;
 use crate::simulation::{
-    children_of, descendants_of, relationship_between, AutonomyProfile, Genealogy, KinshipRelation,
-    PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION,
+    children_of, descendants_of, relationship_between, AutonomyProfile, EntityPassBreakdown,
+    Genealogy, KinshipRelation, PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION,
 };
 use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 use serde::Serialize;
@@ -225,6 +225,43 @@ struct PostPassBreakdown {
 /// `resource_perception_us` is intentionally absent from this struct: the
 /// engine defines it as `memory_reconciliation_us + visible_scan_us`, so
 /// reporting it alongside its own components double counts.
+/// Per-entity pass, decomposed. Full population, microseconds per tick (#207).
+///
+/// `attributed_us` is the sum of the four blocks. `residual_us` is what is left
+/// of `entity_pass_us`: the two blocks deliberately left untimed
+/// (`execute_current_action` and `prune_expired_grief`, both under 1% at 10k)
+/// plus the cost of the timers themselves. Measured under 3% at 1k and 10k
+/// entities — if it grows, the four blocks have stopped being the story.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+struct EntityPassBreakdownDto {
+    perceive_entities_us: f64,
+    plan_validation_us: f64,
+    planning_us: f64,
+    resource_memory_us: f64,
+    attributed_us: f64,
+    residual_us: f64,
+}
+
+impl EntityPassBreakdownDto {
+    fn from_totals(totals: &EntityPassBreakdown, ticks: f64, entity_pass_us: f64) -> Self {
+        let us = |nanos: u64| nanos as f64 / 1_000.0 / ticks;
+        let perceive_entities_us = us(totals.perceive_entities_ns);
+        let plan_validation_us = us(totals.plan_validation_ns);
+        let planning_us = us(totals.planning_ns);
+        let resource_memory_us = us(totals.resource_memory_ns);
+        let attributed_us =
+            perceive_entities_us + plan_validation_us + planning_us + resource_memory_us;
+        Self {
+            perceive_entities_us,
+            plan_validation_us,
+            planning_us,
+            resource_memory_us,
+            attributed_us,
+            residual_us: (entity_pass_us - attributed_us).max(0.0),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 struct AutonomyBreakdown {
     profiled_ticks: u32,
@@ -252,6 +289,10 @@ struct AutonomyBreakdown {
     action_us: f64,
     sampled_subphases_us: f64,
     sampled_subphases_extrapolated_us: f64,
+    /// Descomposición del bucle por-entidad, población completa (#207).
+    entity_pass: EntityPassBreakdownDto,
+    /// `entity_pass.total_us`, como fracción de `entity_pass_us`.
+    entity_pass_attributed_fraction: f64,
     /// Funnel del social pass por tick (#192). Cada etapa es subconjunto de la
     /// anterior; el descenso entre ellas dice si el coste viene de generar
     /// demasiados pares o del trabajo hecho por cada par.
@@ -382,6 +423,7 @@ fn profile_autonomy_breakdown(
         totals.action_us += profile.action_us;
         totals.social_us += profile.social_us;
         totals.entity_pass_us += profile.entity_pass_us;
+        totals.entity_pass.accumulate(&profile.entity_pass);
         totals.sampled_entities += profile.sampled_entities;
     }
 
@@ -394,6 +436,9 @@ fn profile_autonomy_breakdown(
         0.0
     };
     let mean = |micros: u64| micros as f64 / tick_count;
+    let entity_pass_us = mean(totals.entity_pass_us);
+    let entity_pass =
+        EntityPassBreakdownDto::from_totals(&totals.entity_pass, tick_count, entity_pass_us);
     let sampled_subphases_us = mean(totals.entity_perception_us)
         + mean(totals.visible_scan_us)
         + mean(totals.memory_reconciliation_us)
@@ -406,8 +451,14 @@ fn profile_autonomy_breakdown(
         sampled_entities_per_tick,
         sampled_fraction,
         social_pass_us: mean(totals.social_us),
-        entity_pass_us: mean(totals.entity_pass_us),
-        attributed_passes_us: mean(totals.social_us) + mean(totals.entity_pass_us),
+        entity_pass_us,
+        entity_pass,
+        entity_pass_attributed_fraction: if entity_pass_us > 0.0 {
+            entity_pass.attributed_us / entity_pass_us
+        } else {
+            0.0
+        },
+        attributed_passes_us: mean(totals.social_us) + entity_pass_us,
         profiled_step_total_us: mean(totals.step_total_us),
         entity_perception_us: mean(totals.entity_perception_us),
         visible_scan_us: mean(totals.visible_scan_us),
@@ -1100,6 +1151,70 @@ mod tests {
             },
             workload,
         }
+    }
+
+    /// #207: the residual is a number that gets quoted, so its arithmetic is
+    /// pinned here. What is *not* pinned is how big it is — that is a ratio of
+    /// wall-clock timers and would flake (#204). What is pinned is that
+    /// `attributed_us` is exactly the sum of the four blocks and that the
+    /// residual is the difference against `entity_pass_us`, never negative.
+    /// Without this, adding a fifth block and forgetting `attributed_us` would
+    /// silently make the residual meaningless.
+    #[test]
+    fn entity_pass_residual_is_the_difference_against_the_whole_pass() {
+        let totals = EntityPassBreakdown {
+            perceive_entities_ns: 400_000,
+            plan_validation_ns: 300_000,
+            planning_ns: 200_000,
+            resource_memory_ns: 100_000,
+        };
+        let dto = EntityPassBreakdownDto::from_totals(&totals, 2.0, 500.0);
+
+        assert_eq!(dto.perceive_entities_us, 200.0);
+        assert_eq!(dto.plan_validation_us, 150.0);
+        assert_eq!(dto.planning_us, 100.0);
+        assert_eq!(dto.resource_memory_us, 50.0);
+        assert_eq!(dto.attributed_us, 500.0);
+        assert_eq!(dto.residual_us, 0.0);
+    }
+
+    /// The residual must stay non-negative even when the timers overshoot the
+    /// pass they are inside — they can, because `entity_pass_us` is taken in
+    /// microseconds and the four blocks in nanoseconds, over different spans.
+    #[test]
+    fn entity_pass_residual_clamps_at_zero() {
+        let totals = EntityPassBreakdown {
+            perceive_entities_ns: 900_000,
+            plan_validation_ns: 900_000,
+            planning_ns: 900_000,
+            resource_memory_ns: 900_000,
+        };
+        let dto = EntityPassBreakdownDto::from_totals(&totals, 1.0, 100.0);
+
+        assert_eq!(dto.attributed_us, 3_600.0);
+        assert_eq!(dto.residual_us, 0.0);
+    }
+
+    /// Every block that gets timed has to survive into the DTO, with its own
+    /// value. A distinct nanosecond figure per block is what makes this a
+    /// tripwire: with four equal values, dropping one or wiring two to the same
+    /// field would pass unnoticed.
+    #[test]
+    fn entity_pass_breakdown_emits_every_block_it_times() {
+        let totals = EntityPassBreakdown {
+            perceive_entities_ns: 1_000,
+            plan_validation_ns: 2_000,
+            planning_ns: 3_000,
+            resource_memory_ns: 4_000,
+        };
+        let dto = EntityPassBreakdownDto::from_totals(&totals, 1.0, 1_000.0);
+
+        assert_eq!(dto.perceive_entities_us, 1.0);
+        assert_eq!(dto.plan_validation_us, 2.0);
+        assert_eq!(dto.planning_us, 3.0);
+        assert_eq!(dto.resource_memory_us, 4.0);
+        assert_eq!(dto.attributed_us, 10.0);
+        assert_eq!(dto.residual_us, 990.0);
     }
 
     fn food_count(world: &Grid) -> usize {

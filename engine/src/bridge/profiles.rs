@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use super::to_json;
 use crate::simulation::{
-    AutonomyProfile, PerformanceSummary, PhaseProfile, PopulationStats, PostPassProfile,
-    StateGauges, WorkCounters,
+    AutonomyProfile, EntityPassBreakdown, PerformanceSummary, PhaseProfile, PopulationStats,
+    PostPassProfile, StateGauges, WorkCounters,
 };
 
 pub(crate) fn performance_summary_json(summary: &PerformanceSummary) -> String {
@@ -106,6 +106,46 @@ impl From<&WorkCounters> for WorkCountersDto {
     }
 }
 
+/// The per-entity pass, decomposed (#207). Full population, microseconds.
+///
+/// `attributed_us` is the sum of the four blocks; `residual_us` is what is left
+/// of `entity_pass_us` once they are subtracted. Both live here rather than
+/// being recomputed by the consumer so that there is one definition of the
+/// residual, and it is the one the engine uses.
+#[derive(Serialize)]
+struct EntityPassBreakdownDto {
+    perceive_entities_us: u64,
+    plan_validation_us: u64,
+    planning_us: u64,
+    resource_memory_us: u64,
+    attributed_us: u64,
+    residual_us: u64,
+}
+
+impl EntityPassBreakdownDto {
+    /// Not a `From`: the residual is measured against the wall clock of the
+    /// whole loop, which lives on `AutonomyProfile` and not on the breakdown.
+    /// Taking it as an argument keeps that dependency visible instead of
+    /// leaving a `residual_us` that is silently always zero.
+    fn new(breakdown: &EntityPassBreakdown, entity_pass_us: u64) -> Self {
+        let us = |nanos: u64| nanos / 1_000;
+        let perceive_entities_us = us(breakdown.perceive_entities_ns);
+        let plan_validation_us = us(breakdown.plan_validation_ns);
+        let planning_us = us(breakdown.planning_ns);
+        let resource_memory_us = us(breakdown.resource_memory_ns);
+        let attributed_us =
+            perceive_entities_us + plan_validation_us + planning_us + resource_memory_us;
+        Self {
+            perceive_entities_us,
+            plan_validation_us,
+            planning_us,
+            resource_memory_us,
+            attributed_us,
+            residual_us: entity_pass_us.saturating_sub(attributed_us),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct PhaseProfileDto {
     #[serde(flatten)]
@@ -168,6 +208,13 @@ struct AutonomyProfileDto {
     social_us: u64,
     /// Full population. One timer around the per-entity loop.
     entity_pass_us: u64,
+    /// The same loop, decomposed. Full population, microseconds.
+    ///
+    /// Nested rather than flattened: these four are one population and the
+    /// `sampled_*` fields below are another, and the point of #191 was that
+    /// mixing them silently produces nonsense. Keeping them in separate
+    /// namespaces makes the mistake hard to make by accident.
+    entity_pass: EntityPassBreakdownDto,
     /// `social_us + entity_pass_us`. The only total here that mixes no sampled
     /// value; compare it against `step_total_us`.
     attributed_passes_us: u64,
@@ -196,6 +243,7 @@ impl From<&AutonomyProfile> for AutonomyProfileDto {
             state: (&profile.state).into(),
             social_us: profile.social_us,
             entity_pass_us: profile.entity_pass_us,
+            entity_pass: EntityPassBreakdownDto::new(&profile.entity_pass, profile.entity_pass_us),
             attributed_passes_us: profile.social_us.saturating_add(profile.entity_pass_us),
             step_total_us: profile.step_total_us,
             sampled_entity_perception_us: profile.entity_perception_us,
@@ -445,5 +493,47 @@ mod tests {
         let dto = serde_json::to_value(AutonomyProfileDto::from(&profile))
             .expect("AutonomyProfileDto serializes");
         assert_eq!(dto["attributed_passes_us"], 1_000);
+    }
+
+    /// #207: the entity-pass breakdown is nested, so the tripwire above cannot
+    /// see it — it only walks top-level keys. This is the same check one level
+    /// down. Nothing inside `entity_pass` may be sampled, and every block that
+    /// gets timed has to be emitted, or the residual stops meaning what it
+    /// claims to mean.
+    #[test]
+    fn entity_pass_breakdown_is_full_population_and_complete() {
+        let json = super::autonomy_profile_json(&AutonomyProfile {
+            entity_pass_us: 1_000,
+            entity_pass: EntityPassBreakdown {
+                perceive_entities_ns: 400_000,
+                plan_validation_ns: 300_000,
+                planning_ns: 200_000,
+                resource_memory_ns: 100_000,
+            },
+            ..AutonomyProfile::default()
+        });
+        let payload: serde_json::Value = serde_json::from_str(&json).expect("payload is JSON");
+        let entity_pass = payload["entity_pass"]
+            .as_object()
+            .expect("entity_pass is a nested object");
+
+        for key in entity_pass.keys() {
+            assert!(
+                !key.starts_with("sampled_"),
+                "`{key}` sits inside the full-population breakdown but is named as sampled; \
+                 a consumer reading it against `entity_pass_us` would mix populations (#191)"
+            );
+        }
+        assert_eq!(entity_pass["perceive_entities_us"], 400);
+        assert_eq!(entity_pass["plan_validation_us"], 300);
+        assert_eq!(entity_pass["planning_us"], 200);
+        assert_eq!(entity_pass["resource_memory_us"], 100);
+        assert_eq!(entity_pass["attributed_us"], 1_000);
+        assert_eq!(entity_pass["residual_us"], 0);
+        assert_eq!(
+            entity_pass.len(),
+            6,
+            "a block is being timed but not emitted, or the reverse"
+        );
     }
 }

@@ -61,6 +61,48 @@ impl PostPassProfile {
     }
 }
 
+/// The per-entity pass, decomposed into the blocks that carry signal.
+///
+/// Full population, no sampling — the timers run for every entity, every tick.
+/// These four are the ones that exceed 5% of `entity_pass_us` in at least one of
+/// the eight scenarios (#207). `execute_current_action` and
+/// `prune_expired_grief` never do, so they are deliberately left outside and
+/// land in the residual, which is `entity_pass_us - total_ns()`.
+///
+/// Nanoseconds rather than the microseconds the rest of the profile uses. These
+/// timers fire once per entity, so a block costing 0.6 µs at 100 entities would
+/// truncate to zero on every single entity and the measurement would vanish.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct EntityPassBreakdown {
+    /// `perception::perceive_entities`: spatial lookup of nearby entities.
+    pub perceive_entities_ns: u64,
+    /// Plan invalidation: obsolete food plans, dependents, migration, interrupts.
+    pub plan_validation_ns: u64,
+    /// `decision::evaluate_goals` plus `decision::plan_goal`, including
+    /// pathfinding. Only runs for entities with no current action.
+    pub planning_ns: u64,
+    /// `reconcile_resource_memory` plus `scan_visible_resources`.
+    pub resource_memory_ns: u64,
+}
+
+impl EntityPassBreakdown {
+    /// Adds another tick's worth of per-entity timings. Used by
+    /// `run_autonomy`, which drains a per-tick accumulator into the profile, and
+    /// by `benchmarking`, which sums the profiles of the profiled ticks.
+    pub(crate) fn accumulate(&mut self, other: &Self) {
+        self.perceive_entities_ns = self
+            .perceive_entities_ns
+            .saturating_add(other.perceive_entities_ns);
+        self.plan_validation_ns = self
+            .plan_validation_ns
+            .saturating_add(other.plan_validation_ns);
+        self.planning_ns = self.planning_ns.saturating_add(other.planning_ns);
+        self.resource_memory_ns = self
+            .resource_memory_ns
+            .saturating_add(other.resource_memory_ns);
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct AutonomyProfile {
     pub work: crate::simulation::WorkCounters,
@@ -99,6 +141,14 @@ pub(crate) struct AutonomyProfile {
     /// `social_us + entity_pass_us` en una fracción: los tres se cronometran
     /// dentro de la misma pasada.
     pub step_total_us: u64,
+    /// Descomposición del bucle por-entidad, sobre **toda** la población.
+    ///
+    /// Es lo que `entity_pass_us` no daba: ese número decía cuánto costaba la
+    /// pasada, no de qué estaba hecha. El residuo sin atribuir es
+    /// `entity_pass_us * 1000 - entity_pass.total_ns()` y (#207) quedó por debajo
+    /// del 3% a 1.000 y 10.000 entidades; lo que quepa ahí son los dos bloques
+    /// excluidos a propósito más el coste de los propios cronómetros.
+    pub entity_pass: EntityPassBreakdown,
 }
 
 pub(in crate::simulation) fn should_profile_entity(index: usize) -> bool {
