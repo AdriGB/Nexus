@@ -926,6 +926,11 @@ impl BenchmarkKinshipFixture {
     }
 
     /// `children_of` through the `Genealogy` index added in #198.
+    ///
+    /// Until #202 this allocated and copied a `Vec` on every call, which at 10k
+    /// was ~65% of the cost. It now borrows the index, so this group and
+    /// [`Self::children_of_index_without_copy`] should agree: if they diverge,
+    /// somebody put an allocation back.
     pub fn children_of_index(&self) -> usize {
         self.parent_ids
             .iter()
@@ -941,10 +946,11 @@ impl BenchmarkKinshipFixture {
     /// The same lookups as [`Self::children_of_index`], reading the index
     /// directly instead of going through `kinship::children_of`.
     ///
-    /// The only difference is the `Vec` that `children_of` allocates and copies
-    /// on every call. #198 removed the scan but kept the `.to_vec()`, so
-    /// comparing these two separates what the index is worth from what the
-    /// copy costs. Returns the same number as `children_of_index`.
+    /// These two used to differ by exactly one `Vec` allocation, and comparing
+    /// them is how #198's index was priced against the copy it still paid for.
+    /// #202 removed the copy, so this is now the floor that
+    /// [`Self::children_of_index`] is expected to match rather than a cheaper
+    /// alternative to it. Returns the same number as `children_of_index`.
     pub fn children_of_index_without_copy(&self) -> usize {
         self.parent_ids
             .iter()
