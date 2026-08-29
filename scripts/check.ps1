@@ -33,7 +33,7 @@ function Test-Engine {
         Invoke-CheckStep "Rust clippy (native)" { cargo clippy -- -D warnings }
         Invoke-CheckStep "Rust tests" { cargo test }
         Invoke-CheckStep "Benchmark runner clippy" {
-            cargo clippy --features benchmarks --lib --bin nexus-bench --bench pathfinding --bench spatial --bench autonomy -- -D warnings
+            cargo clippy --features benchmarks --lib --bin nexus-bench --bench pathfinding --bench spatial --bench autonomy --bench kinship -- -D warnings
         }
         Invoke-CheckStep "Benchmark targets compile" {
             cargo check --benches --features benchmarks

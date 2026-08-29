@@ -32,6 +32,11 @@ name = "autonomy"
 harness = false
 required-features = ["benchmarks"]
 
+[[bench]]
+name = "kinship"
+harness = false
+required-features = ["benchmarks"]
+
 [dependencies]
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }

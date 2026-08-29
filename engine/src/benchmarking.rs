@@ -9,7 +9,8 @@ use crate::pathfinding::{find_path_with_workspace, PathfindingWorkspace};
 use crate::regions::detect_regions;
 use crate::resources::generate_resources;
 use crate::simulation::{
-    AutonomyProfile, PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION,
+    children_of, descendants_of, relationship_between, AutonomyProfile, Genealogy, KinshipRelation,
+    PerformanceRun, PerformanceSummary, Simulation, MAX_POPULATION,
 };
 use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 use serde::Serialize;
@@ -798,6 +799,223 @@ impl BenchmarkSpatialFixture {
     }
 }
 
+/// Synthetic multi-generation lineage, for measuring kinship queries that
+/// actually return children.
+///
+/// No scenario can do this. The short ones report `genealogy_links = 0`
+/// (`GESTATION_TICKS` is 6,720 against 124 ticks), and `long-run-1000` produces
+/// only a single generation, and only after its social graph has decayed tenfold
+/// — see #199. This fixture builds the tree directly and sidesteps
+/// `GESTATION_TICKS` and `POSTPARTUM_TICKS` entirely.
+///
+/// Shape: `KINSHIP_FIXTURE_GENERATIONS` generations of equal size, entity ids
+/// running `1..=population` in generation order. Generation 0 is founders with
+/// no parents; every other entity has two **distinct** parents drawn from the
+/// previous generation by [`fixture_hash`], so parents average two children but
+/// are not uniform — some have none, some have five, as in a real population.
+///
+/// Mating must be pseudo-random rather than regular. An earlier revision paired
+/// child `i` with mother `i` and father `(i + n/2) % n`, which is an involution:
+/// ancestor sets collapsed to `{i, i + n/2}` at every depth, producing `n/2`
+/// parallel lineages that never intermarried. Descendant counts stayed at two
+/// per generation and no two entities were ever cousins, so the fixture
+/// measured nothing. The current rule has no such fixed points.
+pub struct BenchmarkKinshipFixture {
+    genealogy: Genealogy,
+    parent_ids: Vec<u32>,
+    focal_ids: Vec<u32>,
+    pair_ids: Vec<(u32, u32)>,
+}
+
+const KINSHIP_FIXTURE_GENERATIONS: u32 = 10;
+const KINSHIP_FIXTURE_PARENT_SAMPLES: usize = 64;
+const KINSHIP_FIXTURE_FOCAL_SAMPLES: usize = 16;
+const KINSHIP_FIXTURE_PAIR_SAMPLES: usize = 16;
+
+impl BenchmarkKinshipFixture {
+    pub fn new(population: u32) -> Result<Self, String> {
+        if population == 0 || !population.is_multiple_of(KINSHIP_FIXTURE_GENERATIONS) {
+            return Err(format!(
+                "kinship population {population} must be a nonzero multiple of {KINSHIP_FIXTURE_GENERATIONS}"
+            ));
+        }
+        let generation_size = population / KINSHIP_FIXTURE_GENERATIONS;
+        let mut genealogy = Genealogy::default();
+        let mut next_id = 1u32;
+        for generation in 0..KINSHIP_FIXTURE_GENERATIONS {
+            let previous_start = next_id.saturating_sub(generation_size);
+            for index in 0..generation_size {
+                let (mother_id, father_id) = if generation == 0 {
+                    (None, None)
+                } else {
+                    let mother =
+                        previous_start + fixture_hash(index ^ generation) % generation_size;
+                    // Nudged once when the draw collides, so a child always has
+                    // two distinct parents and the link count is exact. With
+                    // `generation_size == 1` there is no other parent to pick,
+                    // and `register` collapses the pair to one link.
+                    let mut father_offset =
+                        fixture_hash(index ^ generation ^ 0x8000_0000) % generation_size;
+                    if previous_start + father_offset == mother && generation_size > 1 {
+                        father_offset = (father_offset + 1) % generation_size;
+                    }
+                    let father = previous_start + father_offset;
+                    (Some(mother), Some(father))
+                };
+                genealogy.register(next_id, mother_id, father_id);
+                next_id += 1;
+            }
+        }
+
+        // Sampled from parents that are known to have children. Sampling raw ids
+        // would include the childless, and every empty lookup is work the
+        // benchmark is not trying to measure.
+        let mut parents_with_children: Vec<u32> = genealogy
+            .records()
+            .iter()
+            .flat_map(|record| [record.mother_id, record.father_id])
+            .flatten()
+            .collect();
+        parents_with_children.sort_unstable();
+        parents_with_children.dedup();
+        let parent_ids = spread_sample(
+            0,
+            parents_with_children.len() as u32,
+            KINSHIP_FIXTURE_PARENT_SAMPLES,
+        )
+        .into_iter()
+        .map(|index| parents_with_children[index as usize])
+        .collect();
+
+        // Founders: with random mating their descendant sets grow geometrically
+        // until they saturate the generation, so this walks most of the tree.
+        let focal_ids = spread_sample(1, 1 + generation_size, KINSHIP_FIXTURE_FOCAL_SAMPLES);
+
+        // Pairs are taken *within* the last generation, on purpose.
+        //
+        // `relationship_between` tests descendants first and ancestors second,
+        // so any cross-generation pair short-circuits into the ancestor fast
+        // path and never reaches the `AuntUncle` / `NieceNephew` / `Cousin`
+        // branches — which are the only ones that walk ancestors on both sides,
+        // and the only ones with a nested `ancestors x ancestors` scan.
+        // Same-generation pairs cannot be ancestor/descendant of each other, and
+        // the last generation has the deepest ancestor chains. Two consecutive
+        // ids are full siblings only if both draws collide, which is negligible.
+        let last_generation_start = 1 + (KINSHIP_FIXTURE_GENERATIONS - 1) * generation_size;
+        let pair_ids = spread_sample(
+            last_generation_start,
+            population,
+            KINSHIP_FIXTURE_PAIR_SAMPLES,
+        )
+        .into_iter()
+        .map(|first_id| (first_id, first_id + 1))
+        .collect();
+
+        Ok(Self {
+            genealogy,
+            parent_ids,
+            focal_ids,
+            pair_ids,
+        })
+    }
+
+    /// `children_of` through the `Genealogy` index added in #198.
+    pub fn children_of_index(&self) -> usize {
+        self.parent_ids
+            .iter()
+            .map(|&parent_id| {
+                children_of(&self.genealogy, parent_id)
+                    .iter()
+                    .map(|&child_id| child_id as usize)
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// The same lookups as [`Self::children_of_index`], reading the index
+    /// directly instead of going through `kinship::children_of`.
+    ///
+    /// The only difference is the `Vec` that `children_of` allocates and copies
+    /// on every call. #198 removed the scan but kept the `.to_vec()`, so
+    /// comparing these two separates what the index is worth from what the
+    /// copy costs. Returns the same number as `children_of_index`.
+    pub fn children_of_index_without_copy(&self) -> usize {
+        self.parent_ids
+            .iter()
+            .map(|&parent_id| {
+                self.genealogy
+                    .children_of(parent_id)
+                    .iter()
+                    .map(|&child_id| child_id as usize)
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// The same query through the linear filter that #198 replaced. Kept only
+    /// to quantify what the index is worth with real children; the short
+    /// scenarios cannot, because they have no children at all. Nothing outside
+    /// benchmarks calls this.
+    pub fn children_of_scan(&self) -> usize {
+        self.parent_ids
+            .iter()
+            .map(|&parent_id| {
+                self.genealogy
+                    .records()
+                    .iter()
+                    .filter(|record| {
+                        record.mother_id == Some(parent_id) || record.father_id == Some(parent_id)
+                    })
+                    .map(|record| record.entity_id as usize)
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// Breadth-first descent from founders, which is the deep traversal the
+    /// short scenarios never get to run.
+    pub fn descendants(&self) -> usize {
+        self.focal_ids
+            .iter()
+            .map(|&focal_id| descendants_of(&self.genealogy, focal_id).len())
+            .sum()
+    }
+
+    /// Classification for same-generation pairs, which is the only shape that
+    /// reaches the `AuntUncle` / `NieceNephew` / `Cousin` branches that every
+    /// scenario leaves dead.
+    pub fn relationships(&self) -> usize {
+        self.pair_ids
+            .iter()
+            .filter(|&&(first_id, second_id)| {
+                relationship_between(&self.genealogy, first_id, second_id)
+                    != KinshipRelation::Unrelated
+            })
+            .count()
+    }
+}
+
+/// Deterministic pseudo-random draw for fixture construction: a splitmix32
+/// finalizer. Chosen over a `rand` call because fixtures must build the exact
+/// same genealogy on every machine and every run, forever — a benchmark whose
+/// input moves between runs cannot detect a regression.
+fn fixture_hash(value: u32) -> u32 {
+    let mut state = value.wrapping_add(0x9E37_79B9);
+    state = (state ^ (state >> 16)).wrapping_mul(0x7FEB_352D);
+    state = (state ^ (state >> 15)).wrapping_mul(0x846C_A68B);
+    state ^ (state >> 16)
+}
+
+fn spread_sample(start: u32, end_exclusive: u32, count: usize) -> Vec<u32> {
+    let span = usize::try_from(end_exclusive.saturating_sub(start))
+        .unwrap_or(0)
+        .max(1);
+    let take = count.min(span).max(1);
+    (0..take)
+        .map(|index| start + u32::try_from(index * span / take).unwrap_or(0))
+        .collect()
+}
+
 /// Cloneable deterministic base state for canonical autonomy measurements.
 pub struct BenchmarkAutonomyFixture {
     world: Grid,
@@ -1145,5 +1363,142 @@ mod tests {
 
         let autonomy = BenchmarkAutonomyFixture::new(100).unwrap();
         assert_eq!(autonomy.prepare().run_once(), autonomy.prepare().run_once());
+    }
+
+    #[test]
+    fn kinship_fixture_rejects_populations_that_cannot_fill_ten_generations() {
+        assert!(BenchmarkKinshipFixture::new(0).is_err());
+        // 95 does not divide into ten equal generations.
+        assert!(BenchmarkKinshipFixture::new(95).is_err());
+        assert!(BenchmarkKinshipFixture::new(10).is_ok());
+        assert!(BenchmarkKinshipFixture::new(1_000).is_ok());
+    }
+
+    /// The invariant that makes the fixture usable at all, and the one no
+    /// scenario satisfies: unlike every scenario, parents here have children.
+    #[test]
+    fn kinship_fixture_links_every_non_founder_to_two_distinct_parents() {
+        let population = 1_000u32;
+        let generation_size = population / KINSHIP_FIXTURE_GENERATIONS;
+        let fixture = BenchmarkKinshipFixture::new(population).unwrap();
+        let records = fixture.genealogy.records();
+
+        assert_eq!(records.len(), population as usize);
+
+        let mut link_count = 0usize;
+        for (position, record) in records.iter().enumerate() {
+            let generation = position as u32 / generation_size;
+            if generation == 0 {
+                assert_eq!(
+                    (record.mother_id, record.father_id),
+                    (None, None),
+                    "founder {} must have no parents",
+                    record.entity_id
+                );
+                continue;
+            }
+            let (Some(mother_id), Some(father_id)) = (record.mother_id, record.father_id) else {
+                panic!("entity {} must have two parents", record.entity_id);
+            };
+            // Two *distinct* parents, so the link count is exact and `register`
+            // never has to collapse a pair.
+            assert_ne!(
+                mother_id, father_id,
+                "entity {} has the same parent twice",
+                record.entity_id
+            );
+            let previous_start = 1 + (generation - 1) * generation_size;
+            let previous_end = previous_start + generation_size;
+            assert!(
+                (previous_start..previous_end).contains(&mother_id)
+                    && (previous_start..previous_end).contains(&father_id),
+                "entity {} has parents outside the previous generation",
+                record.entity_id
+            );
+            link_count += 2;
+        }
+
+        assert_eq!(
+            link_count,
+            2 * (population - generation_size) as usize,
+            "every non-founder contributes exactly two links"
+        );
+        // The last generation cannot be anyone's parent.
+        for leaf_id in (1 + (KINSHIP_FIXTURE_GENERATIONS - 1) * generation_size)..=population {
+            assert!(fixture.genealogy.children_of(leaf_id).is_empty());
+        }
+    }
+
+    /// Guards against the collapse that made an earlier revision useless: if
+    /// ancestry stops mixing, descendant counts stay tiny and no two entities
+    /// are ever cousins, and the benchmark quietly measures nothing.
+    #[test]
+    fn kinship_fixture_lineages_actually_intermarry() {
+        let population = 10_000u32;
+        let generation_size = population / KINSHIP_FIXTURE_GENERATIONS;
+        let fixture = BenchmarkKinshipFixture::new(population).unwrap();
+
+        // A founder's descendants must grow geometrically, not stay flat at two
+        // per generation the way the involutive parent rule did.
+        let deepest = descendants_of(&fixture.genealogy, 1).len();
+        assert!(
+            deepest > 2 * KINSHIP_FIXTURE_GENERATIONS as usize,
+            "founder 1 has only {deepest} descendants; lineages are not mixing"
+        );
+
+        // Most of the last generation must descend from *some* founder in a
+        // shared pool, i.e. ancestry converges rather than staying in `n/2`
+        // disjoint clans.
+        let founders_with_lineage = (1..=generation_size)
+            .filter(|&founder_id| descendants_of(&fixture.genealogy, founder_id).len() > 2)
+            .count();
+        assert!(
+            founders_with_lineage > generation_size as usize / 2,
+            "only {founders_with_lineage} of {generation_size} founders have grandchildren"
+        );
+    }
+
+    /// The oracle that #198 could only run against empty results. Here the scan
+    /// and the index both return real children, so a disagreement would be a
+    /// real bug rather than two ways of computing zero.
+    #[test]
+    fn kinship_fixture_index_matches_scan_with_real_children() {
+        let fixture = BenchmarkKinshipFixture::new(10_000).unwrap();
+        let indexed = fixture.children_of_index();
+        let scanned = fixture.children_of_scan();
+
+        assert!(indexed > 0, "the fixture must produce real children");
+        assert_eq!(
+            indexed, scanned,
+            "the #198 index disagrees with a record scan"
+        );
+        // The copy-free path exists only to price the `Vec` in `children_of`, so
+        // it has to return the same thing or the comparison is meaningless.
+        assert_eq!(indexed, fixture.children_of_index_without_copy());
+    }
+
+    /// `descendants` and `relationships` must do real work; if either returned
+    /// zero the bench would be measuring nothing, exactly like the short
+    /// scenarios do today.
+    #[test]
+    fn kinship_fixture_walks_real_descendants_and_relationships() {
+        let fixture = BenchmarkKinshipFixture::new(10_000).unwrap();
+
+        let descendants = fixture.descendants();
+        assert!(
+            descendants > 0,
+            "a founder must have descendants in a seeded lineage"
+        );
+
+        let relationships = fixture.relationships();
+        assert!(
+            relationships > 0,
+            "same-generation pairs must resolve to a real relation, not Unrelated"
+        );
+
+        let second = BenchmarkKinshipFixture::new(10_000).unwrap();
+        assert_eq!(fixture.descendants(), descendants);
+        assert_eq!(second.descendants(), descendants);
+        assert_eq!(second.relationships(), relationships);
     }
 }
