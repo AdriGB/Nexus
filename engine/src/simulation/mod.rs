@@ -31,7 +31,7 @@ pub use self::events::{
     SimulationEventKind,
 };
 use self::events::{PendingSimulationEvent, RecentEventHistory};
-use self::genealogy::Genealogy;
+pub(crate) use self::genealogy::Genealogy;
 pub(crate) use self::households::{members_of, Household};
 pub use self::inventory::{Inventory, ItemKind};
 pub(crate) use self::kinship::{
