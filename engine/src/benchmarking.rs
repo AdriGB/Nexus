@@ -169,6 +169,26 @@ const SCENARIOS: [BenchmarkScenario; 8] = [
 /// would perturb the very timings the regression gate compares.
 const AUTONOMY_PROFILE_TICKS: u32 = 32;
 
+/// Mean per-tick microseconds of the work `Simulation::execute_autonomy` runs
+/// after the per-entity loop and the social pass (#195).
+///
+/// These eight calls were the unattributed remainder. They are timed one by one
+/// because the volumes they receive differ wildly between them; the matching
+/// `*_recorded` / `*_attempts` counters in the breakdown say how much work each
+/// one was handed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+struct PostPassBreakdown {
+    resource_discoveries_us: f64,
+    entity_encounters_us: f64,
+    food_consumptions_us: f64,
+    social_interactions_us: f64,
+    food_share_us: f64,
+    household_deposit_us: f64,
+    household_withdraw_us: f64,
+    household_conflict_us: f64,
+    total_us: f64,
+}
+
 /// Mean per-tick microseconds spent inside the autonomy phase, by sub-phase.
 ///
 /// **Use the ratios, not the absolute values.** Every number here comes from a
@@ -196,29 +216,15 @@ const AUTONOMY_PROFILE_TICKS: u32 = 32;
 /// autonomy phase, which also contains the social pass — a different
 /// denominator, not a biased sample.
 ///
+/// That 91%–98% is **measured, not asserted by a test**: it is a ratio of two
+/// wall-clock timers, and pinning it in CI would flake. What a test does pin is
+/// the arithmetic around it — see `bridge::profiles::tests`, which asserts that
+/// sampled and full-population timings are distinguishable in the serialized
+/// payload. Re-derive the bound by hand before quoting it.
+///
 /// `resource_perception_us` is intentionally absent from this struct: the
 /// engine defines it as `memory_reconciliation_us + visible_scan_us`, so
 /// reporting it alongside its own components double counts.
-/// Mean per-tick microseconds of the work `Simulation::execute_autonomy` runs
-/// after the per-entity loop and the social pass (#195).
-///
-/// These eight calls were the unattributed remainder. They are timed one by one
-/// because the volumes they receive differ wildly between them; the matching
-/// `*_recorded` / `*_attempts` counters in the breakdown say how much work each
-/// one was handed.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
-struct PostPassBreakdown {
-    resource_discoveries_us: f64,
-    entity_encounters_us: f64,
-    food_consumptions_us: f64,
-    social_interactions_us: f64,
-    food_share_us: f64,
-    household_deposit_us: f64,
-    household_withdraw_us: f64,
-    household_conflict_us: f64,
-    total_us: f64,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 struct AutonomyBreakdown {
     profiled_ticks: u32,

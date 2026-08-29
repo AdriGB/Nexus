@@ -145,29 +145,74 @@ pub(crate) fn phase_profile_json(profile: &PhaseProfile) -> String {
     })
 }
 
+/// Two populations are timed here and the payload has to keep them apart.
+///
+/// `social_us` and `entity_pass_us` are one timer around one whole pass, so
+/// they cover every entity. Everything prefixed `sampled_` is timed per entity
+/// over a `PROFILE_SAMPLE_RATE` sample. Adding a `sampled_` value to a
+/// full-population one produces a number that means nothing, which is exactly
+/// what the debug panel did before #191: it summed six sampled sub-phases
+/// against `social_us` and showed the result as percentages.
+///
+/// `resource_perception_us` is deliberately **not** projected. The engine
+/// defines it as `memory_reconciliation_us + visible_scan_us`, so shipping it
+/// next to its own components invites any consumer that sums the fields to
+/// double count that work.
 #[derive(Serialize)]
 struct AutonomyProfileDto {
     #[serde(flatten)]
     work: WorkCountersDto,
     #[serde(flatten)]
     state: StateGaugesDto,
-    resource_perception_us: u64,
-    entity_perception_us: u64,
-    plan_validation_us: u64,
-    planning_us: u64,
-    action_us: u64,
+    /// Full population. One timer around the social pass.
+    social_us: u64,
+    /// Full population. One timer around the per-entity loop.
+    entity_pass_us: u64,
+    /// `social_us + entity_pass_us`. The only total here that mixes no sampled
+    /// value; compare it against `step_total_us`.
+    attributed_passes_us: u64,
+    /// Wall clock of the profiled step, the denominator for
+    /// `attributed_passes_us`.
+    step_total_us: u64,
+    sampled_entity_perception_us: u64,
+    sampled_plan_validation_us: u64,
+    sampled_planning_us: u64,
+    sampled_action_us: u64,
+    sampled_memory_reconciliation_us: u64,
+    sampled_visible_scan_us: u64,
     sampled_entities: u32,
     planned_entities: u32,
     urgent_interrupts: u32,
-    memory_reconciliation_us: u64,
-    visible_scan_us: u64,
     sampled_known_resources_total: u32,
     sampled_known_resources_max: u32,
     visible_resources_seen: u32,
-    social_us: u64,
-    entity_pass_us: u64,
-    step_total_us: u64,
     post_pass: PostPassProfileDto,
+}
+
+impl From<&AutonomyProfile> for AutonomyProfileDto {
+    fn from(profile: &AutonomyProfile) -> Self {
+        Self {
+            work: (&profile.work).into(),
+            state: (&profile.state).into(),
+            social_us: profile.social_us,
+            entity_pass_us: profile.entity_pass_us,
+            attributed_passes_us: profile.social_us.saturating_add(profile.entity_pass_us),
+            step_total_us: profile.step_total_us,
+            sampled_entity_perception_us: profile.entity_perception_us,
+            sampled_plan_validation_us: profile.plan_validation_us,
+            sampled_planning_us: profile.planning_us,
+            sampled_action_us: profile.action_us,
+            sampled_memory_reconciliation_us: profile.memory_reconciliation_us,
+            sampled_visible_scan_us: profile.visible_scan_us,
+            sampled_entities: profile.sampled_entities,
+            planned_entities: profile.planned_entities,
+            urgent_interrupts: profile.urgent_interrupts,
+            sampled_known_resources_total: profile.sampled_known_resources_total,
+            sampled_known_resources_max: profile.sampled_known_resources_max,
+            visible_resources_seen: profile.visible_resources_seen,
+            post_pass: (&profile.post_pass).into(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -200,27 +245,7 @@ impl From<&PostPassProfile> for PostPassProfileDto {
 }
 
 pub(crate) fn autonomy_profile_json(profile: &AutonomyProfile) -> String {
-    to_json(&AutonomyProfileDto {
-        work: (&profile.work).into(),
-        state: (&profile.state).into(),
-        resource_perception_us: profile.resource_perception_us,
-        entity_perception_us: profile.entity_perception_us,
-        plan_validation_us: profile.plan_validation_us,
-        planning_us: profile.planning_us,
-        action_us: profile.action_us,
-        sampled_entities: profile.sampled_entities,
-        planned_entities: profile.planned_entities,
-        urgent_interrupts: profile.urgent_interrupts,
-        memory_reconciliation_us: profile.memory_reconciliation_us,
-        visible_scan_us: profile.visible_scan_us,
-        sampled_known_resources_total: profile.sampled_known_resources_total,
-        sampled_known_resources_max: profile.sampled_known_resources_max,
-        visible_resources_seen: profile.visible_resources_seen,
-        social_us: profile.social_us,
-        entity_pass_us: profile.entity_pass_us,
-        step_total_us: profile.step_total_us,
-        post_pass: (&profile.post_pass).into(),
-    })
+    to_json(&AutonomyProfileDto::from(profile))
 }
 
 #[derive(Serialize)]
@@ -304,5 +329,121 @@ mod tests {
             &serde_json::to_value(StateGaugesDto::from(&gauges))
                 .expect("StateGaugesDto serializes"),
         );
+    }
+
+    /// Timings that cover every entity: one timer around one whole pass.
+    /// Anything else ending in `_us` is timed per entity over a
+    /// `PROFILE_SAMPLE_RATE` sample and must say so in its name.
+    const FULL_POPULATION_TIMINGS: [&str; 4] = [
+        "social_us",
+        "entity_pass_us",
+        "attributed_passes_us",
+        "step_total_us",
+    ];
+
+    /// Keys `AutonomyProfileDto` declares itself, minus the flattened work
+    /// counters and state gauges, which are covered by the tests above.
+    fn autonomy_dto_own_keys() -> Vec<String> {
+        let dto = serde_json::to_value(AutonomyProfileDto::from(&AutonomyProfile::default()))
+            .expect("AutonomyProfileDto serializes");
+        let work = serde_json::to_value(WorkCountersDto::from(&WorkCounters::default()))
+            .expect("WorkCountersDto serializes");
+        let state = serde_json::to_value(StateGaugesDto::from(&StateGauges::default()))
+            .expect("StateGaugesDto serializes");
+        let flattened: std::collections::BTreeSet<String> = work
+            .as_object()
+            .expect("object")
+            .keys()
+            .chain(state.as_object().expect("object").keys())
+            .cloned()
+            .collect();
+        dto.as_object()
+            .expect("object")
+            .keys()
+            .filter(|key| !flattened.contains(*key))
+            .cloned()
+            .collect()
+    }
+
+    /// The payload has to say which timings are sampled. Before #191 the debug
+    /// panel summed six per-entity sub-phases against `social_us`, which covers
+    /// every entity, and showed the result as percentages. No consumer could
+    /// tell the two apart from the field names.
+    #[test]
+    fn autonomy_profile_dto_marks_sampled_timings() {
+        for key in autonomy_dto_own_keys() {
+            if !key.ends_with("_us") || FULL_POPULATION_TIMINGS.contains(&key.as_str()) {
+                continue;
+            }
+            assert!(
+                key.starts_with("sampled_"),
+                "`{key}` is timed per entity over a sample, so it must be prefixed `sampled_`; \
+                 adding it to a full-population timing produces a meaningless total (#191)"
+            );
+        }
+    }
+
+    /// `resource_perception_us` is `memory_reconciliation + visible_scan` in the
+    /// engine. Both components are projected, so shipping the rollup makes any
+    /// consumer that sums the fields double count that work.
+    #[test]
+    fn autonomy_profile_dto_omits_the_resource_perception_rollup() {
+        assert!(
+            !autonomy_dto_own_keys()
+                .iter()
+                .any(|key| key == "resource_perception_us"),
+            "`resource_perception_us` is a rollup of two fields that are also projected; \
+             reporting it double counts (#191)"
+        );
+    }
+
+    /// The two tests above inspect `AutonomyProfileDto` on its own. This one
+    /// goes through the function the bridge actually calls, so an edit that
+    /// assembles the payload by hand instead of through the DTO cannot bring
+    /// back an unprefixed sampled timing or the rollup without failing here.
+    #[test]
+    fn autonomy_profile_json_shares_the_dtos_discipline() {
+        let json = super::autonomy_profile_json(&AutonomyProfile {
+            social_us: 300,
+            entity_pass_us: 700,
+            memory_reconciliation_us: 40,
+            visible_scan_us: 60,
+            ..AutonomyProfile::default()
+        });
+        let keys: std::collections::BTreeSet<String> =
+            serde_json::from_str::<serde_json::Value>(&json)
+                .expect("payload is JSON")
+                .as_object()
+                .expect("payload is an object")
+                .keys()
+                .cloned()
+                .collect();
+
+        assert!(
+            !keys.contains("resource_perception_us"),
+            "the payload reintroduced the rollup that double counts (#191)"
+        );
+        for key in keys {
+            if !key.ends_with("_us") || FULL_POPULATION_TIMINGS.contains(&key.as_str()) {
+                continue;
+            }
+            assert!(
+                key.starts_with("sampled_"),
+                "`{key}` is timed over a sample but is not prefixed, so no consumer can \
+                 tell it apart from a full-population timing (#191)"
+            );
+        }
+    }
+
+    #[test]
+    fn attributed_passes_is_the_sum_of_the_two_full_population_passes() {
+        let profile = AutonomyProfile {
+            social_us: 300,
+            entity_pass_us: 700,
+            ..AutonomyProfile::default()
+        };
+        let dto = serde_json::to_value(AutonomyProfileDto::from(&profile))
+            .expect("AutonomyProfileDto serializes");
+        assert_eq!(dto["attributed_passes_us"], 1_000);
     }
 }
