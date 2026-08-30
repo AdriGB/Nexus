@@ -18,6 +18,8 @@ mod renewal;
 mod spatial;
 mod time;
 
+use std::collections::BTreeMap;
+
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
 pub(crate) use self::autonomy::{
@@ -316,6 +318,20 @@ pub struct Simulation {
     paused: bool,
     entities: Vec<Entity>,
     population_cache: Vec<EntitySnapshot>,
+    /// Índice derivado del snapshot: `caregiver_id` -> posiciones en
+    /// `population_cache` de quienes dependen de él, **en orden de población**.
+    ///
+    /// Existe porque `dependent_food_need` y `dependent_protection_target`
+    /// recorrían todo el snapshot por entidad, haciendo el paso por entidad
+    /// cuadrático: medido en 2026-08-30, esos dos escaneos eran el 96,8% de
+    /// `plan_validation` a 10k (105,5 de 109,1 ms/tick).
+    ///
+    /// Se reconstruye junto al snapshot y nunca se itera el mapa: sólo se
+    /// consulta una clave y se recorre su vector, que conserva el orden de
+    /// población para no alterar el resultado de `max_by`. `BTreeMap` en lugar
+    /// de `HashMap` para que el orden de iteración no pueda depender del
+    /// estado aleatorio del proceso.
+    caregiver_index: BTreeMap<u32, Vec<u32>>,
     spatial_grid: SpatialGrid,
     pathfinding_workspace: PathfindingWorkspace,
     next_entity_id: u32,
@@ -337,6 +353,7 @@ impl Default for Simulation {
             paused: true,
             entities: Vec::new(),
             population_cache: Vec::new(),
+            caregiver_index: BTreeMap::new(),
             spatial_grid: SpatialGrid::default(),
             pathfinding_workspace: PathfindingWorkspace::new(),
             next_entity_id: 1,
@@ -827,6 +844,7 @@ impl Simulation {
     ) -> AutonomyTickOutcome {
         let tick = self.tick;
         let population_cache = &self.population_cache;
+        let caregiver_index = &self.caregiver_index;
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
         let households = &self.households;
@@ -873,6 +891,10 @@ impl Simulation {
                         }
                     })
             });
+            let dependents = caregiver_index
+                .get(&entity.id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
             let (result, entity_discoveries, entity_encounters) = autonomy::update_entity(
                 entity,
                 world,
@@ -881,6 +903,7 @@ impl Simulation {
                 spatial_grid,
                 pathfinding_workspace,
                 autonomy::EntityUpdateContext {
+                    dependents,
                     household: household_context,
                     work: work.as_deref_mut(),
                     profile: profile
@@ -1420,6 +1443,7 @@ impl Simulation {
 
     fn rebuild_population_index(&mut self, world: &Grid) {
         self.population_cache.clear();
+        self.caregiver_index.clear();
         self.spatial_grid.prepare(world.width, world.height);
 
         for entity in &self.entities {
@@ -1440,6 +1464,13 @@ impl Simulation {
                 is_child: life_stage == LifeStage::Child,
                 is_infant: life_stage == LifeStage::Infant,
             });
+
+            if let Some(caregiver_id) = entity.caregiver_id {
+                self.caregiver_index
+                    .entry(caregiver_id)
+                    .or_default()
+                    .push(snapshot_index as u32);
+            }
 
             self.spatial_grid.insert(snapshot_index, entity.x, entity.y);
         }

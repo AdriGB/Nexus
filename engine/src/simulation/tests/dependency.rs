@@ -224,6 +224,61 @@ fn newborn_gets_mother_as_caregiver() {
     assert_eq!(simulation.entities()[2].caregiver_id, Some(1));
 }
 
+/// The caregiver index replaced a filter over `population`. This pins that it
+/// yields exactly the same dependents, **in the same order**: the order matters
+/// because `dependent_protection_target` breaks ties with `max_by`, which keeps
+/// the *last* maximum, so reordering would change which dependent gets
+/// protected without anything else giving it away.
+#[test]
+fn caregiver_index_matches_the_population_scan_it_replaced() {
+    let world = plain_grid(10, 10);
+    let mut simulation = Simulation::with_population(42, &world, 6);
+    let ids: Vec<u32> = simulation
+        .entities()
+        .iter()
+        .map(|entity| entity.id)
+        .collect();
+
+    // Two caregivers with several dependents each, at NON-contiguous
+    // positions. That is what makes a reordering visible: if the index
+    // reversed or reshuffled its vector, the two lists would stop matching.
+    simulation.entities[0].caregiver_id = Some(ids[4]);
+    simulation.entities[3].caregiver_id = Some(ids[4]);
+    simulation.entities[1].caregiver_id = Some(ids[5]);
+    simulation.entities[2].caregiver_id = Some(ids[5]);
+    simulation.entities[5].caregiver_id = Some(ids[5]);
+
+    simulation.rebuild_population_index(&world);
+
+    assert!(
+        simulation
+            .caregiver_index
+            .values()
+            .any(|dependents| dependents.len() > 1),
+        "degenerate test: no caregiver has more than one dependent"
+    );
+
+    let population = &simulation.population_cache;
+    for entity in &simulation.entities {
+        let scanned: Vec<u32> = population
+            .iter()
+            .enumerate()
+            .filter(|(_, snapshot)| snapshot.caregiver_id == Some(entity.id))
+            .map(|(index, _)| index as u32)
+            .collect();
+        let indexed: Vec<u32> = simulation
+            .caregiver_index
+            .get(&entity.id)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(
+            indexed, scanned,
+            "index for {} does not match the scan it replaced",
+            entity.id
+        );
+    }
+}
+
 #[test]
 fn adolescent_releases_caregiver() {
     let mut world = plain_grid(10, 10);
