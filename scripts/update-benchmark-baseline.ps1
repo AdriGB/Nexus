@@ -12,9 +12,15 @@ $input = Read-BenchmarkAggregate ([System.IO.Path]::GetFullPath($InputPath))
 if ($input.Aggregate.suite -cne "full") {
     throw "A baseline update requires suite 'full', got '$($input.Aggregate.suite)'."
 }
+# Kept in step with `SCENARIOS` in engine/src/benchmarking.rs by hand. That is
+# deliberate rather than lazy: updating the baseline is a reviewed change, and
+# spelling the set out here means a new scenario cannot enter the gate without
+# somebody writing its name down twice. The cost is that adding a scenario means
+# touching this list too.
 $expected = @(
     "baseline-100", "baseline-1000", "baseline-10000", "dense-social-1000",
-    "households-1000", "long-run-1000", "pathfinding-heavy-1000", "scarcity-1000"
+    "households-1000", "lineage-1000", "long-run-1000", "pathfinding-heavy-1000",
+    "scarcity-1000"
 )
 $actual = @($input.ByName.Keys | Sort-Object)
 if (($expected -join "`n") -cne ($actual -join "`n")) {
