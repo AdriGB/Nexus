@@ -129,15 +129,20 @@ impl DependentFoodNeed {
     }
 }
 
+/// `dependents` son las posiciones en `population` de quienes tienen a esta
+/// entidad como cuidador, resueltas por el índice y en orden de población; sin
+/// él esta función recorría todo el snapshot (O(N) por entidad).
 pub(super) fn dependent_food_need(
-    caregiver_id: u32,
     mind: &Mind,
     population: &[EntitySnapshot],
+    dependents: &[u32],
 ) -> DependentFoodNeed {
     let mut hungry_child = false;
-    for snapshot in population.iter().filter(|snapshot| {
-        snapshot.caregiver_id == Some(caregiver_id) && snapshot.hunger >= FOOD_SEARCH_THRESHOLD
-    }) {
+    for snapshot in dependents
+        .iter()
+        .map(|index| &population[*index as usize])
+        .filter(|snapshot| snapshot.hunger >= FOOD_SEARCH_THRESHOLD)
+    {
         if snapshot.is_infant {
             return DependentFoodNeed::Infant;
         }
@@ -152,15 +157,19 @@ pub(super) fn dependent_food_need(
     }
 }
 
+/// Igual que `dependent_food_need`: `dependents` evita el escaneo completo. El
+/// orden del vector es el de población, y `max_by` se queda con el último
+/// máximo, así que el resultado es idéntico al del escaneo original.
 pub(super) fn dependent_protection_target(
-    caregiver_id: u32,
     caregiver_position: (u32, u32),
     mind: &Mind,
     population: &[EntitySnapshot],
+    dependents: &[u32],
 ) -> Option<u32> {
-    population
+    dependents
         .iter()
-        .filter(|snapshot| snapshot.caregiver_id == Some(caregiver_id) && snapshot.is_child)
+        .map(|index| &population[*index as usize])
+        .filter(|snapshot| snapshot.is_child)
         .filter(|snapshot| mind.visible_entities.binary_search(&snapshot.id).is_ok())
         .filter_map(|snapshot| {
             let distance = super::mind::manhattan(caregiver_position, (snapshot.x, snapshot.y));
@@ -590,9 +599,14 @@ fn plan_follow(
     }
 }
 
-fn plan_protect_dependent(entity: &mut Entity, tick: u64, population: &[EntitySnapshot]) {
+fn plan_protect_dependent(
+    entity: &mut Entity,
+    tick: u64,
+    population: &[EntitySnapshot],
+    dependents: &[u32],
+) {
     let Some(target_id) =
-        dependent_protection_target(entity.id, (entity.x, entity.y), &entity.mind, population)
+        dependent_protection_target((entity.x, entity.y), &entity.mind, population, dependents)
     else {
         entity.mind.clear_goal();
         entity.path.clear();
@@ -701,6 +715,10 @@ fn plan_food_delivery(
     }
 }
 
+// `dependents` viaja junto a `population` porque las consultas de dependientes
+// necesitan ambas cosas; agruparlas en un struct tocaría a todos los planes, que
+// sólo necesitan `population`. Misma convención que `GpuRenderer::render`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn plan_goal(
     entity: &mut Entity,
     world: &Grid,
@@ -708,6 +726,7 @@ pub(super) fn plan_goal(
     goal: Goal,
     pathfinding_workspace: &mut PathfindingWorkspace,
     population: &[EntitySnapshot],
+    dependents: &[u32],
     household_context: Option<super::HouseholdAutonomyContext>,
 ) {
     let origin = (entity.x, entity.y);
@@ -726,7 +745,7 @@ pub(super) fn plan_goal(
             let personal_food = entity.inventory.amount(ItemKind::Food);
             let provisioning_need = (entity.hunger < URGENT_HUNGER_THRESHOLD
                 && matches!(stage, LifeStage::Adult | LifeStage::Elder))
-            .then(|| dependent_food_need(entity.id, &entity.mind, population))
+            .then(|| dependent_food_need(&entity.mind, population, dependents))
             .filter(|need| *need != DependentFoodNeed::None);
             let requested = provisioning_need
                 .map(|need| need.required_food().saturating_sub(personal_food))
@@ -848,7 +867,7 @@ pub(super) fn plan_goal(
                 entity.activity = super::super::entity::EntityActivity::Resting;
             }
         }
-        Goal::ProtectDependent => plan_protect_dependent(entity, tick, population),
+        Goal::ProtectDependent => plan_protect_dependent(entity, tick, population, dependents),
         Goal::Rest => {
             entity.path.clear();
             entity.path_index = 0;

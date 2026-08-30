@@ -72,6 +72,10 @@ pub(in crate::simulation) struct HouseholdAutonomyContext {
 }
 
 pub(super) struct EntityUpdateContext<'a> {
+    /// Posiciones en el snapshot de población de quienes tienen a esta entidad
+    /// como cuidador, ya resueltas por el índice y en orden de población. Vacío
+    /// si nadie depende de ella, que es el caso más común.
+    pub dependents: &'a [u32],
     pub household: Option<HouseholdAutonomyContext>,
     pub profile: Option<&'a mut AutonomyProfile>,
     pub work: Option<&'a mut crate::simulation::WorkCounters>,
@@ -114,6 +118,7 @@ pub(super) fn update_entity(
     context: EntityUpdateContext<'_>,
 ) -> (ActionOutcome, Vec<ResourceDiscovery>, Vec<EntityEncounter>) {
     let EntityUpdateContext {
+        dependents,
         household: household_context,
         mut profile,
         mut work,
@@ -191,9 +196,9 @@ pub(super) fn update_entity(
         entity.action_tick = 0;
     }
 
-    let dependent_food_need = decision::dependent_food_need(entity.id, &entity.mind, population);
+    let dependent_food_need = decision::dependent_food_need(&entity.mind, population, dependents);
     let dependent_protection_target =
-        decision::dependent_protection_target(entity.id, position, &entity.mind, population);
+        decision::dependent_protection_target(position, &entity.mind, population, dependents);
     let provisioning_goal = (entity.hunger < URGENT_HUNGER_THRESHOLD)
         .then(|| {
             decision::dependent_provisioning_goal(
@@ -329,6 +334,7 @@ pub(super) fn update_entity(
             goal,
             pathfinding_workspace,
             population,
+            dependents,
             household_context,
         );
         if let Some(work) = work.as_deref_mut() {
