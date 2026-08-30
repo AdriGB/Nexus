@@ -1554,6 +1554,74 @@ impl Simulation {
         self.benchmark_household_invariants(world)
     }
 
+    /// Replaces the population's lineage with a synthetic multi-generation
+    /// tree, so that kinship queries have something to look at.
+    ///
+    /// No scenario can grow one: `GESTATION_TICKS` is 6,720 against the 124
+    /// ticks the short scenarios run, so every entity is a founder and
+    /// `genealogy_links` is 0. `long-run-1000` gets there, but costs 8,760
+    /// ticks and yields a single generation after its social graph has decayed
+    /// tenfold (#199, #212).
+    ///
+    /// `parents` are **indices** into `entities`, not entity ids: the caller
+    /// does not assign ids and cannot assume what they are.
+    ///
+    /// The genealogy is rebuilt from scratch rather than appended to.
+    /// [`Genealogy::register`] requires records in ascending entity-id order
+    /// and appends unconditionally, so registering an already-registered
+    /// population would trip its `debug_assert` in a debug build and silently
+    /// double every link in release — hence the explicit order check instead of
+    /// relying on an assertion that release builds compile out.
+    #[cfg(feature = "benchmarks")]
+    pub(crate) fn benchmark_seed_lineage(
+        &mut self,
+        world: &Grid,
+        parents: &[(Option<u32>, Option<u32>)],
+    ) -> Result<(), String> {
+        if parents.len() != self.entities.len() {
+            return Err(format!(
+                "received {} parent pairs for {} entities",
+                parents.len(),
+                self.entities.len()
+            ));
+        }
+        if !self.entities.windows(2).all(|pair| pair[0].id < pair[1].id) {
+            return Err("lineage seeding needs entities in ascending id order".to_string());
+        }
+
+        let ids: Vec<u32> = self.entities.iter().map(|entity| entity.id).collect();
+        let resolve = |index: Option<u32>| -> Result<Option<u32>, String> {
+            let Some(index) = index else {
+                return Ok(None);
+            };
+            let id = usize::try_from(index)
+                .ok()
+                .and_then(|index| ids.get(index))
+                .copied()
+                .ok_or_else(|| {
+                    format!(
+                        "lineage parent index {index} is out of range for {} entities",
+                        ids.len()
+                    )
+                })?;
+            Ok(Some(id))
+        };
+        let mut resolved = Vec::with_capacity(ids.len());
+        for &(mother, father) in parents {
+            resolved.push((resolve(mother)?, resolve(father)?));
+        }
+
+        let mut genealogy = Genealogy::default();
+        for (entity, &(mother_id, father_id)) in self.entities.iter_mut().zip(&resolved) {
+            entity.mother_id = mother_id;
+            entity.father_id = father_id;
+            genealogy.register(entity.id, mother_id, father_id);
+        }
+        self.genealogy = genealogy;
+        self.benchmark_rebuild_population_index(world);
+        Ok(())
+    }
+
     #[cfg(feature = "benchmarks")]
     pub(crate) fn benchmark_household_invariants(&self, world: &Grid) -> Result<(), String> {
         let active_ids: HashSet<_> = self

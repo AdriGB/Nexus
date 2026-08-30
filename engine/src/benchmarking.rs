@@ -52,6 +52,21 @@ pub enum BenchmarkWorkload {
         food_grid_spacing: u32,
         food_capacity: u16,
     },
+    /// A seeded multi-generation lineage, placed in a compact arena.
+    ///
+    /// The other scenarios have no genealogy at all: `GESTATION_TICKS` is
+    /// 6,720 and they run 124 ticks, so nobody is ever born and every kinship
+    /// query returns nothing (see #212). Seeding the tree directly is the only
+    /// way to measure kinship, partnership formation and inheritance against a
+    /// population that has relatives.
+    ///
+    /// The compact placement is not decoration. Lineage alone produces no
+    /// encounters, and without encounters none of the relationship or
+    /// inheritance paths fire — the scenario would be a kinship microbench
+    /// with extra steps, which is what the criterion bench already has.
+    SeededLineage {
+        generations: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -71,7 +86,7 @@ const STANDARD_WORLD: BenchmarkWorld = BenchmarkWorld {
     sea_level: 0.35,
 };
 
-const SCENARIOS: [BenchmarkScenario; 8] = [
+const SCENARIOS: [BenchmarkScenario; 9] = [
     BenchmarkScenario {
         name: "baseline-100",
         seed: 42,
@@ -146,6 +161,15 @@ const SCENARIOS: [BenchmarkScenario; 8] = [
             initial_hunger: 0,
             known_food_targets: 0,
         },
+    },
+    BenchmarkScenario {
+        name: "lineage-1000",
+        seed: 42,
+        population: 1_000,
+        warmup_ticks: 24,
+        measured_ticks: 100,
+        world: STANDARD_WORLD,
+        workload: BenchmarkWorkload::SeededLineage { generations: 10 },
     },
     BenchmarkScenario {
         name: "long-run-1000",
@@ -601,6 +625,16 @@ fn apply_workload(
             food_capacity,
             ..
         } => prepare_long_run_food(world, food_grid_spacing, food_capacity),
+        BenchmarkWorkload::SeededLineage { generations } => {
+            // Reuses the dense-social arena for placement: it is a compact
+            // walkable square, which is exactly what produces encounters here.
+            // The name says "social" but nothing about it is social-specific.
+            let positions = build_dense_social_arena(world, simulation.entities().len())?;
+            simulation.benchmark_set_entity_positions(world, &positions)?;
+            let population = u32::try_from(simulation.entities().len()).unwrap_or(u32::MAX);
+            let parents = synthetic_lineage_parents(population, generations)?;
+            simulation.benchmark_seed_lineage(world, &parents)
+        }
     }
 }
 
@@ -889,39 +923,75 @@ const KINSHIP_FIXTURE_PARENT_SAMPLES: usize = 64;
 const KINSHIP_FIXTURE_FOCAL_SAMPLES: usize = 16;
 const KINSHIP_FIXTURE_PAIR_SAMPLES: usize = 16;
 
+/// Mother and father for every entity of a synthetic multi-generation tree, as
+/// **indices** into the population.
+///
+/// Indices and not entity ids, because a `Simulation` assigns the ids and the
+/// caller cannot assume what they are; the criterion fixture below, which owns
+/// its id space, shifts them by one.
+///
+/// Generation 0 are founders with no parents. Every other entity has two
+/// parents drawn from the previous generation by [`fixture_hash`], so parents
+/// average two children but are not uniform — some have none, some have five.
+/// A uniform tree would make every kinship query return the same size and
+/// measure nothing.
+///
+/// Shared with the seeded-lineage benchmark scenario (#212) so that criterion
+/// and the gate exercise the same shape of tree. They used to be able to drift:
+/// the fixture's rule lived only here.
+/// Mother and father of one entity, as indices into the population.
+///
+/// An alias rather than a bare tuple because `Result<Vec<(Option<u32>,
+/// Option<u32>)>, String>` trips `clippy::type_complexity`, and because the
+/// name says which slot is which — a tuple does not.
+type LineageParents = (Option<u32>, Option<u32>);
+
+fn synthetic_lineage_parents(
+    population: u32,
+    generations: u32,
+) -> Result<Vec<LineageParents>, String> {
+    if generations == 0 {
+        return Err("lineage needs at least one generation".to_string());
+    }
+    if population == 0 || !population.is_multiple_of(generations) {
+        return Err(format!(
+            "lineage population {population} must be a nonzero multiple of {generations}"
+        ));
+    }
+    let generation_size = population / generations;
+    let mut parents = Vec::with_capacity(population as usize);
+    for generation in 0..generations {
+        let previous_start = generation.saturating_sub(1) * generation_size;
+        for index in 0..generation_size {
+            if generation == 0 {
+                parents.push((None, None));
+                continue;
+            }
+            let mother = previous_start + fixture_hash(index ^ generation) % generation_size;
+            // Nudged once when the draw collides, so a child always has two
+            // distinct parents and the link count is exact. With
+            // `generation_size == 1` there is no other parent to pick, and
+            // `register` collapses the pair to one link.
+            let mut father_offset =
+                fixture_hash(index ^ generation ^ 0x8000_0000) % generation_size;
+            if previous_start + father_offset == mother && generation_size > 1 {
+                father_offset = (father_offset + 1) % generation_size;
+            }
+            parents.push((Some(mother), Some(previous_start + father_offset)));
+        }
+    }
+    Ok(parents)
+}
+
 impl BenchmarkKinshipFixture {
     pub fn new(population: u32) -> Result<Self, String> {
-        if population == 0 || !population.is_multiple_of(KINSHIP_FIXTURE_GENERATIONS) {
-            return Err(format!(
-                "kinship population {population} must be a nonzero multiple of {KINSHIP_FIXTURE_GENERATIONS}"
-            ));
-        }
+        let parents = synthetic_lineage_parents(population, KINSHIP_FIXTURE_GENERATIONS)?;
         let generation_size = population / KINSHIP_FIXTURE_GENERATIONS;
         let mut genealogy = Genealogy::default();
-        let mut next_id = 1u32;
-        for generation in 0..KINSHIP_FIXTURE_GENERATIONS {
-            let previous_start = next_id.saturating_sub(generation_size);
-            for index in 0..generation_size {
-                let (mother_id, father_id) = if generation == 0 {
-                    (None, None)
-                } else {
-                    let mother =
-                        previous_start + fixture_hash(index ^ generation) % generation_size;
-                    // Nudged once when the draw collides, so a child always has
-                    // two distinct parents and the link count is exact. With
-                    // `generation_size == 1` there is no other parent to pick,
-                    // and `register` collapses the pair to one link.
-                    let mut father_offset =
-                        fixture_hash(index ^ generation ^ 0x8000_0000) % generation_size;
-                    if previous_start + father_offset == mother && generation_size > 1 {
-                        father_offset = (father_offset + 1) % generation_size;
-                    }
-                    let father = previous_start + father_offset;
-                    (Some(mother), Some(father))
-                };
-                genealogy.register(next_id, mother_id, father_id);
-                next_id += 1;
-            }
+        for (&(mother, father), id) in parents.iter().zip(1..=population) {
+            // The fixture's ids are 1-based, so an index maps to `index + 1`.
+            let shift = |parent: Option<u32>| parent.map(|index| index + 1);
+            genealogy.register(id, shift(mother), shift(father));
         }
 
         // Sampled from parents that are known to have children. Sampling raw ids
@@ -1153,6 +1223,70 @@ mod tests {
         }
     }
 
+    /// #212: the seeded lineage is two data structures that must agree — the
+    /// `Genealogy`, which `kinship` reads, and the `mother_id` / `father_id`
+    /// fields on each entity, which the state gauges and the population
+    /// snapshot read. Nothing else would catch them drifting apart: a
+    /// disagreement changes which relative a query returns without failing
+    /// anything.
+    #[test]
+    fn seeded_lineage_agrees_with_the_entity_fields() {
+        let scenario = small_specialized(BenchmarkWorkload::SeededLineage { generations: 5 });
+        let (_world, simulation) = prepare_scenario(scenario).expect("seeded lineage scenario");
+
+        for entity in simulation.entities() {
+            let record = simulation
+                .genealogy()
+                .get(entity.id)
+                .expect("every seeded entity has a lineage record");
+            assert_eq!(record.mother_id, entity.mother_id, "entity {}", entity.id);
+            assert_eq!(record.father_id, entity.father_id, "entity {}", entity.id);
+        }
+
+        // The tree has to reach the genealogy, not just the entities: 20
+        // entities over 5 generations is 4 founders and 16 children, each with
+        // two distinct parents.
+        let links = simulation
+            .entities()
+            .iter()
+            .map(|entity| {
+                usize::from(entity.mother_id.is_some()) + usize::from(entity.father_id.is_some())
+            })
+            .sum::<usize>();
+        assert_eq!(links, 32, "expected 16 children x 2 distinct parents");
+    }
+
+    /// #201 left a warning about this and it is worth pinning: the first
+    /// revision of the mating rule was an involution, so ancestor sets
+    /// collapsed to two entities at every depth and the fixture measured
+    /// nothing while still looking plausible. A uniform tree is the same
+    /// failure — every kinship query returns the same size.
+    #[test]
+    fn seeded_lineage_does_not_give_every_parent_the_same_number_of_children() {
+        let parents = synthetic_lineage_parents(1_000, 10).expect("valid lineage population");
+
+        let mut by_parent: Vec<u32> = parents
+            .iter()
+            .flat_map(|(mother, father)| [(*mother), (*father)])
+            .flatten()
+            .collect();
+        by_parent.sort_unstable();
+        let mut unique = by_parent.clone();
+        unique.dedup();
+
+        let counts: Vec<usize> = unique
+            .iter()
+            .map(|parent| by_parent.iter().filter(|other| *other == parent).count())
+            .collect();
+        let fewest = counts.iter().min().expect("seeded parents");
+        let most = counts.iter().max().expect("seeded parents");
+        assert!(
+            most > fewest,
+            "degenerate lineage: every parent has exactly {fewest} children, so every \
+             kinship query returns the same size and measures nothing"
+        );
+    }
+
     /// #207: the residual is a number that gets quoted, so its arithmetic is
     /// pinned here. What is *not* pinned is how big it is — that is a ratio of
     /// wall-clock timers and would flake (#204). What is pinned is that
@@ -1238,6 +1372,7 @@ mod tests {
                 "scarcity-1000",
                 "households-1000",
                 "pathfinding-heavy-1000",
+                "lineage-1000",
                 "long-run-1000",
             ]
         );
