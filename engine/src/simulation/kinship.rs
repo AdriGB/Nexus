@@ -129,15 +129,19 @@ pub(crate) fn relationship_between(
     if first_id == second_id {
         return KinshipRelation::SamePerson;
     }
+    if genealogy.records().is_empty() {
+        return KinshipRelation::Unrelated;
+    }
 
-    if let Some(generations) = generation_of(descendants_of(genealogy, first_id), second_id) {
+    if let Some(generations) = generation_of(&descendants_of(genealogy, first_id), second_id) {
         return if generations == 1 {
             KinshipRelation::Parent
         } else {
             KinshipRelation::Ancestor { generations }
         };
     }
-    if let Some(generations) = generation_of(ancestors_of(genealogy, first_id), second_id) {
+    let first_ancestors = ancestors_of(genealogy, first_id);
+    if let Some(generations) = generation_of(&first_ancestors, second_id) {
         return if generations == 1 {
             KinshipRelation::Child
         } else {
@@ -156,7 +160,6 @@ pub(crate) fn relationship_between(
         }
     }
 
-    let first_ancestors = ancestors_of(genealogy, first_id);
     let second_ancestors = ancestors_of(genealogy, second_id);
     let nearest_common = first_ancestors
         .iter()
@@ -191,9 +194,9 @@ pub(crate) fn relationship_between(
     }
 }
 
-fn generation_of(relatives: Vec<KinshipGeneration>, entity_id: u32) -> Option<u16> {
+fn generation_of(relatives: &[KinshipGeneration], entity_id: u32) -> Option<u16> {
     relatives
-        .into_iter()
+        .iter()
         .find(|relative| relative.entity_id == entity_id)
         .map(|relative| relative.generation)
 }

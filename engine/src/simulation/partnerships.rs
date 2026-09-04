@@ -103,22 +103,6 @@ pub(super) fn try_form(
         return None;
     }
 
-    if matches!(
-        relationship_between(genealogy, actor_id, target_id),
-        KinshipRelation::SamePerson
-            | KinshipRelation::Parent
-            | KinshipRelation::Child
-            | KinshipRelation::FullSibling
-            | KinshipRelation::HalfSibling
-            | KinshipRelation::Ancestor { .. }
-            | KinshipRelation::Descendant { .. }
-            | KinshipRelation::AuntUncle { .. }
-            | KinshipRelation::NieceNephew { .. }
-            | KinshipRelation::Cousin { degree: 1, .. }
-    ) {
-        return None;
-    }
-
     let (actor, target) = if actor_index < target_index {
         let (left, right) = entities.split_at_mut(target_index);
         (&mut left[actor_index], &mut right[0])
@@ -162,6 +146,22 @@ pub(super) fn try_form(
     if actor_relationship.affinity < affinity_threshold
         || target_relationship.affinity < affinity_threshold
     {
+        return None;
+    }
+
+    if matches!(
+        relationship_between(genealogy, actor_id, target_id),
+        KinshipRelation::SamePerson
+            | KinshipRelation::Parent
+            | KinshipRelation::Child
+            | KinshipRelation::FullSibling
+            | KinshipRelation::HalfSibling
+            | KinshipRelation::Ancestor { .. }
+            | KinshipRelation::Descendant { .. }
+            | KinshipRelation::AuntUncle { .. }
+            | KinshipRelation::NieceNephew { .. }
+            | KinshipRelation::Cousin { degree: 1, .. }
+    ) {
         return None;
     }
 
