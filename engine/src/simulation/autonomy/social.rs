@@ -8,7 +8,6 @@ use super::mind::{manhattan, Action, AffinityChangeRecord, Goal, KnownEntity, Mi
 use super::relationships::{close_relationship_role, CloseRelationshipRole, RelationshipIdentity};
 use crate::pathfinding::{self, PathfindingWorkspace};
 use crate::world::Grid;
-use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::simulation) struct SocialInteraction {
@@ -472,12 +471,6 @@ pub(super) fn process_social_interactions(
     tick: u64,
     mut work: Option<&mut WorkCounters>,
 ) -> Vec<SocialInteraction> {
-    let id_to_index: HashMap<u32, usize> = entities
-        .iter()
-        .enumerate()
-        .map(|(index, entity)| (entity.id, index))
-        .collect();
-
     let mut pairs: Vec<(usize, usize, SocialInteraction)> = Vec::new();
 
     for (entity_index, entity) in entities.iter().enumerate() {
@@ -500,9 +493,8 @@ pub(super) fn process_social_interactions(
                 work.social_pairs_scanned += 1;
             }
 
-            let b_index = match id_to_index.get(&b_id) {
-                Some(&index) => index,
-                None => continue,
+            let Ok(b_index) = entities.binary_search_by_key(&b_id, |entity| entity.id) else {
+                continue;
             };
 
             let confronting = |actor: &Entity, target_id: u32| {

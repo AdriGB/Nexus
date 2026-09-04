@@ -56,6 +56,9 @@ impl Inventory {
     pub const fn capacity(&self) -> u16 {
         self.capacity
     }
+    pub const fn amounts(&self) -> &[u16; ItemKind::ALL.len()] {
+        &self.amounts
+    }
     pub fn used_capacity(&self) -> u16 {
         self.amounts.iter().copied().sum()
     }

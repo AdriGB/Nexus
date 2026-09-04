@@ -458,7 +458,7 @@ mod tests {
         for position in [(1, 1), (7, 7), (8, 8), (15, 15), (30, 30)] {
             let mut mind = Mind::default();
             let radius = mind.perception_radius;
-            let mut expected = std::collections::HashSet::new();
+            let mut expected = std::collections::BTreeSet::new();
 
             for y in 0..world.height {
                 for x in 0..world.width {

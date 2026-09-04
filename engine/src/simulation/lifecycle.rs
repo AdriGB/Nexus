@@ -347,7 +347,12 @@ pub(super) fn spawn_candidates(world: &Grid) -> Vec<(u32, u32)> {
             })
         })
         .collect();
-    food_tiles.sort_unstable_by_key(|&coordinate| manhattan(coordinate, center));
+    food_tiles.sort_unstable_by_key(|&coordinate| {
+        (
+            manhattan(coordinate, center),
+            coordinate.1 * world.width + coordinate.0,
+        )
+    });
 
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
@@ -385,7 +390,12 @@ pub(super) fn spawn_candidates(world: &Grid) -> Vec<(u32, u32)> {
             (index % world.width, index / world.width)
         })
         .collect();
-    fallback.sort_unstable_by_key(|&coordinate| manhattan(coordinate, center));
+    fallback.sort_unstable_by_key(|&coordinate| {
+        (
+            manhattan(coordinate, center),
+            coordinate.1 * world.width + coordinate.0,
+        )
+    });
     candidates.extend(
         fallback
             .into_iter()

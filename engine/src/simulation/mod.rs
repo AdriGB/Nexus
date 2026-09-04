@@ -16,9 +16,12 @@ mod physiology;
 mod pipeline;
 mod renewal;
 mod spatial;
+pub mod state_hash;
 mod time;
 
 use std::collections::BTreeMap;
+
+pub use self::state_hash::SimulationStateHash;
 
 use self::autonomy::Mind;
 pub(crate) use self::autonomy::GATHER_DURATION_TICKS;
@@ -279,6 +282,7 @@ impl StateGauges {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn dominates(&self, other: &Self) -> bool {
         self.entities_alive >= other.entities_alive
             && self.known_entities_total >= other.known_entities_total
@@ -429,12 +433,22 @@ impl Simulation {
         &self.entities
     }
 
+    #[cfg(test)]
+    pub(crate) fn entities_mut(&mut self) -> &mut [Entity] {
+        &mut self.entities
+    }
+
     pub(crate) fn genealogy(&self) -> &Genealogy {
         &self.genealogy
     }
 
     pub(crate) fn households(&self) -> &[Household] {
         &self.households
+    }
+
+    /// Computes a canonical, deterministic hash of the entire logical simulation state.
+    pub fn state_hash(&self, world: &Grid) -> SimulationStateHash {
+        self::state_hash::compute_state_hash(self, world)
     }
 
     pub fn transfer_item(

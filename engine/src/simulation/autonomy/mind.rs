@@ -1,7 +1,7 @@
 use super::super::time::TICKS_PER_DAY;
 use crate::world::{Grid, ResourceKind};
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BTreeSet, BinaryHeap};
 
 const DEFAULT_PERCEPTION_RADIUS: u32 = 6;
 const FAILED_TARGET_RETRY_TICKS: u64 = 120;
@@ -196,7 +196,7 @@ struct ConflictRecord {
 #[derive(Clone, Debug, Default)]
 pub struct Memory {
     pub known_resources: Vec<KnownResource>,
-    pub(super) known_chunks: HashSet<u32>,
+    pub(super) known_chunks: BTreeSet<u32>,
     failed_exploration: Vec<FailedExploration>,
     pub known_entities: Vec<KnownEntity>,
     pub known_dead_entities: Vec<u32>,
@@ -545,6 +545,129 @@ impl Default for Mind {
 }
 
 impl Mind {
+    pub(in crate::simulation) fn hash_state(
+        &self,
+        hasher: &mut crate::simulation::state_hash::StateHasher,
+    ) {
+        hasher.write_u32(self.perception_radius);
+        hasher.write_u32(match self.current_goal {
+            Some(Goal::Eat) => 1,
+            Some(Goal::AcquireResource) => 2,
+            Some(Goal::ConfrontHouseholdMember) => 3,
+            Some(Goal::Explore) => 4,
+            Some(Goal::Follow) => 5,
+            Some(Goal::Grieve) => 6,
+            Some(Goal::MigrateHousehold) => 7,
+            Some(Goal::ProtectDependent) => 8,
+            Some(Goal::Rest) => 9,
+            Some(Goal::Socialize) => 10,
+            Some(Goal::ShareFood) => 11,
+            None => 0,
+        });
+        hasher.write_u64(self.goal_since_tick);
+        hasher.write_usize(self.current_plan.len());
+        hasher.write_usize(self.plan_index);
+        for action in &self.current_plan {
+            match action {
+                Action::MoveTo(x, y) => {
+                    hasher.write_u32(1);
+                    hasher.write_u32(*x);
+                    hasher.write_u32(*y);
+                }
+                Action::Gather(kind) => {
+                    hasher.write_u32(2);
+                    hasher.write_u32(*kind as u32);
+                }
+                Action::Consume(kind) => {
+                    hasher.write_u32(3);
+                    hasher.write_u32(*kind as u32);
+                }
+                Action::ExploreArea(x, y) => {
+                    hasher.write_u32(4);
+                    hasher.write_u32(*x);
+                    hasher.write_u32(*y);
+                }
+                Action::Wait => {
+                    hasher.write_u32(5);
+                }
+                Action::ApproachEntity(id) => {
+                    hasher.write_u32(6);
+                    hasher.write_u32(*id);
+                }
+                Action::Interact(id) => {
+                    hasher.write_u32(7);
+                    hasher.write_u32(*id);
+                }
+                Action::ShareFood(id) => {
+                    hasher.write_u32(8);
+                    hasher.write_u32(*id);
+                }
+                Action::DepositHouseholdFood(amount) => {
+                    hasher.write_u32(9);
+                    hasher.write_u16(*amount);
+                }
+                Action::WithdrawHouseholdFood(amount) => {
+                    hasher.write_u32(10);
+                    hasher.write_u16(*amount);
+                }
+            }
+        }
+        hasher.write_usize(self.visible_entities.len());
+        for &id in &self.visible_entities {
+            hasher.write_u32(id);
+        }
+        hasher.write_usize(self.grief.len());
+        for g in &self.grief {
+            hasher.write_u32(g.deceased_id);
+            hasher.write_u64(g.started_tick);
+            hasher.write_u64(g.ends_tick);
+            hasher.write_u32(u32::from(g.intensity));
+        }
+
+        // Memory
+        hasher.write_usize(self.memory.known_chunks.len());
+        for &chunk in &self.memory.known_chunks {
+            hasher.write_u32(chunk);
+        }
+        hasher.write_usize(self.memory.known_entities.len());
+        for k in &self.memory.known_entities {
+            hasher.write_u32(k.id);
+            hasher.write_u64(k.first_seen_tick);
+            hasher.write_u64(k.last_seen_tick);
+            hasher.write_u32(k.last_seen_x);
+            hasher.write_u32(k.last_seen_y);
+            hasher.write_u32(k.observed_ticks);
+            hasher.write_i16(k.affinity);
+            hasher.write_u64(k.last_interaction_tick);
+            hasher.write_u32(k.interaction_count);
+            hasher.write_opt_u64(k.seek_retry_after_tick);
+        }
+        hasher.write_usize(self.memory.known_resources.len());
+        for r in &self.memory.known_resources {
+            hasher.write_u32(r.x);
+            hasher.write_u32(r.y);
+            hasher.write_u32(r.kind as u32);
+            hasher.write_u64(r.last_seen_tick);
+            hasher.write_u16(r.estimated_amount);
+            hasher.write_u16(r.failed_attempts);
+            hasher.write_u64(r.avoid_until_tick);
+        }
+        hasher.write_usize(self.memory.known_dead_entities.len());
+        for &dead_id in &self.memory.known_dead_entities {
+            hasher.write_u32(dead_id);
+        }
+        hasher.write_usize(self.memory.failed_exploration.len());
+        for f in &self.memory.failed_exploration {
+            hasher.write_u32(f.chunk_index);
+            hasher.write_u64(f.retry_after_tick);
+        }
+        hasher.write_usize(self.memory.conflict_history.len());
+        for c in &self.memory.conflict_history {
+            hasher.write_u32(c.entity_id);
+            hasher.write_u64(c.last_conflict_tick);
+        }
+    }
+
     pub(in crate::simulation) fn add_grief(&mut self, state: GriefState) -> bool {
         match self
             .grief

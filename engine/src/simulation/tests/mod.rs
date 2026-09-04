@@ -4,6 +4,7 @@ mod core;
 mod dependency;
 mod dependent_protection;
 mod dependent_provisioning;
+mod determinism;
 mod events;
 mod food_sharing;
 mod genealogy;

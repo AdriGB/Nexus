@@ -1,6 +1,6 @@
 //! Persistent household identity with membership derived from living entities.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use super::time::TICKS_PER_DAY;
 use super::{
@@ -53,6 +53,37 @@ impl Household {
             .filter(|migration| migration.completed_tick.is_none())
             .map(|migration| (migration.target_x, migration.target_y))
     }
+
+    pub(super) fn hash_state(&self, hasher: &mut super::state_hash::StateHasher) {
+        hasher.write_u32(self.id);
+        hasher.write_u64(self.formed_tick);
+        hasher.write_opt_u64(self.dissolved_tick);
+        hasher.write_u32(self.residence_x);
+        hasher.write_u32(self.residence_y);
+        hasher.write_u16(self.storage.capacity());
+        for &amt in self.storage.amounts() {
+            hasher.write_u16(amt);
+        }
+        if let Some(migration) = self.migration {
+            hasher.write_bool(true);
+            hasher.write_u64(migration.started_tick);
+            hasher.write_u32(migration.proposer_id);
+            hasher.write_u32(migration.target_x);
+            hasher.write_u32(migration.target_y);
+            hasher.write_opt_u64(migration.completed_tick);
+        } else {
+            hasher.write_bool(false);
+        }
+        if let Some(inheritance) = self.inheritance {
+            hasher.write_bool(true);
+            hasher.write_u64(inheritance.resolved_tick);
+            hasher.write_u32(inheritance.decedent_id);
+            hasher.write_opt_u32(inheritance.heir_id);
+            hasher.write_opt_u32(inheritance.destination_household_id);
+        } else {
+            hasher.write_bool(false);
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -81,7 +112,7 @@ pub(super) fn plan_daily_household_migrations(
     if !tick.is_multiple_of(TICKS_PER_DAY) {
         return;
     }
-    let mut states: HashMap<u32, MigrationPlanningState> = households
+    let mut states: BTreeMap<u32, MigrationPlanningState> = households
         .iter()
         .filter(|household| household.is_active() && household.active_migration_target().is_none())
         .map(|household| {
@@ -199,7 +230,7 @@ pub(super) fn settle_completed_migrations(
     households: &mut [Household],
     tick: u64,
 ) {
-    let targets: HashMap<u32, (u32, u32)> = households
+    let targets: BTreeMap<u32, (u32, u32)> = households
         .iter()
         .filter_map(|household| {
             household
@@ -207,7 +238,7 @@ pub(super) fn settle_completed_migrations(
                 .map(|target| (household.id, target))
         })
         .collect();
-    let mut arrivals: HashMap<u32, (u32, bool)> = HashMap::new();
+    let mut arrivals: BTreeMap<u32, (u32, bool)> = BTreeMap::new();
     for entity in entities {
         let Some(household_id) = entity.household_id else {
             continue;
@@ -248,7 +279,7 @@ pub(super) fn household_stats(
         .filter(|household| household.is_active())
         .map(|household| household.id)
         .collect();
-    let mut member_counts: HashMap<u32, u32> = HashMap::new();
+    let mut member_counts: BTreeMap<u32, u32> = BTreeMap::new();
     let mut dependent_households = HashSet::new();
     let mut housed_entities = 0u32;
     for entity in entities {
@@ -527,11 +558,6 @@ pub(super) fn synchronize_dependent_memberships(
     entities: &mut [Entity],
     households: &[Household],
 ) -> Vec<HouseholdMembershipChange> {
-    let caregiver_households: HashMap<u32, Option<u32>> = entities
-        .iter()
-        .filter(|entity| entity.health > 0.0)
-        .map(|entity| (entity.id, entity.household_id))
-        .collect();
     let transitions: Vec<_> = entities
         .iter()
         .filter(|entity| {
@@ -543,8 +569,15 @@ pub(super) fn synchronize_dependent_memberships(
         })
         .filter_map(|entity| {
             let caregiver_id = entity.caregiver_id?;
-            let caregiver_household = caregiver_households.get(&caregiver_id)?;
-            Some((entity.id, *caregiver_household))
+            let caregiver_idx = entities
+                .binary_search_by_key(&caregiver_id, |e| e.id)
+                .ok()?;
+            let caregiver = &entities[caregiver_idx];
+            if caregiver.health > 0.0 {
+                Some((entity.id, caregiver.household_id))
+            } else {
+                None
+            }
         })
         .collect();
 

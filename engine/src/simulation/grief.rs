@@ -1,7 +1,3 @@
-//! Observer-specific death knowledge and temporary relationship-sensitive grief.
-
-use std::collections::HashMap;
-
 use super::autonomy::{Goal, GriefState, GRIEF_MAX_DURATION_TICKS, GRIEF_MIN_DURATION_TICKS};
 use super::{relationship_between, DeathContext, Entity, Genealogy, KinshipRelation};
 
@@ -33,16 +29,20 @@ pub(super) fn process_witnessed_deaths(
     deaths: &[DeathContext],
     tick: u64,
 ) {
-    let dead_by_id: HashMap<_, _> = deaths
-        .iter()
-        .map(|death| (death.entity_id, *death))
-        .collect();
+    if deaths.is_empty() {
+        return;
+    }
     for survivor in survivors {
         let witnessed: Vec<_> = survivor
             .mind
             .visible_entities
             .iter()
-            .filter_map(|entity_id| dead_by_id.get(entity_id).copied())
+            .filter_map(|entity_id| {
+                deaths
+                    .iter()
+                    .find(|death| death.entity_id == *entity_id)
+                    .copied()
+            })
             .collect();
         for death in witnessed {
             let newly_known = survivor.mind.memory.mark_entity_dead(death.entity_id);
