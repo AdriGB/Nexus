@@ -688,3 +688,34 @@ fn use_tree_parser_handles_groups_and_aliases() {
         vec![vec!["simulation".to_string(), "events".to_string()]]
     );
 }
+
+#[test]
+fn simulation_does_not_use_nondeterministic_apis() {
+    let map = build_module_map();
+    let forbidden_patterns = ["rand::", "thread_rng", "getrandom", "SystemTime::now"];
+    let mut violations = Vec::new();
+    for (file, mod_path) in &map {
+        if !mod_path.starts_with(&["simulation".to_string()]) {
+            continue;
+        }
+        if module_is_exempt(mod_path) {
+            continue;
+        }
+        let content = read_stripped(file);
+        for &pattern in &forbidden_patterns {
+            if content.contains(pattern) {
+                violations.push(format!(
+                    "{} ({}) contains forbidden pattern '{}'",
+                    mod_path.join("::"),
+                    file.display(),
+                    pattern
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "simulation must not depend on non-deterministic PRNGs or wall clocks:\n{}",
+        violations.join("\n")
+    );
+}

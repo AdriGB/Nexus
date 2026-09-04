@@ -262,9 +262,14 @@ impl RecentEventHistory {
         hasher.write_usize(self.events.len());
         for event in &self.events {
             hasher.write_u64(event.id.as_u64());
+            hasher.write_opt_u64(event.caused_by_event_id.map(|id| id.as_u64()));
             hasher.write_u64(event.tick);
             hasher.write_u32(event.actor_id);
             hasher.write_opt_u32(event.target_id);
+            hasher.write_usize(event.related_entity_ids.len());
+            for &id in &event.related_entity_ids {
+                hasher.write_u32(id);
+            }
             hasher.write_u32(event.location.x);
             hasher.write_u32(event.location.y);
             hasher.write_u32(match event.kind {
@@ -281,6 +286,94 @@ impl RecentEventHistory {
                 SimulationEventKind::FoodShareRefused => 11,
                 SimulationEventKind::HouseholdConflict => 12,
             });
+            hasher.write_u32(match event.cause {
+                SimulationEventCause::MutualSocialContact => 1,
+                SimulationEventCause::Born => 2,
+                SimulationEventCause::Starvation => 3,
+                SimulationEventCause::NaturalDeath => 4,
+                SimulationEventCause::AteFood => 5,
+                SimulationEventCause::ResourceFound => 6,
+                SimulationEventCause::FirstEncounter => 7,
+                SimulationEventCause::RelationshipDecay => 8,
+                SimulationEventCause::FoodShared => 9,
+                SimulationEventCause::FoodShareRefused => 10,
+                SimulationEventCause::MutualCommitment => 11,
+                SimulationEventCause::HouseholdConflict => 12,
+            });
+            match event.details {
+                SimulationEventDetails::Interaction {
+                    actor_affinity_delta,
+                    target_affinity_delta,
+                } => {
+                    hasher.write_u32(1);
+                    hasher.write_i16(actor_affinity_delta);
+                    hasher.write_i16(target_affinity_delta);
+                }
+                SimulationEventDetails::Birth { child_id } => {
+                    hasher.write_u32(2);
+                    hasher.write_u32(child_id);
+                }
+                SimulationEventDetails::Death => {
+                    hasher.write_u32(3);
+                }
+                SimulationEventDetails::Consumption { amount } => {
+                    hasher.write_u32(4);
+                    hasher.write_u16(amount);
+                }
+                SimulationEventDetails::ResourceDiscovery { kind, amount } => {
+                    hasher.write_u32(5);
+                    hasher.write_u32(kind as u32);
+                    hasher.write_u16(amount);
+                }
+                SimulationEventDetails::Encounter => {
+                    hasher.write_u32(6);
+                }
+                SimulationEventDetails::AffinityChange {
+                    previous_affinity,
+                    new_affinity,
+                    delta,
+                } => {
+                    hasher.write_u32(7);
+                    hasher.write_i16(previous_affinity);
+                    hasher.write_i16(new_affinity);
+                    hasher.write_i16(delta);
+                }
+                SimulationEventDetails::FoodShared { amount } => {
+                    hasher.write_u32(8);
+                    hasher.write_u16(amount);
+                }
+                SimulationEventDetails::FoodShareRefused => {
+                    hasher.write_u32(9);
+                }
+                SimulationEventDetails::HouseholdConflict {
+                    household_id,
+                    actor_affinity_delta,
+                    target_affinity_delta,
+                } => {
+                    hasher.write_u32(10);
+                    hasher.write_u32(household_id);
+                    hasher.write_i16(actor_affinity_delta);
+                    hasher.write_i16(target_affinity_delta);
+                }
+                SimulationEventDetails::PartnershipFormed {
+                    actor_affinity,
+                    target_affinity,
+                    compatibility_per_mille,
+                } => {
+                    hasher.write_u32(11);
+                    hasher.write_i16(actor_affinity);
+                    hasher.write_i16(target_affinity);
+                    hasher.write_u16(compatibility_per_mille);
+                }
+                SimulationEventDetails::PartnershipDissolved {
+                    actor_affinity,
+                    target_affinity,
+                } => {
+                    hasher.write_u32(12);
+                    hasher.write_i16(actor_affinity);
+                    hasher.write_i16(target_affinity);
+                }
+            }
         }
     }
 

@@ -16,7 +16,7 @@ mod physiology;
 mod pipeline;
 mod renewal;
 mod spatial;
-pub mod state_hash;
+pub(crate) mod state_hash;
 mod time;
 
 use std::collections::BTreeMap;
@@ -436,6 +436,34 @@ impl Simulation {
     #[cfg(test)]
     pub(crate) fn entities_mut(&mut self) -> &mut [Entity] {
         &mut self.entities
+    }
+
+    #[cfg(test)]
+    pub(crate) fn form_household_for_partnership(
+        &mut self,
+        first_id: u32,
+        second_id: u32,
+        tick: u64,
+    ) -> Option<u32> {
+        households::form_for_partnership(
+            &mut self.entities,
+            &mut self.households,
+            &mut self.next_household_id,
+            first_id,
+            second_id,
+            tick,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_test_lineage(&mut self, parents: &[(Option<u32>, Option<u32>)]) {
+        let mut genealogy = Genealogy::default();
+        for (entity, &(mother_id, father_id)) in self.entities.iter_mut().zip(parents) {
+            entity.mother_id = mother_id;
+            entity.father_id = father_id;
+            genealogy.register(entity.id, mother_id, father_id);
+        }
+        self.genealogy = genealogy;
     }
 
     pub(crate) fn genealogy(&self) -> &Genealogy {
