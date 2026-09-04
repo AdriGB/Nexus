@@ -506,106 +506,104 @@ pub(super) fn process_social_interactions(
             None => continue,
         };
 
-        for &b_id in &entity.mind.visible_entities {
-            if a_id >= b_id {
-                continue;
-            }
+        let start_index = entity
+            .mind
+            .visible_entities
+            .partition_point(|&b_id| b_id <= a_id);
+
+        for &b_id in &entity.mind.visible_entities[start_index..] {
             if let Some(work) = work.as_deref_mut() {
                 work.social_pairs_scanned += 1;
             }
 
-            let Ok(b_index) = entities.binary_search_by_key(&b_id, |entity| entity.id) else {
+            let Ok(b_index) = population.binary_search_by_key(&b_id, |snapshot| snapshot.id) else {
                 continue;
             };
+            let b_snapshot = &population[b_index];
 
-            let confronting = |actor: &Entity, target_id: u32| {
-                actor.mind.current_goal == Some(Goal::ConfrontHouseholdMember)
-                    && actor
-                        .mind
-                        .current_plan
-                        .iter()
-                        .filter_map(|action| action.target_entity_id())
-                        .any(|id| id == target_id)
-            };
-            if confronting(entity, b_id) || confronting(&entities[b_index], a_id) {
+            if b_snapshot.is_infant {
                 continue;
             }
 
-            let b_pos = match population.get(b_index) {
-                Some(snapshot) => (snapshot.x, snapshot.y),
-                None => continue,
-            };
-
+            let b_pos = (b_snapshot.x, b_snapshot.y);
             if manhattan(a_pos, b_pos) > SOCIAL_RADIUS {
                 continue;
             }
 
-            if entities[b_index].health <= 0.0
-                || LifeStage::from_age_ticks(entities[b_index].age_ticks) == LifeStage::Infant
-            {
+            let b_entity = &entities[b_index];
+            if b_entity.health <= 0.0 {
                 continue;
             }
+
+            let a_confronting = entity.mind.current_goal == Some(Goal::ConfrontHouseholdMember)
+                && entity
+                    .mind
+                    .current_plan
+                    .iter()
+                    .filter_map(|action| action.target_entity_id())
+                    .any(|id| id == b_id);
+            if a_confronting {
+                continue;
+            }
+
+            let b_confronting = b_entity.mind.current_goal == Some(Goal::ConfrontHouseholdMember)
+                && b_entity
+                    .mind
+                    .current_plan
+                    .iter()
+                    .filter_map(|action| action.target_entity_id())
+                    .any(|id| id == a_id);
+            if b_confronting {
+                continue;
+            }
+
             if let Some(work) = work.as_deref_mut() {
                 work.social_pairs_in_radius += 1;
             }
 
-            if entities[b_index]
-                .mind
-                .visible_entities
-                .binary_search(&a_id)
-                .is_err()
-            {
+            if b_entity.mind.visible_entities.binary_search(&a_id).is_err() {
                 continue;
             }
             if let Some(work) = work.as_deref_mut() {
                 work.social_pairs_mutual += 1;
             }
 
-            let last_a_to_b = entities[entity_index]
+            let interval = interaction_interval(&entity.personality, &b_entity.personality);
+
+            let last_a_to_b = entity
                 .mind
                 .memory
                 .known_entities
                 .binary_search_by_key(&b_id, |known| known.id)
                 .ok()
-                .map(|index| {
-                    entities[entity_index].mind.memory.known_entities[index].last_interaction_tick
-                })
+                .map(|index| entity.mind.memory.known_entities[index].last_interaction_tick)
                 .unwrap_or(0);
 
-            let last_b_to_a = entities[b_index]
+            if last_a_to_b != 0 && tick.saturating_sub(last_a_to_b) < interval {
+                continue;
+            }
+
+            let last_b_to_a = b_entity
                 .mind
                 .memory
                 .known_entities
                 .binary_search_by_key(&a_id, |known| known.id)
                 .ok()
-                .map(|index| {
-                    entities[b_index].mind.memory.known_entities[index].last_interaction_tick
-                })
+                .map(|index| b_entity.mind.memory.known_entities[index].last_interaction_tick)
                 .unwrap_or(0);
 
-            let last_interaction = last_a_to_b.max(last_b_to_a);
-            let interval = interaction_interval(
-                &entities[entity_index].personality,
-                &entities[b_index].personality,
-            );
-
-            if last_interaction != 0 && tick.saturating_sub(last_interaction) < interval {
+            if last_b_to_a != 0 && tick.saturating_sub(last_b_to_a) < interval {
                 continue;
             }
+
             if let Some(work) = work.as_deref_mut() {
                 work.social_pairs_due += 1;
             }
 
-            let compatibility = personality_compatibility(
-                &entities[entity_index].personality,
-                &entities[b_index].personality,
-            );
-            let delta_a =
-                interaction_delta(compatibility, entities[b_index].personality.cooperativeness);
-            let delta_b = interaction_delta(
-                compatibility,
-                entities[entity_index].personality.cooperativeness,
-            );
+            let compatibility =
+                personality_compatibility(&entity.personality, &b_entity.personality);
+            let delta_a = interaction_delta(compatibility, b_entity.personality.cooperativeness);
+            let delta_b = interaction_delta(compatibility, entity.personality.cooperativeness);
 
             pairs.push((
                 entity_index,
