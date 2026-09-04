@@ -178,10 +178,14 @@ pub(super) fn try_form(
 }
 
 pub(super) fn clear_missing_partners(entities: &mut [Entity]) {
-    let alive: std::collections::HashSet<u32> = entities.iter().map(|entity| entity.id).collect();
-    for entity in entities {
-        if entity.partner_id.is_some_and(|id| !alive.contains(&id)) {
-            entity.partner_id = None;
+    for i in 0..entities.len() {
+        if let Some(partner_id) = entities[i].partner_id {
+            if entities
+                .binary_search_by_key(&partner_id, |e| e.id)
+                .is_err()
+            {
+                entities[i].partner_id = None;
+            }
         }
     }
 }

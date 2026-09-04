@@ -229,11 +229,11 @@ function Get-InformationalBenchmarkMarkdown {
         $lines.Add("|---|---|---:|---:|---:|---:|---|")
         foreach ($item in $Slowdowns) {
             $level = if ($item.Level -eq "Warning") { "Warning" } else { "Info" }
-            $explained = if ([string]::IsNullOrWhiteSpace($item.Explanation)) { "—" } else { $item.Explanation }
+            $explained = if ([string]::IsNullOrWhiteSpace($item.Explanation)) { "$([char]0x2014)" } else { $item.Explanation }
             $lines.Add("| $level | $($item.Name) | $(Format-Milliseconds $item.BaselineMeanUs) | $(Format-Milliseconds $item.CurrentMeanUs) | $(Format-Percent $item.MeanDeltaPercent) | $(Format-Percent $item.P95DeltaPercent) | $explained |")
         }
     }
-    $lines.Add(""); $lines.Add("Informational only — this does not affect job status. The 10% and 20% levels may include runner noise. Phase and counter attribution ranks absolute increases and never changes job status.")
+    $lines.Add(""); $lines.Add("Informational only $([char]0x2014) this does not affect job status. The 10% and 20% levels may include runner noise. Phase and counter attribution ranks absolute increases and never changes job status.")
     return $lines -join [Environment]::NewLine
 }
 
