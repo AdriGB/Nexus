@@ -740,6 +740,19 @@ pub(super) fn plan_goal(
             entity.activity = super::super::entity::EntityActivity::SeekingFood;
         }
         Goal::AcquireResource => {
+            let priority = if entity.hunger >= URGENT_HUNGER_THRESHOLD {
+                crate::pathfinding::SearchPriority::Critical
+            } else {
+                crate::pathfinding::SearchPriority::Standard
+            };
+            if !pathfinding_workspace.can_search(priority) {
+                entity
+                    .mind
+                    .set_plan(Goal::Rest, vec![Action::Wait, Action::Wait], tick);
+                entity.activity = super::super::entity::EntityActivity::Resting;
+                return;
+            }
+
             let kind = ResourceKind::Food;
             let stage = LifeStage::from_age_ticks(entity.age_ticks);
             let personal_food = entity.inventory.amount(ItemKind::Food);
@@ -773,11 +786,12 @@ pub(super) fn plan_goal(
                         entity.activity = super::super::entity::EntityActivity::SeekingFood;
                         return;
                     }
-                    if let Some(path) = pathfinding::find_path_with_workspace(
+                    if let Some(path) = pathfinding::find_path_with_workspace_and_limit(
                         pathfinding_workspace,
                         world,
                         origin,
                         home,
+                        Some(pathfinding::STANDARD_PATHFINDING_LIMIT),
                     ) {
                         entity.path = path.into_iter().skip(1).collect();
                         entity.path_index = 0;
@@ -795,12 +809,18 @@ pub(super) fn plan_goal(
                 }
             }
             let mut targets = entity.mind.remembered_resource_targets(origin, tick, kind);
+            let mut attempts = 0;
             while let Some(std::cmp::Reverse((_, _, target))) = targets.pop() {
-                if let Some(path) = pathfinding::find_path_with_workspace(
+                if attempts >= 3 {
+                    break;
+                }
+                attempts += 1;
+                if let Some(path) = pathfinding::find_path_with_workspace_and_limit(
                     pathfinding_workspace,
                     world,
                     origin,
                     target,
+                    Some(pathfinding::STANDARD_PATHFINDING_LIMIT),
                 ) {
                     entity.path = path.into_iter().skip(1).collect();
                     entity.path_index = 0;
@@ -849,9 +869,13 @@ pub(super) fn plan_goal(
                     .mind
                     .set_plan(Goal::MigrateHousehold, vec![Action::Wait], tick);
                 entity.activity = super::super::entity::EntityActivity::Resting;
-            } else if let Some(path) =
-                pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target)
-            {
+            } else if let Some(path) = pathfinding::find_path_with_workspace_and_limit(
+                pathfinding_workspace,
+                world,
+                origin,
+                target,
+                Some(pathfinding::STANDARD_PATHFINDING_LIMIT),
+            ) {
                 entity.path = path.into_iter().skip(1).collect();
                 entity.path_index = 0;
                 entity.mind.set_plan(
@@ -889,11 +913,12 @@ pub(super) fn plan_goal(
                 .map(|context| context.migration_target.unwrap_or(context.residence))
                 .filter(|home| *home != origin)
             {
-                if let Some(path) = pathfinding::find_path_with_workspace(
+                if let Some(path) = pathfinding::find_path_with_workspace_and_limit(
                     pathfinding_workspace,
                     world,
                     origin,
                     home,
+                    Some(pathfinding::STANDARD_PATHFINDING_LIMIT),
                 ) {
                     entity.path = path.into_iter().skip(1).collect();
                     let mut plan = vec![Action::MoveTo(home.0, home.1)];

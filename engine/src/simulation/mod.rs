@@ -889,6 +889,10 @@ impl Simulation {
         let caregiver_index = &self.caregiver_index;
         let spatial_grid = &self.spatial_grid;
         let pathfinding_workspace = &mut self.pathfinding_workspace;
+        let population_len = self.entities.len();
+        let max_nodes = (population_len * 50).max(10_000);
+        let max_searches = (population_len / 4).max(50);
+        pathfinding_workspace.reset_tick_budget(max_nodes, max_searches);
         let households = &self.households;
 
         let mut consumed = 0u64;
