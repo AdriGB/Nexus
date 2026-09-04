@@ -405,3 +405,36 @@ fn second_cousins_and_unrelated_adults_can_still_form_partnerships() {
     assert!(can_form(7, 8, &second_cousins));
     assert!(can_form(1, 2, &Genealogy::default()));
 }
+
+#[test]
+fn try_form_rejects_unqualified_pairs_regardless_of_genealogy() {
+    let mut entities = qualified_entities(1, 2);
+    entities[0].partner_id = Some(99);
+    assert!(
+        super::super::partnerships::try_form(&mut entities, &Genealogy::default(), 1, 2).is_none()
+    );
+
+    let mut entities = qualified_entities(1, 2);
+    entities[0].health = 0.0;
+    assert!(
+        super::super::partnerships::try_form(&mut entities, &Genealogy::default(), 1, 2).is_none()
+    );
+
+    let mut entities = qualified_entities(1, 2);
+    entities[0].age_ticks = 0;
+    assert!(
+        super::super::partnerships::try_form(&mut entities, &Genealogy::default(), 1, 2).is_none()
+    );
+
+    let mut entities = qualified_entities(1, 2);
+    entities[0].mind.memory.known_entities[0].interaction_count = 2;
+    assert!(
+        super::super::partnerships::try_form(&mut entities, &Genealogy::default(), 1, 2).is_none()
+    );
+
+    let mut entities = qualified_entities(1, 2);
+    entities[0].mind.memory.known_entities[0].affinity = 0;
+    assert!(
+        super::super::partnerships::try_form(&mut entities, &Genealogy::default(), 1, 2).is_none()
+    );
+}
