@@ -15,8 +15,8 @@ use super::events::{EventLocation, PendingSimulationEvent};
 use super::inventory::ItemKind;
 use super::{Simulation, SimulationEventCause, SimulationEventDetails, SimulationEventKind};
 
-pub(crate) const GRATITUDE_DELTA: i16 = 20;
-pub(crate) const RESENTMENT_DELTA: i16 = -15;
+const GRATITUDE_DELTA: i16 = 20;
+const RESENTMENT_DELTA: i16 = -15;
 
 /// Resultado explícito de un intento (contrato A03). `moved` es la cantidad
 /// realmente transferida (0 si `willing` fue false o sin stock/capacidad).
@@ -32,11 +32,7 @@ struct FoodShareOutcome {
 /// Pure willingness rule: feeds-own-dependent is always willing; otherwise
 /// cooperativeness (0.0..1.0), affinity (-1000..1000) and close-relationship
 /// role determine the threshold.
-pub(crate) fn is_willing(
-    actor: &Entity,
-    target: &Entity,
-    target_is_dependent_of_actor: bool,
-) -> bool {
+fn is_willing(actor: &Entity, target: &Entity, target_is_dependent_of_actor: bool) -> bool {
     if target_is_dependent_of_actor {
         return true;
     }

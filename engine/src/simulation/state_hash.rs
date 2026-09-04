@@ -62,6 +62,11 @@ impl StateHasher {
     }
 
     #[inline]
+    pub(crate) fn write_u8(&mut self, val: u8) {
+        self.write_u64(u64::from(val));
+    }
+
+    #[inline]
     pub(crate) fn write_i16(&mut self, val: i16) {
         self.write_u64(val as u16 as u64);
     }
@@ -114,6 +119,10 @@ pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> Simul
     let mut hasher = StateHasher::new();
 
     // 1. Simulation scalar metadata & monotonic IDs
+    // Note on `paused`: `paused` is an interactive simulation driver state, not an
+    // intrinsic evolutionary state component. Two simulations with the same logical state
+    // will hash identically whether paused or active. When persisting snapshots (Phase 2.11.8),
+    // `paused` is stored separately in the snapshot envelope.
     hasher.write_u64(simulation.tick);
     hasher.write_u64(simulation.seed);
     hasher.write_u32(simulation.next_entity_id);
@@ -123,7 +132,20 @@ pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> Simul
     hasher.write_u64(simulation.deaths);
     hasher.write_u64(simulation.food_consumed);
 
-    // 2. Mutable world resource deposits
+    // 2. World dimensions, tile terrain, and renewable resources
+    hasher.write_u32(world.width);
+    hasher.write_u32(world.height);
+    for tile in &world.tiles {
+        hasher.write_u8(tile.terrain as u8);
+    }
+    hasher.write_usize(world.renewable_resources.len());
+    for renewable in &world.renewable_resources {
+        hasher.write_usize(renewable.index);
+        hasher.write_u32(renewable.kind as u32);
+        hasher.write_u16(renewable.capacity);
+    }
+
+    // 3. Mutable world resource deposits
     for (index, deposit) in world.resources.iter().enumerate() {
         if let Some(deposit) = deposit {
             hasher.write_usize(index);

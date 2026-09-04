@@ -168,6 +168,20 @@ fn mutation_tripwire_detects_state_perturbations() {
             "world resource perturbation was not caught by state hash"
         );
     }
+
+    // Perturbation 5: modify a tile's terrain in the world
+    let mut world_mutated = world.clone();
+    let current_terrain = world_mutated.tiles[0].terrain;
+    world_mutated.tiles[0].terrain = if current_terrain == crate::world::Terrain::Mountain {
+        crate::world::Terrain::Plains
+    } else {
+        crate::world::Terrain::Mountain
+    };
+    assert_ne!(
+        base_hash,
+        sim.state_hash(&world_mutated),
+        "tile terrain perturbation was not caught by state hash"
+    );
 }
 
 #[test]
@@ -180,7 +194,53 @@ fn golden_hash_snapshot_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "ce7be0b897bcf4a6",
+        "c678ee41939747d7",
         "golden state hash drifted! An unapproved change affected deterministic simulation state"
+    );
+}
+
+#[test]
+fn golden_hash_households_pin() {
+    let mut world = sample_grid();
+    let mut sim = Simulation::with_population(42, &world, POPULATION);
+    sim.form_household_for_partnership(1, 2, 0);
+    sim.form_household_for_partnership(3, 4, 0);
+    for _ in 0..50 {
+        sim.step(&mut world);
+    }
+    let hash = sim.state_hash(&world);
+    assert_eq!(
+        hash.to_string(),
+        "3cd0c6c853d3d902",
+        "households golden state hash drifted!"
+    );
+}
+
+#[test]
+fn golden_hash_lineage_pin() {
+    let mut world = sample_grid();
+    let mut sim = Simulation::with_population(42, &world, POPULATION);
+    let parents = [
+        (None, None),
+        (None, None),
+        (None, None),
+        (None, None),
+        (Some(1), Some(2)),
+        (Some(1), Some(2)),
+        (Some(3), Some(4)),
+        (Some(5), Some(7)),
+        (Some(5), Some(7)),
+        (Some(6), Some(7)),
+    ];
+    sim.seed_test_lineage(&parents);
+
+    for _ in 0..50 {
+        sim.step(&mut world);
+    }
+    let hash = sim.state_hash(&world);
+    assert_eq!(
+        hash.to_string(),
+        "cc1b21e40baca8c1",
+        "lineage golden state hash drifted!"
     );
 }
