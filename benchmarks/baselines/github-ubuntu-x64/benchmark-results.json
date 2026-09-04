@@ -19,7 +19,7 @@
           "kind": "baseline"
         }
       },
-      "state_hash": "49a47d22acbc885a",
+      "state_hash": "bc43e2e2857d701a",
       "summary": {
         "samples": 100,
         "total": {
@@ -168,7 +168,7 @@
           "kind": "baseline"
         }
       },
-      "state_hash": "52c69b502a9cca72",
+      "state_hash": "3a870e57a28b850d",
       "summary": {
         "samples": 100,
         "total": {
@@ -317,7 +317,7 @@
           "kind": "baseline"
         }
       },
-      "state_hash": "1ecd0f14a5780388",
+      "state_hash": "3da7b5c04c70ff13",
       "summary": {
         "samples": 100,
         "total": {
@@ -468,7 +468,7 @@
           "enclosed_walkable_arena": true
         }
       },
-      "state_hash": "4516bafae9bb1edc",
+      "state_hash": "de1fde2f2dfd13c7",
       "summary": {
         "samples": 100,
         "total": {
@@ -619,7 +619,7 @@
           "food_per_household": 100
         }
       },
-      "state_hash": "aece87b38be3b29f",
+      "state_hash": "f2b4f89278d06de7",
       "summary": {
         "samples": 100,
         "total": {
@@ -769,7 +769,7 @@
           "generations": 10
         }
       },
-      "state_hash": "152f38f9fa034027",
+      "state_hash": "78f2752e7ee6f68d",
       "summary": {
         "samples": 100,
         "total": {
@@ -982,7 +982,7 @@
           "food_capacity": 5000
         }
       },
-      "state_hash": "6379d1a6c202a152",
+      "state_hash": "04ce4e12039c8ccd",
       "overall": {
         "samples": 8760,
         "total": {
@@ -2756,7 +2756,7 @@
           "known_food_targets": 0
         }
       },
-      "state_hash": "9039ef3e291a1f5d",
+      "state_hash": "96ee08e4ca261612",
       "summary": {
         "samples": 100,
         "total": {
@@ -2906,7 +2906,7 @@
           "food_retention_stride": 8
         }
       },
-      "state_hash": "d019bc301a017b5d",
+      "state_hash": "46842268084923f7",
       "summary": {
         "samples": 100,
         "total": {

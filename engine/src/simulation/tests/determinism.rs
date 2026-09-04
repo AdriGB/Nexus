@@ -196,7 +196,7 @@ fn golden_hash_snapshot_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "da7cf5dfe4fc4647",
+        "be22c30e48d6e2c3",
         "golden state hash drifted! An unapproved change affected deterministic simulation state"
     );
 }
@@ -242,7 +242,7 @@ fn golden_hash_lineage_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "820e591f3d5a7861",
+        "1000e3ba396acf6a",
         "lineage golden state hash drifted!"
     );
 }

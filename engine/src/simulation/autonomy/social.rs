@@ -381,6 +381,14 @@ pub(super) fn plan_socialize(
     let origin = (entity.x, entity.y);
     let pressure = social_need_pressure(entity.hunger, entity.health);
 
+    if !pathfinding_workspace.can_search(crate::pathfinding::SearchPriority::Discretionary) {
+        entity
+            .mind
+            .set_plan(Goal::Rest, vec![Action::Wait, Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+        return;
+    }
+
     let Some(target_id) = select_social_target_with_identity(
         &entity.mind,
         origin,
@@ -436,9 +444,18 @@ pub(super) fn plan_socialize(
         return;
     }
 
-    if let Some(path) =
-        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target_pos)
-    {
+    let search_limit = if is_visible {
+        pathfinding::LOCAL_PATHFINDING_LIMIT
+    } else {
+        pathfinding::STANDARD_PATHFINDING_LIMIT
+    };
+    if let Some(path) = pathfinding::find_path_with_workspace_and_limit(
+        pathfinding_workspace,
+        world,
+        origin,
+        target_pos,
+        Some(search_limit),
+    ) {
         entity.path = path.into_iter().skip(1).collect();
         entity.path_index = 0;
         entity.mind.set_plan(
@@ -454,7 +471,11 @@ pub(super) fn plan_socialize(
         if !is_visible {
             entity.mind.memory.mark_failed_social_seek(target_id, tick);
         }
-        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.mind.set_plan(
+            Goal::Rest,
+            vec![Action::Wait, Action::Wait, Action::Wait, Action::Wait],
+            tick,
+        );
         entity.activity = EntityActivity::Resting;
     }
 }

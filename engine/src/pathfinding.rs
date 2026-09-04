@@ -35,6 +35,21 @@ impl Ord for OpenNode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SearchPriority {
+    Critical,
+    Standard,
+    Discretionary,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PathfindingBudget {
+    pub max_nodes: usize,
+    pub max_searches: usize,
+    pub nodes_expanded: usize,
+    pub searches_done: usize,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PathfindingWorkspace {
     open: BinaryHeap<OpenNode>,
@@ -45,11 +60,40 @@ pub(crate) struct PathfindingWorkspace {
     count_work: bool,
     counted_searches: u64,
     counted_nodes_expanded: u64,
+    budget: Option<PathfindingBudget>,
 }
 
 impl PathfindingWorkspace {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn reset_tick_budget(&mut self, max_nodes: usize, max_searches: usize) {
+        self.budget = Some(PathfindingBudget {
+            max_nodes,
+            max_searches,
+            nodes_expanded: 0,
+            searches_done: 0,
+        });
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn clear_tick_budget(&mut self) {
+        self.budget = None;
+    }
+
+    pub(crate) fn can_search(&self, priority: SearchPriority) -> bool {
+        match priority {
+            SearchPriority::Critical => true,
+            SearchPriority::Standard | SearchPriority::Discretionary => {
+                if let Some(budget) = self.budget {
+                    budget.searches_done < budget.max_searches
+                        && budget.nodes_expanded < budget.max_nodes
+                } else {
+                    true
+                }
+            }
+        }
     }
 
     pub(crate) fn start_counting(&mut self, enabled: bool) {
@@ -117,7 +161,10 @@ pub(crate) fn step_cost(grid: &Grid, from: (u32, u32), to: (u32, u32)) -> Option
     Some(base_cost * terrain_cost)
 }
 
-fn find_path_with_workspace_and_limit(
+pub(crate) const LOCAL_PATHFINDING_LIMIT: usize = 1_000;
+pub(crate) const STANDARD_PATHFINDING_LIMIT: usize = 10_000;
+
+pub(crate) fn find_path_with_workspace_and_limit(
     workspace: &mut PathfindingWorkspace,
     grid: &Grid,
     start: (u32, u32),
@@ -126,6 +173,9 @@ fn find_path_with_workspace_and_limit(
 ) -> Option<Vec<(u32, u32)>> {
     if workspace.count_work {
         workspace.counted_searches = workspace.counted_searches.saturating_add(1);
+    }
+    if let Some(budget) = workspace.budget.as_mut() {
+        budget.searches_done = budget.searches_done.saturating_add(1);
     }
     if !grid.get(start.0, start.1)?.terrain.is_walkable()
         || !grid.get(goal.0, goal.1)?.terrain.is_walkable()
@@ -164,6 +214,12 @@ fn find_path_with_workspace_and_limit(
     while let Some(current) = workspace.open.pop() {
         if workspace.count_work {
             workspace.counted_nodes_expanded = workspace.counted_nodes_expanded.saturating_add(1);
+        }
+        if let Some(budget) = workspace.budget.as_mut() {
+            budget.nodes_expanded = budget.nodes_expanded.saturating_add(1);
+            if budget.nodes_expanded > budget.max_nodes {
+                return None;
+            }
         }
         iterations += 1;
         if iterations > max_iters {

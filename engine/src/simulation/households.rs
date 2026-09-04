@@ -372,6 +372,9 @@ pub(super) fn settle_basic_inheritances(
     dissolutions: &[HouseholdDissolution],
     tick: u64,
 ) -> Vec<HouseholdInheritanceSettlement> {
+    if dissolutions.is_empty() || deaths.is_empty() {
+        return Vec::new();
+    }
     let newly_dissolved: HashSet<u32> = dissolutions.iter().map(|item| item.household_id).collect();
     let living: HashSet<u32> = entities.iter().map(|entity| entity.id).collect();
     let mut settlements = Vec::new();

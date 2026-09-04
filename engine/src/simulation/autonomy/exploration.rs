@@ -12,27 +12,51 @@ pub(super) fn plan_exploration(
     let origin = (entity.x, entity.y);
     entity.mind.memory.prune_exploration_failures(tick);
 
+    if !pathfinding_workspace.can_search(crate::pathfinding::SearchPriority::Discretionary) {
+        entity
+            .mind
+            .set_plan(Goal::Rest, vec![Action::Wait, Action::Wait], tick);
+        entity.activity = EntityActivity::Resting;
+        return;
+    }
+
     let Some(target) = exploration_target(&entity.mind, world, origin, entity.id, tick) else {
-        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.mind.set_plan(
+            Goal::Rest,
+            vec![Action::Wait, Action::Wait, Action::Wait, Action::Wait],
+            tick,
+        );
         entity.activity = EntityActivity::Resting;
         return;
     };
-    let Some(path) =
-        pathfinding::find_path_with_workspace(pathfinding_workspace, world, origin, target)
-    else {
+    let Some(path) = pathfinding::find_path_with_workspace_and_limit(
+        pathfinding_workspace,
+        world,
+        origin,
+        target,
+        Some(pathfinding::LOCAL_PATHFINDING_LIMIT),
+    ) else {
         let failed_chunk = chunk_index(world, target.0, target.1);
         entity
             .mind
             .memory
             .mark_exploration_failed(failed_chunk, tick);
-        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.mind.set_plan(
+            Goal::Rest,
+            vec![Action::Wait, Action::Wait, Action::Wait, Action::Wait],
+            tick,
+        );
         entity.activity = EntityActivity::Resting;
         return;
     };
     entity.path = path.into_iter().skip(1).collect();
     entity.path_index = 0;
     if entity.path.is_empty() {
-        entity.mind.set_plan(Goal::Rest, vec![Action::Wait], tick);
+        entity.mind.set_plan(
+            Goal::Rest,
+            vec![Action::Wait, Action::Wait, Action::Wait, Action::Wait],
+            tick,
+        );
         entity.activity = EntityActivity::Resting;
     } else {
         entity.mind.set_plan(
