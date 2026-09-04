@@ -341,6 +341,7 @@ struct AutonomyBreakdown {
 struct BenchmarkResult {
     schema_version: u32,
     scenario: BenchmarkScenario,
+    state_hash: String,
     summary: PerformanceSummary,
     autonomy_breakdown: AutonomyBreakdown,
 }
@@ -357,6 +358,7 @@ struct LongRunWindow {
 struct LongRunResult {
     schema_version: u32,
     scenario: BenchmarkScenario,
+    state_hash: String,
     overall: PerformanceSummary,
     windows: Vec<LongRunWindow>,
     /// Autonomy breakdown measured **after** the last window, not averaged over
@@ -415,11 +417,13 @@ fn run_scenario(scenario: BenchmarkScenario) -> Result<BenchmarkResult, String> 
         simulation.step(&mut world);
     }
     let summary = simulation.profile_run(&mut world, scenario.measured_ticks);
+    let state_hash = simulation.state_hash(&world).to_string();
     let autonomy_breakdown =
         profile_autonomy_breakdown(&mut simulation, &mut world, AUTONOMY_PROFILE_TICKS);
     Ok(BenchmarkResult {
         schema_version: BENCHMARK_SCHEMA_VERSION,
         scenario,
+        state_hash,
         summary,
         autonomy_breakdown,
     })
@@ -562,6 +566,7 @@ fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, Strin
         });
     }
     let overall_summary = overall.summarize();
+    let state_hash = simulation.state_hash(&world).to_string();
     // Profiled after the windows, so the breakdown sees the population and the
     // lineage the run actually produced. See the field docs on `LongRunResult`.
     let autonomy_breakdown =
@@ -569,6 +574,7 @@ fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, Strin
     Ok(LongRunResult {
         schema_version: BENCHMARK_SCHEMA_VERSION,
         scenario,
+        state_hash,
         overall: overall_summary,
         windows,
         autonomy_breakdown,
@@ -1404,6 +1410,8 @@ mod tests {
         assert_eq!(json["scenario"]["name"], TEST_SCENARIO.name);
         assert_eq!(json["scenario"]["workload"]["kind"], "baseline");
         assert_eq!(json["summary"]["samples"], TEST_SCENARIO.measured_ticks);
+        assert_eq!(result.state_hash.len(), 16);
+        assert_eq!(json["state_hash"], result.state_hash);
     }
 
     #[test]
@@ -1412,6 +1420,8 @@ mod tests {
         let second = run_scenario(TEST_SCENARIO).unwrap();
 
         assert_eq!(first.scenario, second.scenario);
+        assert_eq!(first.state_hash, second.state_hash);
+        assert!(!first.state_hash.is_empty());
         assert_eq!(first.summary.work_total, second.summary.work_total);
         assert_eq!(first.summary.state_final, second.summary.state_final);
         assert_eq!(first.summary.state_peak, second.summary.state_peak);

@@ -115,14 +115,25 @@ impl StateHasher {
     }
 }
 
+pub(crate) const HASH_VERSION: u64 = 1;
+
+const TAG_META: u8 = 1;
+const TAG_GRID: u8 = 2;
+const TAG_ENTITY: u8 = 3;
+const TAG_HOUSEHOLD: u8 = 4;
+const TAG_GENEALOGY: u8 = 5;
+const TAG_EVENT: u8 = 6;
+
 pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> SimulationStateHash {
     let mut hasher = StateHasher::new();
+    hasher.write_u64(HASH_VERSION);
 
     // 1. Simulation scalar metadata & monotonic IDs
     // Note on `paused`: `paused` is an interactive simulation driver state, not an
     // intrinsic evolutionary state component. Two simulations with the same logical state
     // will hash identically whether paused or active. When persisting snapshots (Phase 2.11.8),
     // `paused` is stored separately in the snapshot envelope.
+    hasher.write_u8(TAG_META);
     hasher.write_u64(simulation.tick);
     hasher.write_u64(simulation.seed);
     hasher.write_u32(simulation.next_entity_id);
@@ -132,7 +143,8 @@ pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> Simul
     hasher.write_u64(simulation.deaths);
     hasher.write_u64(simulation.food_consumed);
 
-    // 2. World dimensions, tile terrain, and renewable resources
+    // 2. World dimensions, tile terrain, renewable resources, and deposits
+    hasher.write_u8(TAG_GRID);
     hasher.write_u32(world.width);
     hasher.write_u32(world.height);
     for tile in &world.tiles {
@@ -145,7 +157,7 @@ pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> Simul
         hasher.write_u16(renewable.capacity);
     }
 
-    // 3. Mutable world resource deposits
+    // Mutable world resource deposits
     for (index, deposit) in world.resources.iter().enumerate() {
         if let Some(deposit) = deposit {
             hasher.write_usize(index);
@@ -155,21 +167,25 @@ pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> Simul
     }
 
     // 3. Living entities (ordered by ID)
+    hasher.write_u8(TAG_ENTITY);
     hasher.write_usize(simulation.entities.len());
     for entity in &simulation.entities {
         entity.hash_state(&mut hasher);
     }
 
     // 4. Households (ordered by ID)
+    hasher.write_u8(TAG_HOUSEHOLD);
     hasher.write_usize(simulation.households.len());
     for household in &simulation.households {
         household.hash_state(&mut hasher);
     }
 
     // 5. Lineage genealogy
+    hasher.write_u8(TAG_GENEALOGY);
     simulation.genealogy.hash_state(&mut hasher);
 
     // 6. Recent event history ring
+    hasher.write_u8(TAG_EVENT);
     simulation.recent_events.hash_state(&mut hasher);
 
     hasher.finish()

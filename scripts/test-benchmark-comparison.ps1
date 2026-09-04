@@ -25,7 +25,7 @@ function New-Summary([double]$Value) {
     $summary.state_final = New-CountMap $script:StateGauges $Value
     return $summary
 }
-function New-Result([string]$Name, [double]$Value, [bool]$LongRun = $false) {
+function New-Result([string]$Name, [double]$Value, [bool]$LongRun = $false, [string]$StateHash = "0123456789abcdef") {
     $result = [ordered]@{
         schema_version = 3
         scenario = [ordered]@{
@@ -33,6 +33,7 @@ function New-Result([string]$Name, [double]$Value, [bool]$LongRun = $false) {
             world = [ordered]@{ width = 64; height = 64; sea_level = 0.35 }
             workload = [ordered]@{ kind = "baseline" }
         }
+        state_hash = $StateHash
     }
     if ($LongRun) {
         $result.overall = New-Summary $Value
@@ -59,6 +60,7 @@ try {
     Assert-Equal 2 $comparison.summary.compared_scenarios "Subset count differs."
     Assert-Equal "alpha" $comparison.scenarios[0].name "Scenario order differs."
     Assert-Equal "beta" $comparison.scenarios[1].name "Scenario order differs."
+    Assert-Equal "0123456789abcdef" $comparison.scenarios[0].state_hash "Scenario state_hash differs."
     Assert-Equal 10 $comparison.scenarios[0].timings.total.mean.delta_percent "Positive delta differs."
     Assert-Equal -10 $comparison.scenarios[1].timings.total.mean.delta_percent "Negative delta differs."
     foreach ($category in $script:TimingCategories) {
@@ -141,6 +143,24 @@ try {
     Write-Aggregate $baselinePath "full" @($base)
     Write-Aggregate $currentPath "quick" @($current)
     Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Scenario schema mismatch was accepted."
+
+    $missingHashBase = New-Result "alpha" 100
+    $missingHashBase.Remove("state_hash")
+    Write-Aggregate $baselinePath "full" @($missingHashBase)
+    Write-Aggregate $currentPath "quick" @((New-Result "alpha" 100))
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Missing baseline state_hash was accepted."
+
+    $missingHashCurrent = New-Result "alpha" 100
+    $missingHashCurrent.Remove("state_hash")
+    Write-Aggregate $baselinePath "full" @((New-Result "alpha" 100))
+    Write-Aggregate $currentPath "quick" @($missingHashCurrent)
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Missing current state_hash was accepted."
+
+    $mismatchBase = New-Result "alpha" 100 -StateHash "1111111111111111"
+    $mismatchCurrent = New-Result "alpha" 100 -StateHash "2222222222222222"
+    Write-Aggregate $baselinePath "full" @($mismatchBase)
+    Write-Aggregate $currentPath "quick" @($mismatchCurrent)
+    Assert-Throws { Write-BenchmarkComparison $baselinePath $currentPath $outputPath } "Mismatched state_hash was accepted."
 
     Write-Host "Benchmark comparison tests passed." -ForegroundColor Green
 }

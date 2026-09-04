@@ -62,6 +62,15 @@ function Assert-CompatibleScenario {
     if ($Baseline.schema_version -ne $Current.schema_version) {
         throw "Scenario '$Name' is incompatible with baseline: scenario schema_version differs ($($Baseline.schema_version) vs $($Current.schema_version))."
     }
+    if ($Baseline.PSObject.Properties.Name -notcontains "state_hash" -or [string]::IsNullOrWhiteSpace($Baseline.state_hash)) {
+        throw "Scenario '$Name' is incompatible with baseline: baseline is missing state_hash."
+    }
+    if ($Current.PSObject.Properties.Name -notcontains "state_hash" -or [string]::IsNullOrWhiteSpace($Current.state_hash)) {
+        throw "Scenario '$Name' is incompatible with baseline: current run is missing state_hash."
+    }
+    if ($Baseline.state_hash -cne $Current.state_hash) {
+        throw "Scenario '$Name' state_hash mismatch: baseline $($Baseline.state_hash) != current $($Current.state_hash)."
+    }
     foreach ($field in @("seed", "population", "warmup_ticks", "measured_ticks", "world", "workload")) {
         $baselineValue = $Baseline.scenario.$field | ConvertTo-Json -Compress -Depth 100
         $currentValue = $Current.scenario.$field | ConvertTo-Json -Compress -Depth 100
@@ -178,6 +187,7 @@ function Write-BenchmarkComparison {
             (Get-RequiredCountMap $currentSummary $name "state_peak" $script:StateGauges)
         $scenarios += [ordered]@{
             name = $name
+            state_hash = $currentResult.state_hash
             timings = $timings
             work = $work
             state_peak = $statePeak

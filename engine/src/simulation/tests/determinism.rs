@@ -66,12 +66,14 @@ fn continuous_step_matches_batched_step_state_hash() {
         sim_continuous.step(&mut world_continuous);
     }
 
-    // 10 blocks of 10 steps
+    // 10 blocks of 10 steps via advance (must call resume() first as paused defaults to true)
+    sim_batched.resume();
     for _ in 0..10 {
-        for _ in 0..10 {
-            sim_batched.step(&mut world_batched);
-        }
+        sim_batched.advance(10, &mut world_batched);
     }
+
+    assert_eq!(sim_continuous.tick(), 100);
+    assert_eq!(sim_batched.tick(), 100);
 
     let hash_c = sim_continuous.state_hash(&world_continuous);
     let hash_b = sim_batched.state_hash(&world_batched);
@@ -194,7 +196,7 @@ fn golden_hash_snapshot_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "c678ee41939747d7",
+        "da7cf5dfe4fc4647",
         "golden state hash drifted! An unapproved change affected deterministic simulation state"
     );
 }
@@ -211,7 +213,7 @@ fn golden_hash_households_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "3cd0c6c853d3d902",
+        "44cd20c95b0b6981",
         "households golden state hash drifted!"
     );
 }
@@ -240,7 +242,7 @@ fn golden_hash_lineage_pin() {
     let hash = sim.state_hash(&world);
     assert_eq!(
         hash.to_string(),
-        "cc1b21e40baca8c1",
+        "820e591f3d5a7861",
         "lineage golden state hash drifted!"
     );
 }

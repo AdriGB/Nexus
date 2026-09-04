@@ -189,7 +189,7 @@ function Get-BenchmarkGateMarkdown {
         foreach ($outcome in $Outcomes) {
             $retryCell = if ($null -eq (Get-OptionalProperty $outcome "RetryMeanDeltaPercent")) { "n/a" } else { Format-Percent $outcome.RetryMeanDeltaPercent }
             $explained = Get-OptionalProperty $outcome "Explanation"
-            if ([string]::IsNullOrWhiteSpace([string]$explained)) { $explained = "—" }
+            if ([string]::IsNullOrWhiteSpace([string]$explained)) { $explained = "$([char]0x2014)" }
             $lines.Add("| $($outcome.Name) | $(Format-Percent $outcome.FirstMeanDeltaPercent) | $retryCell | $($outcome.Verdict) | $explained |")
         }
         $confirmedCount = @($Outcomes | Where-Object { $_.Verdict -eq "Confirmed" }).Count
