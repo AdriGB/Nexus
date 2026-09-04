@@ -10,6 +10,8 @@ mod resources;
 mod simulation;
 mod world;
 
+pub use simulation::SimulationStateHash;
+
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -309,5 +311,9 @@ impl WorldBridge {
 
     pub fn region_stats(&self) -> String {
         bridge::region_stats_json(&self.grid)
+    }
+
+    pub fn state_hash(&self) -> String {
+        self.simulation.state_hash(&self.grid).to_string()
     }
 }

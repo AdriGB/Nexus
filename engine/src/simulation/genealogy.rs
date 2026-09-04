@@ -69,4 +69,13 @@ impl Genealogy {
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
+
+    pub(super) fn hash_state(&self, hasher: &mut super::state_hash::StateHasher) {
+        hasher.write_usize(self.records.len());
+        for record in &self.records {
+            hasher.write_u32(record.entity_id);
+            hasher.write_opt_u32(record.mother_id);
+            hasher.write_opt_u32(record.father_id);
+        }
+    }
 }

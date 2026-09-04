@@ -357,13 +357,13 @@ Solo comienza después de establecer benchmarks reproducibles.
 
 ## Phase 2.11.7 — Determinism and state integrity
 
-* [ ] Definir `SimulationStateHash` canónico y determinista
-* [ ] Crear golden scenarios con hashes conocidos
-* [ ] Verificar ejecución completa y por bloques
-* [ ] Verificar profiling activado y desactivado
+* [x] Definir `SimulationStateHash` canónico y determinista
+* [x] Crear golden scenarios con hashes conocidos
+* [x] Verificar ejecución completa y por bloques
+* [x] Verificar profiling activado y desactivado
 * [ ] Verificar el mismo estado lógico en debug y release
-* [ ] Detectar dependencia accidental del orden de iteración
-* [ ] Detectar fuentes de RNG no deterministas
+* [x] Detectar dependencia accidental del orden de iteración
+* [x] Detectar fuentes de RNG no deterministas
 * [ ] Añadir replay tests
 
 ## Phase 2.11.8 — Persistence

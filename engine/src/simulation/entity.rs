@@ -90,6 +90,60 @@ impl Entity {
     pub fn remaining_path_len(&self) -> usize {
         self.path.len().saturating_sub(self.path_index)
     }
+
+    pub(in crate::simulation) fn hash_state(&self, hasher: &mut super::state_hash::StateHasher) {
+        hasher.write_u32(self.id);
+        hasher.write_u32(self.x);
+        hasher.write_u32(self.y);
+        hasher.write_u32(match self.sex {
+            Sex::Female => 0,
+            Sex::Male => 1,
+        });
+        hasher.write_u64(self.lifespan_ticks);
+        hasher.write_f32(self.hunger);
+        hasher.write_f32(self.health);
+        hasher.write_u64(self.age_ticks);
+        hasher.write_usize(self.path.len());
+        hasher.write_usize(self.path_index);
+        for &(px, py) in &self.path {
+            hasher.write_u32(px);
+            hasher.write_u32(py);
+        }
+        hasher.write_u32(self.activity as u32);
+        if let Some(pregnancy) = self.pregnancy {
+            hasher.write_bool(true);
+            hasher.write_u32(pregnancy.father_id);
+            hasher.write_u64(pregnancy.conceived_tick);
+            hasher.write_u64(pregnancy.due_tick);
+        } else {
+            hasher.write_bool(false);
+        }
+        hasher.write_u64(self.postpartum_until_tick);
+        hasher.write_f32(self.movement_credit);
+        hasher.write_opt_u32(self.mother_id);
+        hasher.write_opt_u32(self.father_id);
+        hasher.write_opt_u32(self.caregiver_id);
+        hasher.write_opt_u32(self.partner_id);
+        hasher.write_opt_u32(self.household_id);
+
+        // Personality
+        hasher.write_f32(self.personality.curiosity);
+        hasher.write_f32(self.personality.sociability);
+        hasher.write_f32(self.personality.cooperativeness);
+        hasher.write_f32(self.personality.caution);
+        hasher.write_f32(self.personality.persistence);
+
+        // Inventory
+        hasher.write_u16(self.inventory.capacity());
+        for &amt in self.inventory.amounts() {
+            hasher.write_u16(amt);
+        }
+
+        hasher.write_u32(self.action_tick);
+
+        // Mind
+        self.mind.hash_state(hasher);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

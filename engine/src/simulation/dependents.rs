@@ -3,31 +3,36 @@
 //! These operations deliberately work on entity state rather than the whole
 //! simulation so the dependency domain does not acquire unrelated authority.
 
-use std::collections::{HashMap, HashSet};
-
 use super::config::{FOOD_CONSUMED_PER_MEAL, HUNGER_REDUCTION_PER_MEAL};
 use super::{Entity, Goal, LifeStage};
 use crate::world::Grid;
 
 pub(super) fn snap_infants_to_caregivers(entities: &mut [Entity]) {
-    let positions: HashMap<u32, (u32, u32)> = entities
+    let updates: Vec<(usize, u32, u32)> = entities
         .iter()
-        .filter(|entity| entity.health > 0.0)
-        .map(|entity| (entity.id, (entity.x, entity.y)))
+        .enumerate()
+        .filter(|(_, entity)| {
+            entity.health > 0.0
+                && LifeStage::from_age_ticks(entity.age_ticks) == LifeStage::Infant
+                && entity.caregiver_id.is_some()
+        })
+        .filter_map(|(infant_idx, entity)| {
+            let caregiver_id = entity.caregiver_id.unwrap();
+            let caregiver_idx = entities
+                .binary_search_by_key(&caregiver_id, |e| e.id)
+                .ok()?;
+            let caregiver = &entities[caregiver_idx];
+            if caregiver.health > 0.0 {
+                Some((infant_idx, caregiver.x, caregiver.y))
+            } else {
+                None
+            }
+        })
         .collect();
 
-    for entity in entities {
-        if entity.health <= 0.0 || LifeStage::from_age_ticks(entity.age_ticks) != LifeStage::Infant
-        {
-            continue;
-        }
-        if let Some(position) = entity
-            .caregiver_id
-            .and_then(|caregiver_id| positions.get(&caregiver_id).copied())
-        {
-            entity.x = position.0;
-            entity.y = position.1;
-        }
+    for (infant_idx, x, y) in updates {
+        entities[infant_idx].x = x;
+        entities[infant_idx].y = y;
     }
 }
 
@@ -66,7 +71,6 @@ pub(super) fn clear_graduated_caregivers(entities: &mut [Entity]) {
 }
 
 pub(super) fn reassign_orphaned_dependents(entities: &mut [Entity], world: &Grid) {
-    let alive: HashSet<u32> = entities.iter().map(|entity| entity.id).collect();
     let needs_reassignment: Vec<usize> = entities
         .iter()
         .enumerate()
@@ -74,9 +78,11 @@ pub(super) fn reassign_orphaned_dependents(entities: &mut [Entity], world: &Grid
             matches!(
                 LifeStage::from_age_ticks(entity.age_ticks),
                 LifeStage::Infant | LifeStage::Child
-            ) && entity
-                .caregiver_id
-                .is_none_or(|caregiver_id| !alive.contains(&caregiver_id))
+            ) && entity.caregiver_id.is_none_or(|caregiver_id| {
+                entities
+                    .binary_search_by_key(&caregiver_id, |e| e.id)
+                    .is_err()
+            })
         })
         .map(|(index, _)| index)
         .collect();

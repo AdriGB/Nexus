@@ -22,6 +22,10 @@ impl EventId {
     pub(super) fn checked_next(self) -> Option<Self> {
         self.0.checked_add(1).map(Self)
     }
+
+    pub(crate) const fn as_u64(self) -> u64 {
+        self.0
+    }
 }
 
 impl fmt::Display for EventId {
@@ -251,6 +255,33 @@ impl RecentEventHistory {
 
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
         self.events.iter()
+    }
+
+    pub(super) fn hash_state(&self, hasher: &mut super::state_hash::StateHasher) {
+        hasher.write_u64(self.total_created);
+        hasher.write_usize(self.events.len());
+        for event in &self.events {
+            hasher.write_u64(event.id.as_u64());
+            hasher.write_u64(event.tick);
+            hasher.write_u32(event.actor_id);
+            hasher.write_opt_u32(event.target_id);
+            hasher.write_u32(event.location.x);
+            hasher.write_u32(event.location.y);
+            hasher.write_u32(match event.kind {
+                SimulationEventKind::Interaction => 1,
+                SimulationEventKind::Birth => 2,
+                SimulationEventKind::Death => 3,
+                SimulationEventKind::Discovery => 4,
+                SimulationEventKind::Consumption => 5,
+                SimulationEventKind::Encounter => 6,
+                SimulationEventKind::AffinityChange => 7,
+                SimulationEventKind::PartnershipFormed => 8,
+                SimulationEventKind::PartnershipDissolved => 9,
+                SimulationEventKind::FoodShared => 10,
+                SimulationEventKind::FoodShareRefused => 11,
+                SimulationEventKind::HouseholdConflict => 12,
+            });
+        }
     }
 
     pub(super) fn summary_for(&self, entity_id: u32) -> EntityEventSummary {
