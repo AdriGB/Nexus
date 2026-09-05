@@ -85,10 +85,18 @@ impl PathfindingWorkspace {
     pub(crate) fn can_search(&self, priority: SearchPriority) -> bool {
         match priority {
             SearchPriority::Critical => true,
-            SearchPriority::Standard | SearchPriority::Discretionary => {
+            SearchPriority::Standard => {
                 if let Some(budget) = self.budget {
                     budget.searches_done < budget.max_searches
                         && budget.nodes_expanded < budget.max_nodes
+                } else {
+                    true
+                }
+            }
+            SearchPriority::Discretionary => {
+                if let Some(budget) = self.budget {
+                    budget.searches_done < budget.max_searches * 4 / 5
+                        && budget.nodes_expanded < budget.max_nodes * 4 / 5
                 } else {
                     true
                 }
@@ -217,9 +225,6 @@ pub(crate) fn find_path_with_workspace_and_limit(
         }
         if let Some(budget) = workspace.budget.as_mut() {
             budget.nodes_expanded = budget.nodes_expanded.saturating_add(1);
-            if budget.nodes_expanded > budget.max_nodes {
-                return None;
-            }
         }
         iterations += 1;
         if iterations > max_iters {
@@ -629,5 +634,54 @@ mod tests {
 
         let path2 = find_path_with_workspace(&mut workspace, &grid, (5, 3), (0, 0));
         assert_eq!(path2, find_path(&grid, (5, 3), (0, 0)));
+    }
+
+    #[test]
+    fn can_search_respects_priority_thresholds() {
+        let mut workspace = PathfindingWorkspace::new();
+        workspace.reset_tick_budget(100, 10);
+
+        // Initially all can search
+        assert!(workspace.can_search(SearchPriority::Critical));
+        assert!(workspace.can_search(SearchPriority::Standard));
+        assert!(workspace.can_search(SearchPriority::Discretionary));
+
+        // At 80% searches done: Discretionary rejects, Standard & Critical allow
+        workspace.budget.as_mut().unwrap().searches_done = 8;
+        assert!(workspace.can_search(SearchPriority::Critical));
+        assert!(workspace.can_search(SearchPriority::Standard));
+        assert!(!workspace.can_search(SearchPriority::Discretionary));
+
+        // At 80% nodes expanded: Discretionary rejects
+        workspace.budget.as_mut().unwrap().searches_done = 0;
+        workspace.budget.as_mut().unwrap().nodes_expanded = 80;
+        assert!(workspace.can_search(SearchPriority::Critical));
+        assert!(workspace.can_search(SearchPriority::Standard));
+        assert!(!workspace.can_search(SearchPriority::Discretionary));
+
+        // At 100% budget: Standard rejects, Critical still allows
+        workspace.budget.as_mut().unwrap().nodes_expanded = 100;
+        assert!(workspace.can_search(SearchPriority::Critical));
+        assert!(!workspace.can_search(SearchPriority::Standard));
+        assert!(!workspace.can_search(SearchPriority::Discretionary));
+    }
+
+    #[test]
+    fn search_once_started_is_not_aborted_by_tick_budget() {
+        let grid = grid_from_rows(&["PPPPPP", "PPPPPP", "PPPPPP", "PPPPPP"]);
+        let mut workspace = PathfindingWorkspace::new();
+        // Set a tiny budget of 2 nodes
+        workspace.reset_tick_budget(2, 5);
+
+        let path = find_path_with_workspace(&mut workspace, &grid, (0, 0), (5, 3));
+        assert!(
+            path.is_some(),
+            "search must not be aborted mid-way by tick budget"
+        );
+        let budget = workspace.budget.as_ref().unwrap();
+        assert!(
+            budget.nodes_expanded > 2,
+            "expanded nodes must be accurately tracked in budget"
+        );
     }
 }
