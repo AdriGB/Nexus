@@ -115,7 +115,7 @@ impl StateHasher {
     }
 }
 
-pub(crate) const HASH_VERSION: u64 = 1;
+pub(crate) const HASH_VERSION: u32 = 1;
 
 const TAG_META: u8 = 1;
 const TAG_GRID: u8 = 2;
@@ -126,7 +126,7 @@ const TAG_EVENT: u8 = 6;
 
 pub(super) fn compute_state_hash(simulation: &Simulation, world: &Grid) -> SimulationStateHash {
     let mut hasher = StateHasher::new();
-    hasher.write_u64(HASH_VERSION);
+    hasher.write_u64(u64::from(HASH_VERSION));
 
     // 1. Simulation scalar metadata & monotonic IDs
     // Note on `paused`: `paused` is an interactive simulation driver state, not an

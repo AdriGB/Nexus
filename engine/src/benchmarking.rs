@@ -395,7 +395,7 @@ pub fn run_scenario_json(name: &str) -> Result<String, String> {
     }
 }
 
-fn find_scenario(name: &str) -> Result<BenchmarkScenario, String> {
+pub fn find_scenario(name: &str) -> Result<BenchmarkScenario, String> {
     SCENARIOS
         .iter()
         .copied()
@@ -581,7 +581,7 @@ fn run_long_scenario(scenario: BenchmarkScenario) -> Result<LongRunResult, Strin
     })
 }
 
-fn prepare_scenario(scenario: BenchmarkScenario) -> Result<(Grid, Simulation), String> {
+pub fn prepare_scenario(scenario: BenchmarkScenario) -> Result<(Grid, Simulation), String> {
     let mut world = build_generated_world(scenario.seed, scenario.world);
     let mut simulation =
         Simulation::with_population(u64::from(scenario.seed), &world, scenario.population);

@@ -33,7 +33,7 @@ pub struct RenewableResource {
     pub capacity: u16,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[repr(u8)]
 pub enum Terrain {
     DeepWater = 0,
