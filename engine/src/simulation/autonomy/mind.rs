@@ -182,25 +182,25 @@ impl KnownEntity {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FailedExploration {
-    chunk_index: u32,
-    retry_after_tick: u64,
+pub(crate) struct FailedExploration {
+    pub(crate) chunk_index: u32,
+    pub(crate) retry_after_tick: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ConflictRecord {
-    entity_id: u32,
-    last_conflict_tick: u64,
+pub(crate) struct ConflictRecord {
+    pub(crate) entity_id: u32,
+    pub(crate) last_conflict_tick: u64,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Memory {
     pub known_resources: Vec<KnownResource>,
-    pub(super) known_chunks: BTreeSet<u32>,
-    failed_exploration: Vec<FailedExploration>,
+    pub(crate) known_chunks: BTreeSet<u32>,
+    pub(crate) failed_exploration: Vec<FailedExploration>,
     pub known_entities: Vec<KnownEntity>,
     pub known_dead_entities: Vec<u32>,
-    conflict_history: Vec<ConflictRecord>,
+    pub(crate) conflict_history: Vec<ConflictRecord>,
 }
 
 /// Moves an affinity value toward zero by at most `amount`, never

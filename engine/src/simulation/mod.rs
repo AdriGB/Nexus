@@ -15,12 +15,14 @@ mod performance;
 mod physiology;
 mod pipeline;
 mod renewal;
+pub mod snapshot;
 mod spatial;
 pub(crate) mod state_hash;
 mod time;
 
 use std::collections::BTreeMap;
 
+pub use self::snapshot::{SimulationSnapshotV1, SnapshotError, SnapshotHeaderV1};
 pub use self::state_hash::SimulationStateHash;
 
 use self::autonomy::Mind;
@@ -477,6 +479,50 @@ impl Simulation {
     /// Computes a canonical, deterministic hash of the entire logical simulation state.
     pub fn state_hash(&self, world: &Grid) -> SimulationStateHash {
         self::state_hash::compute_state_hash(self, world)
+    }
+
+    /// Captures the full simulation and world state as an immutable Snapshot V1.
+    pub fn to_snapshot(
+        &self,
+        world: &Grid,
+        world_seed: Option<u32>,
+        sea_level: Option<f64>,
+    ) -> SimulationSnapshotV1 {
+        SimulationSnapshotV1::capture(self, world, world_seed, sea_level)
+    }
+
+    /// Restores a simulation and world from a Snapshot V1, reconstructing all derived indices
+    /// and strictly verifying the state hash against the header.
+    pub fn from_snapshot(snapshot: SimulationSnapshotV1) -> Result<(Self, Grid), SnapshotError> {
+        snapshot.restore()
+    }
+
+    /// Serializes the snapshot to a compact JSON string.
+    pub fn save_snapshot(
+        &self,
+        world: &Grid,
+        world_seed: Option<u32>,
+        sea_level: Option<f64>,
+    ) -> Result<String, SnapshotError> {
+        let snapshot = self.to_snapshot(world, world_seed, sea_level);
+        snapshot.to_json()
+    }
+
+    /// Serializes the snapshot to a formatted pretty JSON string.
+    pub fn save_snapshot_pretty(
+        &self,
+        world: &Grid,
+        world_seed: Option<u32>,
+        sea_level: Option<f64>,
+    ) -> Result<String, SnapshotError> {
+        let snapshot = self.to_snapshot(world, world_seed, sea_level);
+        snapshot.to_json_pretty()
+    }
+
+    /// Deserializes a snapshot from a JSON string, reconstructs derived state, and verifies the state hash.
+    pub fn load_snapshot(json: &str) -> Result<(Self, Grid), SnapshotError> {
+        let snapshot = SimulationSnapshotV1::from_json(json)?;
+        snapshot.restore()
     }
 
     pub fn transfer_item(
@@ -1487,7 +1533,7 @@ impl Simulation {
         self.recent_events.push(event)
     }
 
-    fn rebuild_population_index(&mut self, world: &Grid) {
+    pub(super) fn rebuild_population_index(&mut self, world: &Grid) {
         self.population_cache.clear();
         self.caregiver_index.clear();
         self.spatial_grid.prepare(world.width, world.height);

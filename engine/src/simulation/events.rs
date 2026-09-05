@@ -223,6 +223,32 @@ impl RecentEventHistory {
         }
     }
 
+    pub(super) fn from_parts(
+        events: VecDeque<SimulationEvent>,
+        capacity: usize,
+        next_id: EventId,
+        total_created: u64,
+    ) -> Self {
+        Self {
+            events,
+            capacity,
+            next_id,
+            total_created,
+        }
+    }
+
+    pub(super) fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub(super) fn next_id(&self) -> EventId {
+        self.next_id
+    }
+
+    pub(super) fn total_created(&self) -> u64 {
+        self.total_created
+    }
+
     pub(super) fn push(&mut self, event: PendingSimulationEvent) -> EventId {
         self.total_created = self.total_created.saturating_add(1);
         let assigned_id = self.next_id;
@@ -241,16 +267,8 @@ impl RecentEventHistory {
         assigned_id
     }
 
-    pub(super) fn total_created(&self) -> u64 {
-        self.total_created
-    }
-
     pub(super) fn len(&self) -> usize {
         self.events.len()
-    }
-
-    pub(super) fn capacity(&self) -> usize {
-        self.capacity
     }
 
     pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = &SimulationEvent> {
@@ -410,11 +428,6 @@ impl RecentEventHistory {
         }
 
         summary
-    }
-
-    #[cfg(test)]
-    pub(super) fn next_id(&self) -> EventId {
-        self.next_id
     }
 }
 

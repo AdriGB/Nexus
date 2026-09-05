@@ -53,6 +53,9 @@ impl Inventory {
             amounts: [0; ItemKind::ALL.len()],
         }
     }
+    pub const fn from_raw(capacity: u16, amounts: [u16; ItemKind::ALL.len()]) -> Self {
+        Self { capacity, amounts }
+    }
     pub const fn capacity(&self) -> u16 {
         self.capacity
     }

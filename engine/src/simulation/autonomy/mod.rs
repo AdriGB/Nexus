@@ -12,12 +12,10 @@ mod social;
 pub use self::decision::evaluate_goals;
 #[cfg(test)]
 pub use self::exploration::exploration_target;
-pub(in crate::simulation) use self::mind::AffinityChangeRecord;
-#[cfg(test)]
-pub use self::mind::KnownEntity;
-#[cfg(test)]
-pub use self::mind::KnownResource;
 pub use self::mind::{Action, Goal, GriefState, Mind};
+pub(in crate::simulation) use self::mind::{
+    AffinityChangeRecord, ConflictRecord, FailedExploration, KnownEntity, KnownResource, Memory,
+};
 #[cfg(test)]
 pub(in crate::simulation) use self::mind::{
     RELATIONSHIP_DECAY_PER_DAY, RELATIONSHIP_DECAY_START_TICKS,
