@@ -24,14 +24,14 @@ use super::events::{
 };
 use super::genealogy::{Genealogy, LineageRecord};
 use super::households::{Household, HouseholdInheritance, HouseholdMigration};
-use super::inventory::Inventory;
+use super::inventory::{Inventory, ItemKind};
 use super::spatial::SpatialGrid;
 use super::Simulation;
 use crate::pathfinding::PathfindingWorkspace;
 use crate::world::{Grid, RenewableResource, ResourceDeposit, ResourceKind, Terrain, Tile};
 
 pub const SNAPSHOT_FORMAT: &str = "nexus-snapshot/v1";
-pub const ENGINE_VERSION: &str = "0.1.0";
+pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -66,6 +66,7 @@ impl std::error::Error for SnapshotError {}
 pub struct SnapshotHeaderV1 {
     pub format: String,
     pub engine_version: String,
+    pub hash_version: u32,
     pub created_at_tick: u64,
     pub paused: bool,
     pub simulation_seed: u64,
@@ -78,6 +79,22 @@ pub struct SnapshotHeaderV1 {
     pub state_hash: String,
 }
 
+/// Snapshot representation of an individual world tile.
+///
+/// ### State Hashing Contract
+///
+/// The continuous environmental fields (`altitude`, `moisture`, and
+/// `temperature`) are stored in the snapshot because they represent continuous
+/// physical state of the generated world environment and are needed by
+/// renderer and weather systems.
+///
+/// **They do NOT enter into `SimulationStateHash`**, which strictly hashes only
+/// discrete gameplay elements (`terrain as u8` and resource deposits).
+///
+/// Do NOT add these continuous floating-point fields to `SimulationStateHash` in
+/// future revisions: cross-platform floating-point evaluation differences across
+/// architectures (x86, ARM, WASM) would violate hash determinism and break
+/// backward compatibility of snapshots.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TileSnapshotV1 {
     pub terrain: u8,
@@ -366,11 +383,11 @@ pub struct SimulationSnapshotV1 {
     pub events: EventsSnapshotV1,
 }
 
-fn terrain_to_u8(t: Terrain) -> u8 {
+pub(crate) fn terrain_to_u8(t: Terrain) -> u8 {
     t as u8
 }
 
-fn u8_to_terrain(b: u8) -> Result<Terrain, SnapshotError> {
+pub(crate) fn u8_to_terrain(b: u8) -> Result<Terrain, SnapshotError> {
     match b {
         0 => Ok(Terrain::DeepWater),
         1 => Ok(Terrain::ShallowWater),
@@ -392,11 +409,11 @@ fn u8_to_terrain(b: u8) -> Result<Terrain, SnapshotError> {
     }
 }
 
-fn resource_kind_to_u8(k: ResourceKind) -> u8 {
+pub(crate) fn resource_kind_to_u8(k: ResourceKind) -> u8 {
     k as u8
 }
 
-fn u8_to_resource_kind(b: u8) -> Result<ResourceKind, SnapshotError> {
+pub(crate) fn u8_to_resource_kind(b: u8) -> Result<ResourceKind, SnapshotError> {
     match b {
         1 => Ok(ResourceKind::Food),
         2 => Ok(ResourceKind::Timber),
@@ -409,7 +426,31 @@ fn u8_to_resource_kind(b: u8) -> Result<ResourceKind, SnapshotError> {
     }
 }
 
-fn goal_to_u32(g: Goal) -> u32 {
+#[allow(dead_code)]
+pub(crate) fn item_kind_to_u8(k: ItemKind) -> u8 {
+    match k {
+        ItemKind::Food => 1,
+        ItemKind::Timber => 2,
+        ItemKind::Stone => 3,
+        ItemKind::Iron => 4,
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn u8_to_item_kind(b: u8) -> Result<ItemKind, SnapshotError> {
+    match b {
+        1 => Ok(ItemKind::Food),
+        2 => Ok(ItemKind::Timber),
+        3 => Ok(ItemKind::Stone),
+        4 => Ok(ItemKind::Iron),
+        other => Err(SnapshotError::CorruptedData(format!(
+            "invalid item kind discriminant: {}",
+            other
+        ))),
+    }
+}
+
+pub(crate) fn goal_to_u32(g: Goal) -> u32 {
     match g {
         Goal::Eat => 1,
         Goal::AcquireResource => 2,
@@ -425,7 +466,7 @@ fn goal_to_u32(g: Goal) -> u32 {
     }
 }
 
-fn u32_to_goal(val: u32) -> Result<Goal, SnapshotError> {
+pub(crate) fn u32_to_goal(val: u32) -> Result<Goal, SnapshotError> {
     match val {
         1 => Ok(Goal::Eat),
         2 => Ok(Goal::AcquireResource),
@@ -445,7 +486,7 @@ fn u32_to_goal(val: u32) -> Result<Goal, SnapshotError> {
     }
 }
 
-fn action_to_dto(action: &Action) -> ActionSnapshotV1 {
+pub(crate) fn action_to_dto(action: &Action) -> ActionSnapshotV1 {
     match *action {
         Action::MoveTo(x, y) => ActionSnapshotV1::MoveTo { x, y },
         Action::Gather(k) => ActionSnapshotV1::Gather {
@@ -464,7 +505,7 @@ fn action_to_dto(action: &Action) -> ActionSnapshotV1 {
     }
 }
 
-fn dto_to_action(dto: &ActionSnapshotV1) -> Result<Action, SnapshotError> {
+pub(crate) fn dto_to_action(dto: &ActionSnapshotV1) -> Result<Action, SnapshotError> {
     match *dto {
         ActionSnapshotV1::MoveTo { x, y } => Ok(Action::MoveTo(x, y)),
         ActionSnapshotV1::Gather { kind } => Ok(Action::Gather(u8_to_resource_kind(kind)?)),
@@ -483,11 +524,11 @@ fn dto_to_action(dto: &ActionSnapshotV1) -> Result<Action, SnapshotError> {
     }
 }
 
-fn activity_to_u32(act: EntityActivity) -> u32 {
+pub(crate) fn activity_to_u32(act: EntityActivity) -> u32 {
     act as u32
 }
 
-fn u32_to_activity(val: u32) -> Result<EntityActivity, SnapshotError> {
+pub(crate) fn u32_to_activity(val: u32) -> Result<EntityActivity, SnapshotError> {
     match val {
         0 => Ok(EntityActivity::Idle),
         1 => Ok(EntityActivity::SeekingFood),
@@ -503,7 +544,7 @@ fn u32_to_activity(val: u32) -> Result<EntityActivity, SnapshotError> {
     }
 }
 
-fn event_kind_to_u32(k: SimulationEventKind) -> u32 {
+pub(crate) fn event_kind_to_u32(k: SimulationEventKind) -> u32 {
     match k {
         SimulationEventKind::Interaction => 1,
         SimulationEventKind::Birth => 2,
@@ -520,7 +561,7 @@ fn event_kind_to_u32(k: SimulationEventKind) -> u32 {
     }
 }
 
-fn u32_to_event_kind(val: u32) -> Result<SimulationEventKind, SnapshotError> {
+pub(crate) fn u32_to_event_kind(val: u32) -> Result<SimulationEventKind, SnapshotError> {
     match val {
         1 => Ok(SimulationEventKind::Interaction),
         2 => Ok(SimulationEventKind::Birth),
@@ -541,7 +582,7 @@ fn u32_to_event_kind(val: u32) -> Result<SimulationEventKind, SnapshotError> {
     }
 }
 
-fn event_cause_to_u32(c: SimulationEventCause) -> u32 {
+pub(crate) fn event_cause_to_u32(c: SimulationEventCause) -> u32 {
     match c {
         SimulationEventCause::MutualSocialContact => 1,
         SimulationEventCause::Born => 2,
@@ -558,7 +599,7 @@ fn event_cause_to_u32(c: SimulationEventCause) -> u32 {
     }
 }
 
-fn u32_to_event_cause(val: u32) -> Result<SimulationEventCause, SnapshotError> {
+pub(crate) fn u32_to_event_cause(val: u32) -> Result<SimulationEventCause, SnapshotError> {
     match val {
         1 => Ok(SimulationEventCause::MutualSocialContact),
         2 => Ok(SimulationEventCause::Born),
@@ -576,6 +617,76 @@ fn u32_to_event_cause(val: u32) -> Result<SimulationEventCause, SnapshotError> {
             "invalid event cause discriminant: {}",
             other
         ))),
+    }
+}
+
+impl From<Action> for ActionSnapshotV1 {
+    fn from(action: Action) -> Self {
+        action_to_dto(&action)
+    }
+}
+
+impl TryFrom<ActionSnapshotV1> for Action {
+    type Error = SnapshotError;
+
+    fn try_from(dto: ActionSnapshotV1) -> Result<Self, Self::Error> {
+        dto_to_action(&dto)
+    }
+}
+
+impl TryFrom<u8> for Terrain {
+    type Error = SnapshotError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        u8_to_terrain(value)
+    }
+}
+
+impl TryFrom<u8> for ResourceKind {
+    type Error = SnapshotError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        u8_to_resource_kind(value)
+    }
+}
+
+impl TryFrom<u8> for ItemKind {
+    type Error = SnapshotError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        u8_to_item_kind(value)
+    }
+}
+
+impl TryFrom<u32> for Goal {
+    type Error = SnapshotError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        u32_to_goal(value)
+    }
+}
+
+impl TryFrom<u32> for SimulationEventKind {
+    type Error = SnapshotError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        u32_to_event_kind(value)
+    }
+}
+
+impl TryFrom<u32> for SimulationEventCause {
+    type Error = SnapshotError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        u32_to_event_cause(value)
+    }
+}
+
+impl TryFrom<u32> for EntityActivity {
+    type Error = SnapshotError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        u32_to_activity(value)
     }
 }
 
@@ -720,6 +831,7 @@ impl SimulationSnapshotV1 {
         let header = SnapshotHeaderV1 {
             format: SNAPSHOT_FORMAT.to_string(),
             engine_version: ENGINE_VERSION.to_string(),
+            hash_version: super::state_hash::HASH_VERSION,
             created_at_tick: simulation.tick,
             paused: simulation.paused,
             simulation_seed: simulation.seed,
@@ -976,6 +1088,14 @@ impl SimulationSnapshotV1 {
             return Err(SnapshotError::InvalidFormat(format!(
                 "expected format '{}', found '{}'",
                 SNAPSHOT_FORMAT, self.header.format
+            )));
+        }
+
+        if self.header.hash_version != super::state_hash::HASH_VERSION {
+            return Err(SnapshotError::UnsupportedVersion(format!(
+                "expected hash version {}, found {}",
+                super::state_hash::HASH_VERSION,
+                self.header.hash_version
             )));
         }
 
