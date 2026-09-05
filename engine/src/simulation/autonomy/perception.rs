@@ -99,6 +99,7 @@ fn remember_visible_chunks(mind: &mut Mind, world: &Grid, position: (u32, u32)) 
     }
 }
 
+#[cfg(test)]
 fn remember_entity(mind: &mut Mind, other: EntitySnapshot, tick: u64) -> bool {
     match mind
         .memory
@@ -243,34 +244,94 @@ pub(super) fn perceive_entities(
     spatial_grid: &SpatialGrid,
 ) -> Vec<EntityEncounter> {
     mind.visible_entities.clear();
+    let radius = mind.perception_radius;
+
+    spatial_grid.visit_candidates(position.0, position.1, radius, |snapshot_index| {
+        let other = &population[snapshot_index];
+
+        if other.id == entity_id {
+            return;
+        }
+
+        let dx = position.0.abs_diff(other.x);
+        if dx > radius {
+            return;
+        }
+        let dy = position.1.abs_diff(other.y);
+        if dx + dy <= radius {
+            mind.visible_entities.push(snapshot_index as u32);
+        }
+    });
+
+    // Sort visible snapshot indices so that the resulting stream has strictly increasing IDs.
+    mind.visible_entities
+        .sort_unstable_by_key(|&idx| population[idx as usize].id);
+
     let mut encounters = Vec::new();
+    let mut known_idx = 0;
 
-    spatial_grid.visit_candidates(
-        position.0,
-        position.1,
-        mind.perception_radius,
-        |snapshot_index| {
-            let other = population[snapshot_index];
+    for &snapshot_index in &mind.visible_entities {
+        let other = &population[snapshot_index as usize];
 
-            if other.id == entity_id {
-                return;
-            }
+        // Defensive guard against duplicate IDs in synthetic test populations.
+        if known_idx > 0 && mind.memory.known_entities[known_idx - 1].id == other.id {
+            let known = &mut mind.memory.known_entities[known_idx - 1];
+            known.last_seen_tick = tick;
+            known.last_seen_x = other.x;
+            known.last_seen_y = other.y;
+            known.observed_ticks = known.observed_ticks.saturating_add(1);
+            known.clear_seek_cooldown();
+            continue;
+        }
 
-            if manhattan(position, (other.x, other.y)) <= mind.perception_radius {
-                mind.visible_entities.push(other.id);
-                if remember_entity(mind, other, tick) {
-                    encounters.push(EntityEncounter {
-                        observer_id: entity_id,
-                        other_id: other.id,
-                        x: position.0,
-                        y: position.1,
-                    });
-                }
-            }
-        },
-    );
+        while known_idx < mind.memory.known_entities.len()
+            && mind.memory.known_entities[known_idx].id < other.id
+        {
+            known_idx += 1;
+        }
 
-    mind.visible_entities.sort_unstable();
+        if known_idx < mind.memory.known_entities.len()
+            && mind.memory.known_entities[known_idx].id == other.id
+        {
+            let known = &mut mind.memory.known_entities[known_idx];
+            known.last_seen_tick = tick;
+            known.last_seen_x = other.x;
+            known.last_seen_y = other.y;
+            known.observed_ticks = known.observed_ticks.saturating_add(1);
+            known.clear_seek_cooldown();
+            known_idx += 1;
+        } else {
+            mind.memory.known_entities.insert(
+                known_idx,
+                KnownEntity {
+                    id: other.id,
+                    first_seen_tick: tick,
+                    last_seen_tick: tick,
+                    last_seen_x: other.x,
+                    last_seen_y: other.y,
+                    observed_ticks: 1,
+                    affinity: super::mind::NEUTRAL_AFFINITY,
+                    last_interaction_tick: 0,
+                    interaction_count: 0,
+                    seek_retry_after_tick: None,
+                },
+            );
+            encounters.push(EntityEncounter {
+                observer_id: entity_id,
+                other_id: other.id,
+                x: position.0,
+                y: position.1,
+            });
+            known_idx += 1;
+        }
+    }
+
+    // Replace snapshot indices in-place with entity IDs.
+    // Because the indices were sorted by entity ID, visible_entities is strictly sorted by ID.
+    for slot in &mut mind.visible_entities {
+        *slot = population[*slot as usize].id;
+    }
+
     encounters
 }
 
@@ -622,5 +683,81 @@ mod tests {
 
         assert_eq!(known.estimated_amount, 99);
         assert_eq!(known.last_seen_tick, 42);
+    }
+
+    #[test]
+    fn perceive_entities_streaming_updates_and_preserves_sorted_invariants() {
+        let mut spatial = SpatialGrid::default();
+        spatial.prepare(64, 64);
+
+        let make_snapshot = |id: u32, x: u32, y: u32| EntitySnapshot {
+            id,
+            x,
+            y,
+            hunger: 0.0,
+            caregiver_id: None,
+            household_id: None,
+            partner_id: None,
+            mother_id: None,
+            father_id: None,
+            is_adult: true,
+            is_child: false,
+            is_infant: false,
+        };
+
+        // Create population with unordered IDs and various distances.
+        let population = vec![
+            make_snapshot(1, 10, 10),  // Observer
+            make_snapshot(50, 11, 10), // Visible (dist 1)
+            make_snapshot(20, 10, 12), // Visible (dist 2)
+            make_snapshot(80, 12, 12), // Visible (dist 4)
+            make_snapshot(5, 10, 20),  // Far away (dist 10 > radius 6)
+            make_snapshot(35, 11, 11), // Visible (dist 2)
+        ];
+
+        for (index, snap) in population.iter().enumerate() {
+            spatial.insert(index, snap.x, snap.y);
+        }
+
+        let mut mind = Mind::default();
+        mind.perception_radius = 6;
+
+        // First tick: encounters should be discovered for visible neighbors (20, 35, 50, 80).
+        let encounters = perceive_entities(&mut mind, 1, (10, 10), 100, &population, &spatial);
+
+        // Verify visible_entities is strictly sorted by ID.
+        assert_eq!(mind.visible_entities, vec![20, 35, 50, 80]);
+
+        // Verify encounters contains all 4 newly seen entities with observer_id 1.
+        assert_eq!(encounters.len(), 4);
+        assert_eq!(
+            encounters.iter().map(|e| e.other_id).collect::<Vec<_>>(),
+            vec![20, 35, 50, 80]
+        );
+        for enc in &encounters {
+            assert_eq!(enc.observer_id, 1);
+            assert_eq!((enc.x, enc.y), (10, 10));
+        }
+
+        // Verify known_entities is strictly sorted by ID and initialized properly.
+        let known_ids: Vec<u32> = mind.memory.known_entities.iter().map(|k| k.id).collect();
+        assert_eq!(known_ids, vec![20, 35, 50, 80]);
+        for k in &mind.memory.known_entities {
+            assert_eq!(k.first_seen_tick, 100);
+            assert_eq!(k.last_seen_tick, 100);
+            assert_eq!(k.observed_ticks, 1);
+        }
+
+        // Set seek cooldown on one known entity to test clear_seek_cooldown.
+        mind.memory.known_entities[0].seek_retry_after_tick = Some(500);
+
+        // Second tick: no new encounters, but known entities updated.
+        let second_encounters =
+            perceive_entities(&mut mind, 1, (10, 10), 105, &population, &spatial);
+        assert!(second_encounters.is_empty());
+        assert_eq!(mind.visible_entities, vec![20, 35, 50, 80]);
+        assert_eq!(mind.memory.known_entities[0].observed_ticks, 2);
+        assert_eq!(mind.memory.known_entities[0].last_seen_tick, 105);
+        assert_eq!(mind.memory.known_entities[0].seek_retry_after_tick, None);
     }
 }
