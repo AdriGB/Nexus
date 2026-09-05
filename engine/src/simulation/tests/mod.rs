@@ -29,5 +29,6 @@ mod partnerships;
 mod personality;
 mod relationship_food_sharing;
 mod resources;
+mod snapshot;
 mod social;
 mod support;

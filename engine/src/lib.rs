@@ -10,7 +10,7 @@ mod resources;
 mod simulation;
 mod world;
 
-pub use simulation::SimulationStateHash;
+pub use simulation::{SimulationSnapshotV1, SimulationStateHash, SnapshotError, SnapshotHeaderV1};
 
 use wasm_bindgen::prelude::*;
 
@@ -315,5 +315,31 @@ impl WorldBridge {
 
     pub fn state_hash(&self) -> String {
         self.simulation.state_hash(&self.grid).to_string()
+    }
+
+    pub fn save_snapshot(
+        &self,
+        world_seed: Option<u32>,
+        sea_level: Option<f64>,
+    ) -> Result<String, JsError> {
+        self.simulation
+            .save_snapshot(&self.grid, world_seed, sea_level)
+            .map_err(|err| JsError::new(&err.to_string()))
+    }
+
+    pub fn save_snapshot_pretty(
+        &self,
+        world_seed: Option<u32>,
+        sea_level: Option<f64>,
+    ) -> Result<String, JsError> {
+        self.simulation
+            .save_snapshot_pretty(&self.grid, world_seed, sea_level)
+            .map_err(|err| JsError::new(&err.to_string()))
+    }
+
+    pub fn load_snapshot(json: &str) -> Result<WorldBridge, JsError> {
+        let (simulation, grid) = simulation::Simulation::load_snapshot(json)
+            .map_err(|err| JsError::new(&err.to_string()))?;
+        Ok(WorldBridge { grid, simulation })
     }
 }

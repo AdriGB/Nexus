@@ -22,6 +22,14 @@ pub(crate) struct Genealogy {
 }
 
 impl Genealogy {
+    pub(crate) fn from_records(records: Vec<LineageRecord>) -> Self {
+        let mut genealogy = Self::default();
+        for record in records {
+            genealogy.register(record.entity_id, record.mother_id, record.father_id);
+        }
+        genealogy
+    }
+
     pub(crate) fn register(
         &mut self,
         entity_id: u32,
