@@ -690,7 +690,7 @@ impl TryFrom<u32> for EntityActivity {
     }
 }
 
-fn event_details_to_dto(d: &SimulationEventDetails) -> EventDetailsSnapshotV1 {
+pub(crate) fn event_details_to_dto(d: &SimulationEventDetails) -> EventDetailsSnapshotV1 {
     match *d {
         SimulationEventDetails::Interaction {
             actor_affinity_delta,
@@ -752,7 +752,7 @@ fn event_details_to_dto(d: &SimulationEventDetails) -> EventDetailsSnapshotV1 {
     }
 }
 
-fn dto_to_event_details(
+pub(crate) fn dto_to_event_details(
     dto: &EventDetailsSnapshotV1,
 ) -> Result<SimulationEventDetails, SnapshotError> {
     match *dto {
@@ -815,6 +815,20 @@ fn dto_to_event_details(
             actor_affinity,
             target_affinity,
         }),
+    }
+}
+
+impl From<SimulationEventDetails> for EventDetailsSnapshotV1 {
+    fn from(details: SimulationEventDetails) -> Self {
+        event_details_to_dto(&details)
+    }
+}
+
+impl TryFrom<EventDetailsSnapshotV1> for SimulationEventDetails {
+    type Error = SnapshotError;
+
+    fn try_from(dto: EventDetailsSnapshotV1) -> Result<Self, Self::Error> {
+        dto_to_event_details(&dto)
     }
 }
 
@@ -1096,13 +1110,6 @@ impl SimulationSnapshotV1 {
                 "expected hash version {}, found {}",
                 super::state_hash::HASH_VERSION,
                 self.header.hash_version
-            )));
-        }
-
-        if self.header.engine_version != ENGINE_VERSION {
-            return Err(SnapshotError::UnsupportedVersion(format!(
-                "expected engine version '{}', found '{}'",
-                ENGINE_VERSION, self.header.engine_version
             )));
         }
 

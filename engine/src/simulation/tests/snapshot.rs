@@ -306,29 +306,26 @@ fn unsupported_hash_version_returns_unsupported_version_error() {
 }
 
 #[test]
-fn unsupported_engine_version_returns_unsupported_version_error() {
+fn different_engine_version_is_informational_and_restores_cleanly() {
     let world = sample_grid();
     let sim = Simulation::with_population(42, &world, POPULATION);
     let mut snapshot = sim.to_snapshot(&world, None, None);
-    snapshot.header.engine_version = "99.0.0".to_string();
+    snapshot.header.engine_version = "0.0.9".to_string();
 
-    let Err(err) = snapshot.restore() else {
-        panic!("expected UnsupportedVersion error");
-    };
-    match err {
-        SnapshotError::UnsupportedVersion(msg) => {
-            assert!(msg.contains("engine version"));
-            assert!(msg.contains("99.0.0"));
-        }
-        other => panic!("expected UnsupportedVersion, got {:?}", other),
-    }
+    let res = snapshot.restore();
+    assert!(
+        res.is_ok(),
+        "different engine_version must not gate restoration (CARGO_PKG_VERSION is metadata)"
+    );
 }
 
 #[test]
 fn test_all_enum_variants_roundtrip_and_no_collision() {
     use crate::simulation::autonomy::{Action, Goal};
     use crate::simulation::entity::EntityActivity;
-    use crate::simulation::events::{SimulationEventCause, SimulationEventKind};
+    use crate::simulation::events::{
+        SimulationEventCause, SimulationEventDetails, SimulationEventKind,
+    };
     use crate::simulation::inventory::ItemKind;
     use crate::simulation::snapshot::*;
     use crate::world::{ResourceKind, Terrain};
@@ -626,6 +623,82 @@ fn test_all_enum_variants_roundtrip_and_no_collision() {
         assert_eq!(EntityActivity::try_from(code).unwrap(), activity);
     }
     assert_eq!(activity_codes.len(), all_activities.len());
+
+    // 9. SimulationEventDetails
+    let all_event_details = [
+        SimulationEventDetails::Interaction {
+            actor_affinity_delta: 5,
+            target_affinity_delta: -3,
+        },
+        SimulationEventDetails::Birth { child_id: 101 },
+        SimulationEventDetails::Death,
+        SimulationEventDetails::Consumption { amount: 15 },
+        SimulationEventDetails::ResourceDiscovery {
+            kind: ResourceKind::Food,
+            amount: 20,
+        },
+        SimulationEventDetails::Encounter,
+        SimulationEventDetails::AffinityChange {
+            previous_affinity: 10,
+            new_affinity: 15,
+            delta: 5,
+        },
+        SimulationEventDetails::FoodShared { amount: 12 },
+        SimulationEventDetails::FoodShareRefused,
+        SimulationEventDetails::HouseholdConflict {
+            household_id: 7,
+            actor_affinity_delta: -10,
+            target_affinity_delta: -12,
+        },
+        SimulationEventDetails::PartnershipFormed {
+            actor_affinity: 30,
+            target_affinity: 35,
+            compatibility_per_mille: 850,
+        },
+        SimulationEventDetails::PartnershipDissolved {
+            actor_affinity: -5,
+            target_affinity: -10,
+        },
+    ];
+    // Compile-time exhaustiveness check:
+    for &details in &all_event_details {
+        match details {
+            SimulationEventDetails::Interaction { .. } => {}
+            SimulationEventDetails::Birth { .. } => {}
+            SimulationEventDetails::Death => {}
+            SimulationEventDetails::Consumption { .. } => {}
+            SimulationEventDetails::ResourceDiscovery { .. } => {}
+            SimulationEventDetails::Encounter => {}
+            SimulationEventDetails::AffinityChange { .. } => {}
+            SimulationEventDetails::FoodShared { .. } => {}
+            SimulationEventDetails::FoodShareRefused => {}
+            SimulationEventDetails::HouseholdConflict { .. } => {}
+            SimulationEventDetails::PartnershipFormed { .. } => {}
+            SimulationEventDetails::PartnershipDissolved { .. } => {}
+        }
+    }
+    let mut details_tags = HashSet::new();
+    for &details in &all_event_details {
+        let dto = event_details_to_dto(&details);
+        let from_dto: EventDetailsSnapshotV1 = details.into();
+        assert_eq!(dto, from_dto);
+        assert_eq!(dto_to_event_details(&dto).unwrap(), details);
+        assert_eq!(
+            SimulationEventDetails::try_from(dto.clone()).unwrap(),
+            details
+        );
+
+        let json_val = serde_json::to_value(&dto).expect("serialize event details");
+        let tag = json_val["type"]
+            .as_str()
+            .expect("tag must be string")
+            .to_string();
+        assert!(
+            details_tags.insert(tag.clone()),
+            "EventDetails duplicate tag {tag}"
+        );
+    }
+    assert_eq!(details_tags.len(), all_event_details.len());
 }
 
 #[cfg(feature = "benchmarks")]
