@@ -5,6 +5,7 @@ use super::super::spatial::{EntitySnapshot, SpatialGrid};
 use super::super::time::TICKS_PER_YEAR;
 use super::super::Simulation;
 use super::support::*;
+use crate::pathfinding::{PathfindingWorkspace, SearchPriority};
 use crate::world::ResourceKind;
 
 #[test]
@@ -265,4 +266,136 @@ fn entity_memory_persists_outside_perception() {
         .unwrap();
     assert_eq!(known.first_seen_tick, 1);
     assert_eq!(known.last_seen_tick, 1);
+}
+
+#[test]
+fn high_id_hungry_entity_obtains_path_after_discretionary_and_standard_budget_exhausted() {
+    let mut world = plain_grid(30, 30);
+    let food_idx = (15 * world.width + 15) as usize;
+    world.resources[food_idx] = Some(crate::world::ResourceDeposit {
+        kind: ResourceKind::Food,
+        amount: 50,
+    });
+
+    let mut workspace = PathfindingWorkspace::new();
+    workspace.reset_tick_budget(1000, 10);
+
+    // 1. Lower IDs execute discretionary searches up to the 80% threshold (8 searches)
+    assert!(workspace.can_search(SearchPriority::Discretionary));
+    for _ in 0..8 {
+        let path = crate::pathfinding::find_path_with_workspace_and_limit(
+            &mut workspace,
+            &world,
+            (0, 0),
+            (10, 10),
+            None,
+        );
+        assert!(path.is_some());
+    }
+
+    // Discretionary searches now reject (searches_done = 8 >= 80% of 10)
+    assert!(!workspace.can_search(SearchPriority::Discretionary));
+    // Standard is still allowed (< 10 searches and < 1000 nodes)
+    assert!(workspace.can_search(SearchPriority::Standard));
+
+    // 2. Further searches exhaust 100% of standard budget (10 searches)
+    for _ in 0..2 {
+        let path = crate::pathfinding::find_path_with_workspace_and_limit(
+            &mut workspace,
+            &world,
+            (0, 0),
+            (10, 10),
+            None,
+        );
+        assert!(path.is_some());
+    }
+    assert!(!workspace.can_search(SearchPriority::Standard));
+
+    // 3. A high-ID entity with hunger < URGENT_HUNGER_THRESHOLD (Standard priority)
+    // is throttled when evaluating AcquireResource
+    let mut high_id_moderate_entity = entity(800, 0, 0, 40.0);
+    high_id_moderate_entity.age_ticks = 25 * TICKS_PER_YEAR;
+    high_id_moderate_entity
+        .mind
+        .memory
+        .known_resources
+        .push(KnownResource {
+            x: 15,
+            y: 15,
+            kind: ResourceKind::Food,
+            last_seen_tick: 0,
+            estimated_amount: 50,
+            failed_attempts: 0,
+            avoid_until_tick: 0,
+        });
+    let spatial_grid = SpatialGrid::default();
+    crate::simulation::autonomy::update_entity(
+        &mut high_id_moderate_entity,
+        &mut world,
+        1,
+        &[],
+        &spatial_grid,
+        &mut workspace,
+        crate::simulation::autonomy::EntityUpdateContext {
+            dependents: &[],
+            household: None,
+            profile: None,
+            work: None,
+            entity_pass: None,
+        },
+    );
+    assert_eq!(
+        high_id_moderate_entity.mind.current_goal,
+        Some(Goal::Rest),
+        "Standard priority entity must be throttled to Rest when budget exhausted"
+    );
+    assert!(high_id_moderate_entity.path.is_empty());
+
+    // 4. A high-ID entity with hunger >= URGENT_HUNGER_THRESHOLD (Critical priority)
+    // ALWAYS starts and is NOT aborted mid-search by the tick budget
+    assert!(workspace.can_search(SearchPriority::Critical));
+    let mut high_id_starving_entity = entity(999, 0, 0, URGENT_HUNGER_THRESHOLD + 10.0);
+    high_id_starving_entity.age_ticks = 25 * TICKS_PER_YEAR;
+    high_id_starving_entity
+        .mind
+        .memory
+        .known_resources
+        .push(KnownResource {
+            x: 15,
+            y: 15,
+            kind: ResourceKind::Food,
+            last_seen_tick: 0,
+            estimated_amount: 50,
+            failed_attempts: 0,
+            avoid_until_tick: 0,
+        });
+    crate::simulation::autonomy::update_entity(
+        &mut high_id_starving_entity,
+        &mut world,
+        1,
+        &[],
+        &spatial_grid,
+        &mut workspace,
+        crate::simulation::autonomy::EntityUpdateContext {
+            dependents: &[],
+            household: None,
+            profile: None,
+            work: None,
+            entity_pass: None,
+        },
+    );
+    assert_eq!(
+        high_id_starving_entity.mind.current_goal,
+        Some(Goal::AcquireResource),
+        "Critical priority starving entity must acquire resource goal"
+    );
+    assert!(
+        !high_id_starving_entity.path.is_empty(),
+        "Critical priority starving entity must find path despite exhausted budget"
+    );
+    assert_eq!(high_id_starving_entity.path.last(), Some(&(15, 15)));
+    assert_eq!(
+        high_id_starving_entity.activity,
+        super::super::entity::EntityActivity::SeekingFood
+    );
 }
