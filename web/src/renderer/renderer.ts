@@ -14,7 +14,7 @@ const canvas2d = document.getElementById(
 const gpuCanvas = document.getElementById(
   "world-gpu-canvas",
 ) as HTMLCanvasElement;
-const rendererStatus = document.getElementById("st-renderer")!;
+const rendererStatus = document.getElementById("st-renderer");
 const rendererDebug = document.getElementById("renderer-debug")!;
 const rendererDebugBackend = document.getElementById(
   "debug-renderer-backend",
@@ -149,7 +149,9 @@ function fallbackToCanvas(reason?: string): void {
 function activateBackend(): void {
   canvas2d.hidden = backend !== "canvas";
   gpuCanvas.hidden = backend !== "wgpu";
-  rendererStatus.textContent = backend === "wgpu" ? "wgpu" : "Canvas 2D";
+  if (rendererStatus) {
+    rendererStatus.textContent = backend === "wgpu" ? "wgpu" : "Canvas 2D";
+  }
   const resourcesButton = document.querySelector<HTMLButtonElement>(
     '[data-render-mode="resources"]',
   );

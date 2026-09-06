@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -214,7 +214,7 @@
           <label class="field-label">Snapshots &amp; Saves</label>
           <div class="input-row">
             <input id="world-name-input" class="input-field" type="text" placeholder="Snapshot name..." maxlength="60">
-            <button id="btn-save-world" class="btn-primary" style="width:auto;padding:8px 14px;">Save</button>
+            <button id="btn-save-world" class="btn-primary btn-save-inline">Save</button>
           </div>
           <div class="input-row" style="gap:6px;">
             <button id="btn-export-world" class="btn-secondary" style="flex:1;">Export JSON</button>
@@ -223,7 +223,7 @@
               <input id="import-file-input" type="file" accept=".json" style="display:none;">
             </label>
           </div>
-          <div id="save-status-msg" class="save-status-msg" hidden></div>
+          <div id="save-status-msg" class="save-status-msg" role="status" aria-live="polite" hidden></div>
           <div id="saved-worlds-list" class="saved-list"></div>
         </div>
       </div>
@@ -278,8 +278,8 @@
         <span class="status-item">Alt:<span class="val" id="st-alt">&#8212;</span></span>
         <span class="status-item">Moist:<span class="val" id="st-moist">&#8212;</span></span>
         <span class="status-item">Temp:<span class="val" id="st-temp">&#8212;</span></span>
-        <span class="status-item">Mode:<span class="accent" id="st-mode">Inspect</span></span>
-        <span class="status-item">Selected:<span class="val" id="st-selected">None</span></span>
+        <span class="status-item">Renderer:<span class="accent" id="st-renderer">Detecting…</span></span>
+        <span class="status-item">Route:<span class="val" id="st-route">Select origin</span></span>
         <span style="flex:1;"></span>
         <span class="status-item">Zoom:<span class="accent" id="st-zoom">100%</span></span>
       </div>

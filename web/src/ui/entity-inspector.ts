@@ -196,6 +196,10 @@ export function selectEntity(id: number | null): void {
   requestRender();
 }
 
+if (typeof window !== "undefined") {
+  (window as unknown as { selectEntity: typeof selectEntity }).selectEntity = selectEntity;
+}
+
 export function bindEntityInspector(): void {
   const followBtn = document.getElementById("btn-entity-follow");
   const centerBtn = document.getElementById("btn-entity-center");
