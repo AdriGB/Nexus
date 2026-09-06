@@ -58,6 +58,19 @@ export function bindSimulationControls(): void {
     accumulator = 0;
   });
 
+  const hashElement = document.getElementById("simulation-hash");
+  hashElement?.addEventListener("click", () => {
+    const fullHash = hashElement.dataset.fullHash;
+    if (!fullHash) return;
+    navigator.clipboard?.writeText(fullHash).then(() => {
+      const original = hashElement.textContent;
+      hashElement.textContent = "Copied!";
+      setTimeout(() => {
+        hashElement.textContent = original;
+      }, 1200);
+    }).catch(() => {});
+  });
+
   requestAnimationFrame(runSimulationFrame);
   syncSimulationUi();
 }
@@ -65,6 +78,7 @@ export function bindSimulationControls(): void {
 export function syncSimulationUi(): void {
   const tickElement = document.getElementById("simulation-tick")!;
   const stateElement = document.getElementById("simulation-state")!;
+  const hashElement = document.getElementById("simulation-hash");
   const paused = state.world?.simulation_is_paused() ?? true;
 
   tickElement.textContent = state.world
@@ -74,6 +88,20 @@ export function syncSimulationUi(): void {
   stateElement.classList.toggle("running", !paused);
   document.getElementById("btn-sim-play")?.classList.toggle("active", !paused);
   document.getElementById("btn-sim-pause")?.classList.toggle("active", paused);
+
+  if (hashElement) {
+    if (state.world) {
+      const hash = state.world.state_hash();
+      hashElement.textContent = hash.length > 12 ? `${hash.slice(0, 10)}…` : hash;
+      hashElement.dataset.fullHash = hash;
+      hashElement.title = `State Hash: ${hash}\nClick to copy`;
+    } else {
+      hashElement.textContent = "—";
+      hashElement.title = "";
+      delete hashElement.dataset.fullHash;
+    }
+  }
+
   syncPopulationStats();
   syncHouseholdStats();
   syncEntityInspector();

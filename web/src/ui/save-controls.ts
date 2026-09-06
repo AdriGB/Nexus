@@ -1,15 +1,53 @@
 import { readParams } from "./controls";
-import { createSave, type WorldConfig, type WorldSaveV1 } from "../persistence/world-save";
+import { state } from "../state";
+import {
+  type WorldConfig,
+  type SavedSnapshotRecordMeta,
+  parseSnapshotMeta,
+} from "../persistence/world-save";
+import {
+  saveSnapshotRecord,
+  listSnapshotRecords,
+  loadSnapshotRecord,
+  deleteSnapshotRecord,
+} from "../persistence/snapshot-store";
 import {
   loadAllSaves,
-  addSave,
   deleteSave,
   saveAutoSave,
   loadAutoSave,
 } from "../persistence/local-storage";
-import { exportSave, parseImportFile } from "../persistence/file-transfer";
+import {
+  exportSnapshot,
+  parseImportFile,
+} from "../persistence/file-transfer";
 
-const STORAGE_KEY = "nexus_saves";
+export type RestoreSnapshotCallback = (
+  json: string,
+  meta?: SavedSnapshotRecordMeta | null,
+) => Promise<void> | void;
+
+let statusTimeout: number | null = null;
+
+export function showStatusMessage(
+  message: string,
+  type: "success" | "error",
+): void {
+  const el = document.getElementById("save-status-msg");
+  if (!el) return;
+
+  el.textContent = message;
+  el.className = `save-status-msg ${type}`;
+  el.hidden = false;
+
+  if (statusTimeout !== null) {
+    clearTimeout(statusTimeout);
+  }
+  statusTimeout = window.setTimeout(() => {
+    el.hidden = true;
+    statusTimeout = null;
+  }, 4500);
+}
 
 function currentConfig(): WorldConfig {
   const p = readParams();
@@ -17,27 +55,42 @@ function currentConfig(): WorldConfig {
 }
 
 function applyConfig(config: WorldConfig): void {
-  (document.getElementById("seed-input") as HTMLInputElement).value = String(config.seed);
-  (document.getElementById("width-input") as HTMLInputElement).value = String(config.width);
-  (document.getElementById("height-input") as HTMLInputElement).value = String(config.height);
-  const seaSlider = document.getElementById("sea-slider") as HTMLInputElement;
-  seaSlider.value = String(config.seaLevel);
-  document.getElementById("sea-val")!.textContent = config.seaLevel.toFixed(2);
+  const seedInput = document.getElementById("seed-input") as HTMLInputElement | null;
+  const widthInput = document.getElementById("width-input") as HTMLInputElement | null;
+  const heightInput = document.getElementById("height-input") as HTMLInputElement | null;
+  const seaSlider = document.getElementById("sea-slider") as HTMLInputElement | null;
+  const seaVal = document.getElementById("sea-val");
+
+  if (seedInput) seedInput.value = String(config.seed);
+  if (widthInput) widthInput.value = String(config.width);
+  if (heightInput) heightInput.value = String(config.height);
+  if (seaSlider) {
+    seaSlider.value = String(config.seaLevel);
+    if (seaVal) seaVal.textContent = config.seaLevel.toFixed(2);
+  }
 }
 
 /* ── Saved list rendering ────────────────── */
 
-function renderSavedList(onLoad: () => void): void {
-  const container = document.getElementById("saved-worlds-list")!;
-  const saves = loadAllSaves();
+async function renderSavedList(
+  onGenerate: () => void,
+  onRestoreSnapshot: RestoreSnapshotCallback,
+): Promise<void> {
+  const container = document.getElementById("saved-worlds-list");
+  if (!container) return;
 
-  if (saves.length === 0) {
-    container.innerHTML = '<div class="saved-list-empty">No saved worlds yet</div>';
+  const snapshots = await listSnapshotRecords();
+  const legacySaves = loadAllSaves();
+
+  if (snapshots.length === 0 && legacySaves.length === 0) {
+    container.innerHTML = '<div class="saved-list-empty">No saved worlds or snapshots yet</div>';
     return;
   }
 
   container.innerHTML = "";
-  saves.forEach((save, index) => {
+
+  // Render modern Snapshot V1 items
+  snapshots.forEach((save) => {
     const item = document.createElement("div");
     item.className = "save-item";
 
@@ -50,35 +103,89 @@ function renderSavedList(onLoad: () => void): void {
         })
       : "";
 
+    const shortHash = save.stateHash ? save.stateHash.slice(0, 8) : "—";
+
     item.innerHTML = `
       <div class="save-item-info">
         <div class="save-item-name">${escapeHtml(save.name)}</div>
-        <div class="save-item-meta">seed ${save.config.seed} \u00b7 ${save.config.width}\u00d7${save.config.height} \u00b7 sea ${save.config.seaLevel.toFixed(2)}${dateStr ? " \u00b7 " + dateStr : ""}</div>
+        <div class="save-item-meta">Tick ${save.tick.toLocaleString()} \u00b7 Pop ${save.population} \u00b7 <code>${escapeHtml(shortHash)}</code>${dateStr ? " \u00b7 " + dateStr : ""}</div>
       </div>
       <div class="save-item-actions">
-        <button class="save-btn-sm" data-action="load" title="Load">&#9654;</button>
+        <button class="save-btn-sm" data-action="load" title="Load snapshot">&#9654;</button>
+        <button class="save-btn-sm" data-action="export" title="Export snapshot JSON">&#8595;</button>
+        <button class="save-btn-sm danger" data-action="delete" title="Delete snapshot">&times;</button>
+      </div>
+    `;
+
+    const triggerLoad = async () => {
+      try {
+        const full = await loadSnapshotRecord(save.id);
+        if (!full) {
+          showStatusMessage("Snapshot record not found in storage", "error");
+          return;
+        }
+        await onRestoreSnapshot(full.snapshotJson, full);
+        showStatusMessage(`Loaded snapshot "${save.name}" (Tick ${save.tick})`, "success");
+      } catch (err) {
+        showStatusMessage(`Failed to load snapshot: ${(err as Error).message || err}`, "error");
+      }
+    };
+
+    item.querySelector(".save-item-info")!.addEventListener("click", triggerLoad);
+    item.querySelector('[data-action="load"]')!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      triggerLoad();
+    });
+
+    item.querySelector('[data-action="export"]')!.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const full = await loadSnapshotRecord(save.id);
+      if (full) {
+        exportSnapshot(full.snapshotJson, full.name, full.tick);
+      }
+    });
+
+    item.querySelector('[data-action="delete"]')!.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await deleteSnapshotRecord(save.id);
+      renderSavedList(onGenerate, onRestoreSnapshot);
+    });
+
+    container.appendChild(item);
+  });
+
+  // Render legacy config items (if any)
+  legacySaves.forEach((legacy, index) => {
+    const item = document.createElement("div");
+    item.className = "save-item legacy";
+
+    item.innerHTML = `
+      <div class="save-item-info">
+        <div class="save-item-name">${escapeHtml(legacy.name)} <span style="font-size:8px;color:var(--text-muted);">[Legacy seed]</span></div>
+        <div class="save-item-meta">seed ${legacy.config.seed} \u00b7 ${legacy.config.width}\u00d7${legacy.config.height} \u00b7 sea ${legacy.config.seaLevel.toFixed(2)}</div>
+      </div>
+      <div class="save-item-actions">
+        <button class="save-btn-sm" data-action="load" title="Generate from seed">&#9654;</button>
         <button class="save-btn-sm danger" data-action="delete" title="Delete">&times;</button>
       </div>
     `;
 
-    // Click on info area → load
-    item.querySelector(".save-item-info")!.addEventListener("click", () => {
-      applyConfig(save.config);
-      onLoad();
-    });
+    const triggerLegacyLoad = () => {
+      applyConfig(legacy.config);
+      onGenerate();
+      showStatusMessage(`Generated world from legacy seed (${legacy.config.seed})`, "success");
+    };
 
-    // Load button
+    item.querySelector(".save-item-info")!.addEventListener("click", triggerLegacyLoad);
     item.querySelector('[data-action="load"]')!.addEventListener("click", (e) => {
       e.stopPropagation();
-      applyConfig(save.config);
-      onLoad();
+      triggerLegacyLoad();
     });
 
-    // Delete button
     item.querySelector('[data-action="delete"]')!.addEventListener("click", (e) => {
       e.stopPropagation();
       deleteSave(index);
-      renderSavedList(onLoad);
+      renderSavedList(onGenerate, onRestoreSnapshot);
     });
 
     container.appendChild(item);
@@ -93,54 +200,104 @@ function escapeHtml(s: string): string {
 
 /* ── Public API ──────────────────────────── */
 
-export function bindSaveControls(generateFn: () => void): void {
+export function bindSaveControls(
+  onGenerate: () => void,
+  onRestoreSnapshot: RestoreSnapshotCallback,
+): void {
   const nameInput = document.getElementById("world-name-input") as HTMLInputElement;
   const btnSave = document.getElementById("btn-save-world")!;
   const btnExport = document.getElementById("btn-export-world")!;
   const importInput = document.getElementById("import-file-input") as HTMLInputElement;
 
   // Save button
-  btnSave.addEventListener("click", () => {
-    const config = currentConfig();
-    const save = createSave(nameInput.value, config);
-    addSave(save);
-    renderSavedList(generateFn);
-    nameInput.value = "";
+  btnSave.addEventListener("click", async () => {
+    if (!state.world) {
+      showStatusMessage("No active simulation to save", "error");
+      return;
+    }
+
+    try {
+      const cfg = currentConfig();
+      const json = state.world.save_snapshot_pretty(cfg.seed, cfg.seaLevel);
+      const meta = parseSnapshotMeta(json, nameInput.value);
+
+      if (!meta) {
+        showStatusMessage("Failed to generate snapshot metadata", "error");
+        return;
+      }
+
+      await saveSnapshotRecord({ ...meta, snapshotJson: json });
+      showStatusMessage(`Saved snapshot "${meta.name}" (Tick ${meta.tick})`, "success");
+      nameInput.value = "";
+      renderSavedList(onGenerate, onRestoreSnapshot);
+    } catch (err) {
+      showStatusMessage(`Save failed: ${(err as Error).message || err}`, "error");
+    }
   });
 
   // Export button
   btnExport.addEventListener("click", () => {
-    const config = currentConfig();
-    const save = createSave(nameInput.value || "Export", config);
-    exportSave(save);
+    if (!state.world) {
+      showStatusMessage("No active simulation to export", "error");
+      return;
+    }
+
+    try {
+      const cfg = currentConfig();
+      const json = state.world.save_snapshot_pretty(cfg.seed, cfg.seaLevel);
+      const meta = parseSnapshotMeta(json, nameInput.value);
+      exportSnapshot(json, nameInput.value || "world", meta?.tick ?? 0);
+      showStatusMessage("Snapshot exported to JSON file", "success");
+    } catch (err) {
+      showStatusMessage(`Export failed: ${(err as Error).message || err}`, "error");
+    }
   });
 
   // Import file input
   importInput.addEventListener("change", async () => {
     const file = importInput.files?.[0];
     if (!file) return;
-    importInput.value = ""; // reset for re-import of same file
+    importInput.value = ""; // Reset for re-import
 
-    const save = await parseImportFile(file);
-    if (!save) {
-      alert("Invalid save file. Must be a Nexus world JSON with formatVersion 1.");
-      return;
+    const payload = await parseImportFile(file);
+
+    if (payload.type === "snapshot") {
+      try {
+        await onRestoreSnapshot(payload.json, payload.meta);
+        await saveSnapshotRecord({ ...payload.meta, snapshotJson: payload.json });
+        renderSavedList(onGenerate, onRestoreSnapshot);
+        showStatusMessage(
+          `Restored snapshot: Tick ${payload.meta.tick} (Hash verified: ${payload.meta.stateHash.slice(0, 8)}…)`,
+          "success",
+        );
+      } catch (err) {
+        showStatusMessage(`Failed to restore snapshot: ${(err as Error).message || err}`, "error");
+      }
+    } else if (payload.type === "legacy_config") {
+      applyConfig(payload.save.config);
+      onGenerate();
+      showStatusMessage(
+        `Loaded legacy configuration "${payload.save.name}" (Tick 0)`,
+        "success",
+      );
+    } else {
+      showStatusMessage(`Import error: ${payload.error}`, "error");
     }
-
-    // Optionally add to saves list
-    addSave(save);
-    applyConfig(save.config);
-    renderSavedList(generateFn);
-    generateFn();
   });
 
   // Initial render
-  renderSavedList(generateFn);
+  renderSavedList(onGenerate, onRestoreSnapshot);
 }
 
 export function autoSave(): void {
   const config = currentConfig();
-  const save = createSave("", config);
+  const save = {
+    formatVersion: 1 as const,
+    generatorVersion: "0.1.0",
+    name: "",
+    createdAt: new Date().toISOString(),
+    config,
+  };
   saveAutoSave(save);
 }
 
@@ -150,3 +307,4 @@ export function restoreLastWorld(): boolean {
   applyConfig(save.config);
   return true;
 }
+

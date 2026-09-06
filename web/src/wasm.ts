@@ -31,3 +31,10 @@ export async function createGpuRenderer(
   }
   return GpuRenderer.create(canvasId);
 }
+
+export function loadSnapshotWorld(json: string): IWorldBridge {
+  if (!ready) {
+    throw new Error("WASM engine not loaded");
+  }
+  return WorldBridge.load_snapshot(json);
+}

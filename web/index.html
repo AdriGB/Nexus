@@ -66,6 +66,7 @@
             <input id="import-file-input" type="file" accept=".json" style="display:none;">
           </label>
         </div>
+        <div id="save-status-msg" class="save-status-msg" hidden></div>
         <div id="saved-worlds-list" class="saved-list"></div>
       </div>
 
@@ -102,6 +103,7 @@
         <div class="info-grid simulation-readout">
           <span class="info-key">Tick</span><span class="info-val" id="simulation-tick">0</span>
           <span class="info-key">State</span><span class="info-val" id="simulation-state">Paused</span>
+          <span class="info-key">Hash</span><span class="info-val hash-val" id="simulation-hash" title="State hash (click to copy)">—</span>
         </div>
         <div class="simulation-controls">
           <button id="btn-sim-play" class="btn-secondary" aria-label="Play simulation">▶ Play</button>

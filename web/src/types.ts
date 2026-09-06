@@ -48,12 +48,15 @@ export interface IWorldBridge {
   ): Uint8Array;
   tile_info(x: number, y: number): string;
   region_stats(): string;
-  find_path(
+    find_path(
     startX: number,
     startY: number,
     goalX: number,
     goalY: number,
   ): Uint32Array;
+  state_hash(): string;
+  save_snapshot(worldSeed?: number | null, seaLevel?: number | null): string;
+  save_snapshot_pretty(worldSeed?: number | null, seaLevel?: number | null): string;
   free(): void;
 }
 
@@ -64,6 +67,7 @@ export interface WorldBridgeConstructor {
     height: number,
     seaLevel: number,
   ): IWorldBridge;
+  load_snapshot(json: string): IWorldBridge;
 }
 
 export interface IGpuRendererBridge {
