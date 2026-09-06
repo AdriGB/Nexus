@@ -1,10 +1,30 @@
 import { state } from "../state";
 import type { TileInfo } from "../types";
 
-const panel = document.getElementById("tile-inspector")!;
-const grid = document.getElementById("tile-info-grid")!;
+function getPanel(): HTMLElement | null {
+  return typeof document !== "undefined" ? document.getElementById("tile-inspector") : null;
+}
+
+function getGrid(): HTMLElement | null {
+  return typeof document !== "undefined" ? document.getElementById("tile-info-grid") : null;
+}
+
+export function syncInspectorEmptyState(): void {
+  if (typeof document === "undefined") return;
+  const empty = document.getElementById("inspector-empty");
+  const entityPanel = document.getElementById("entity-inspector");
+  const tilePanel = getPanel();
+  if (!empty) return;
+  const hasEntity = entityPanel && !entityPanel.hidden && entityPanel.style.display !== "none";
+  const hasTile = tilePanel && !tilePanel.hidden && tilePanel.style.display !== "none";
+  empty.hidden = !!(hasEntity || hasTile);
+}
 
 export function updateTileInspector(): void {
+  const panel = getPanel();
+  const grid = getGrid();
+  if (!panel || !grid) return;
+
   if (
     !state.selectedTile ||
     !state.world ||
@@ -14,6 +34,7 @@ export function updateTileInspector(): void {
     state.selectedTile.y >= state.worldH
   ) {
     panel.style.display = "none";
+    syncInspectorEmptyState();
     return;
   }
 
@@ -25,10 +46,12 @@ export function updateTileInspector(): void {
   );
   if (!info.terrain) {
     panel.style.display = "none";
+    syncInspectorEmptyState();
     return;
   }
 
   panel.style.display = "";
+  syncInspectorEmptyState();
   const altPct = (((info.altitude + 1) / 2) * 100).toFixed(1);
 
   const regionLabel =
@@ -68,6 +91,9 @@ export function updateTileInspector(): void {
 }
 
 export function clearTileInspector(): void {
-  panel.style.display = "none";
-  grid.innerHTML = "";
+  const panel = getPanel();
+  const grid = getGrid();
+  if (panel) panel.style.display = "none";
+  if (grid) grid.innerHTML = "";
+  syncInspectorEmptyState();
 }

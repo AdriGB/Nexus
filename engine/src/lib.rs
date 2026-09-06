@@ -247,8 +247,25 @@ impl WorldBridge {
             )
     }
 
+    pub fn entities_at(&self, x: u32, y: u32) -> Vec<u32> {
+        self.simulation
+            .entities()
+            .iter()
+            .filter(|entity| entity.x == x && entity.y == y)
+            .map(|entity| entity.id)
+            .collect()
+    }
+
     pub fn entity_kinship(&self, id: u32) -> String {
         bridge::entity_kinship_json(&self.simulation, id)
+    }
+
+    pub fn entity_relationships(&self, id: u32) -> String {
+        self.simulation
+            .entities()
+            .iter()
+            .find(|entity| entity.id == id)
+            .map_or_else(|| "[]".to_string(), bridge::entity_relationships_json)
     }
 
     pub fn entity_household(&self, id: u32) -> String {

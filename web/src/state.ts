@@ -1,5 +1,8 @@
 import type { IWorldBridge, TileCoord } from "./types";
 
+export type SidebarTab = "world" | "simulation" | "inspector" | "events" | "saves";
+export type ToolMode = "inspect" | "path";
+
 export interface AppState {
   world: IWorldBridge | null;
   worldW: number;
@@ -13,6 +16,10 @@ export interface AppState {
   renderMode: "terrain" | "resources";
   hoverTile: TileCoord | null;
   selectedTile: TileCoord | null;
+  selectedEntityId: number | null;
+  cameraFollowEntityId: number | null;
+  activeSidebarTab: SidebarTab;
+  activeTool: ToolMode;
   routeStart: TileCoord | null;
   routeEnd: TileCoord | null;
   route: TileCoord[];
@@ -32,6 +39,10 @@ export const state: AppState = {
   renderMode: "terrain",
   hoverTile: null,
   selectedTile: null,
+  selectedEntityId: null,
+  cameraFollowEntityId: null,
+  activeSidebarTab: "world",
+  activeTool: "inspect",
   routeStart: null,
   routeEnd: null,
   route: [],

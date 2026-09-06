@@ -1,5 +1,8 @@
-import { state } from "../state";
+import { state, requestRender } from "../state";
 import type { EntityHousehold, EntityInfo, EntityKinship, KnownRelationshipInfo } from "../types";
+import { switchTab } from "./tabs";
+import { centerOnTile } from "../renderer/camera";
+import { updateTileInspector, syncInspectorEmptyState } from "./tile-inspector";
 
 function infoRow(key: string, value: string, valueClass?: string): string {
   const cls = valueClass ? `info-val ${valueClass}` : "info-val";
@@ -8,6 +11,18 @@ function infoRow(key: string, value: string, valueClass?: string): string {
 
 function infoSectionTitle(title: string): string {
   return `<span class="info-key info-section-title">${title}</span>`;
+}
+
+function entityLink(id: number | null): string {
+  if (id === null) return "—";
+  return `<button class="entity-link-btn" type="button" data-entity-id="${id}">#${id}</button>`;
+}
+
+function entityLinks(ids: number[]): string {
+  if (ids.length === 0) return "—";
+  return ids
+    .map((id) => `<button class="entity-link-btn" type="button" data-entity-id="${id}">#${id}</button>`)
+    .join(", ");
 }
 
 const RELATIONSHIP_LIMIT = 20;
@@ -140,7 +155,7 @@ function relationshipsSection(
     const lastSeen = `Last seen (${relationship.last_seen_x}, ${relationship.last_seen_y}) ${formatTicksAgo(tick - relationship.last_seen_tick)}`;
 
     return `
-      <span class="info-key" style="margin-top:6px;">#${relationship.id}</span>
+      <span class="info-key" style="margin-top:6px;"><button class="entity-link-btn" type="button" data-entity-id="${relationship.id}">#${relationship.id}</button></span>
       <span class="info-val" style="color:${color};">${affinityText} ${label}${cooldown}</span>
       <span class="info-key"></span>
       <span class="info-val">${relationship.interaction_count} interactions · observed ${relationship.observed_ticks} ticks</span>
@@ -157,21 +172,186 @@ function relationshipsSection(
   );
 }
 
+export function selectEntity(id: number | null): void {
+  state.selectedEntityId = id;
+  if (id === null) {
+    state.cameraFollowEntityId = null;
+  } else if (state.world) {
+    try {
+      const raw = state.world.entity_info(id);
+      if (raw && raw !== "{}") {
+        const ent = JSON.parse(raw);
+        if (ent.id !== undefined) {
+          state.selectedTile = { x: ent.x, y: ent.y };
+        }
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  switchTab("inspector");
+  syncEntityInspector();
+  updateTileInspector();
+  requestRender();
+}
+
+export function bindEntityInspector(): void {
+  const followBtn = document.getElementById("btn-entity-follow");
+  const centerBtn = document.getElementById("btn-entity-center");
+  const chipsContainer = document.getElementById("entity-chips-container");
+  const infoGrid = document.getElementById("entity-info-grid");
+
+  followBtn?.addEventListener("click", () => {
+    if (state.selectedEntityId === null) return;
+    if (state.cameraFollowEntityId === state.selectedEntityId) {
+      state.cameraFollowEntityId = null;
+    } else {
+      state.cameraFollowEntityId = state.selectedEntityId;
+    }
+    syncEntityInspector();
+    requestRender();
+  });
+
+  centerBtn?.addEventListener("click", () => {
+    if (state.selectedEntityId === null || !state.world) return;
+    try {
+      const raw = state.world.entity_info(state.selectedEntityId);
+      if (raw && raw !== "{}") {
+        const ent = JSON.parse(raw);
+        if (ent.id !== undefined) {
+          centerOnTile(ent.x, ent.y);
+        }
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  });
+
+  const handleEntityClick = (e: MouseEvent) => {
+    const target = (e.target as HTMLElement).closest<HTMLElement>("[data-entity-id]");
+    if (!target || !target.dataset.entityId) return;
+    const id = Number(target.dataset.entityId);
+    if (!Number.isNaN(id)) {
+      selectEntity(id);
+    }
+  };
+
+  chipsContainer?.addEventListener("click", handleEntityClick);
+  infoGrid?.addEventListener("click", handleEntityClick);
+}
+
 export function syncEntityInspector(): void {
-  const panel = document.getElementById("entity-inspector")!;
-  const grid = document.getElementById("entity-info-grid")!;
+  const panel = document.getElementById("entity-inspector");
+  const grid = document.getElementById("entity-info-grid");
+  const chipsContainer = document.getElementById("entity-chips-container");
+  const titleEl = document.getElementById("entity-inspector-title");
+  const followBtn = document.getElementById("btn-entity-follow");
+
+  if (!panel || !grid) return;
+
   if (!state.world || state.world.entity_count() === 0) {
     panel.hidden = true;
     grid.innerHTML = "";
+    if (chipsContainer) {
+      chipsContainer.hidden = true;
+      chipsContainer.innerHTML = "";
+    }
+    state.selectedEntityId = null;
+    state.cameraFollowEntityId = null;
+    syncInspectorEmptyState();
     return;
   }
 
-  const entity: EntityInfo = JSON.parse(state.world.first_entity_info());
+  // If no entity is selected, inspect any entity at selectedTile
+  if (state.selectedEntityId === null && state.selectedTile) {
+    const atTile = state.world.entities_at(state.selectedTile.x, state.selectedTile.y);
+    if (atTile.length > 0) {
+      state.selectedEntityId = atTile[0];
+    }
+  }
+
+  if (state.selectedEntityId === null) {
+    panel.hidden = true;
+    grid.innerHTML = "";
+    if (chipsContainer) {
+      chipsContainer.hidden = true;
+      chipsContainer.innerHTML = "";
+    }
+    syncInspectorEmptyState();
+    return;
+  }
+
+  let entity: EntityInfo;
+  try {
+    const raw = state.world.entity_info(state.selectedEntityId);
+    if (!raw || raw === "{}") {
+      panel.hidden = true;
+      grid.innerHTML = "";
+      if (chipsContainer) {
+        chipsContainer.hidden = true;
+        chipsContainer.innerHTML = "";
+      }
+      state.selectedEntityId = null;
+      if (state.cameraFollowEntityId === state.selectedEntityId) {
+        state.cameraFollowEntityId = null;
+      }
+      syncInspectorEmptyState();
+      return;
+    }
+    entity = JSON.parse(raw);
+    if (entity.id === undefined) {
+      panel.hidden = true;
+      grid.innerHTML = "";
+      if (chipsContainer) {
+        chipsContainer.hidden = true;
+        chipsContainer.innerHTML = "";
+      }
+      state.selectedEntityId = null;
+      syncInspectorEmptyState();
+      return;
+    }
+  } catch (_) {
+    panel.hidden = true;
+    grid.innerHTML = "";
+    syncInspectorEmptyState();
+    return;
+  }
+
+  panel.hidden = false;
+  syncInspectorEmptyState();
+
+  if (titleEl) {
+    titleEl.textContent = `Entity #${entity.id}`;
+  }
+
+  if (followBtn) {
+    const isFollowing = state.cameraFollowEntityId === entity.id;
+    followBtn.classList.toggle("active", isFollowing);
+    followBtn.textContent = isFollowing ? "Following" : "Follow";
+  }
+
+  if (chipsContainer) {
+    const coLocated = state.world.entities_at(entity.x, entity.y);
+    if (coLocated.length > 1) {
+      chipsContainer.hidden = false;
+      chipsContainer.innerHTML = Array.from(coLocated)
+        .map(
+          (id) =>
+            `<button class="entity-chip ${id === entity.id ? "active" : ""}" data-entity-id="${id}" type="button">#${id}</button>`,
+        )
+        .join("");
+    } else {
+      chipsContainer.hidden = true;
+      chipsContainer.innerHTML = "";
+    }
+  }
+
   const relationships = JSON.parse(
-    state.world.first_entity_relationships(),
+    state.world.entity_relationships(entity.id),
   ) as KnownRelationshipInfo[];
-  const kinship = JSON.parse(state.world.first_entity_kinship()) as EntityKinship;
-  const household = JSON.parse(state.world.first_entity_household()) as EntityHousehold;
+  const kinship = JSON.parse(state.world.entity_kinship(entity.id)) as EntityKinship;
+  const household = JSON.parse(state.world.entity_household(entity.id)) as EntityHousehold;
   const simulationTick = Number(state.world.simulation_tick());
   const relationshipsHtml = relationshipsSection(relationships, simulationTick);
   const dueInHours =
@@ -181,7 +361,7 @@ export function syncEntityInspector(): void {
           0,
           entity.pregnancy_due_tick - simulationTick,
         );
-  panel.hidden = false;
+
   grid.innerHTML = [
     infoRow("ID", `#${entity.id}`),
     infoRow("Sex", entity.sex),
@@ -193,23 +373,13 @@ export function syncEntityInspector(): void {
       `${(entity.stage_movement_factor * 100).toFixed(0)}%`,
     ),
     infoSectionTitle("Kinship"),
-    infoRow("Mother", kinship.mother_id === null ? "—" : `#${kinship.mother_id}`),
-    infoRow("Father", kinship.father_id === null ? "—" : `#${kinship.father_id}`),
-    infoRow(
-      "Children",
-      kinship.children_ids.length === 0
-        ? "—"
-        : kinship.children_ids.map((id) => `#${id}`).join(", "),
-    ),
-    infoRow(
-      "Siblings",
-      kinship.sibling_ids.length === 0
-        ? "—"
-        : kinship.sibling_ids.map((id) => `#${id}`).join(", "),
-    ),
+    infoRow("Mother", entityLink(kinship.mother_id)),
+    infoRow("Father", entityLink(kinship.father_id)),
+    infoRow("Children", entityLinks(kinship.children_ids)),
+    infoRow("Siblings", entityLinks(kinship.sibling_ids)),
     `<span class="info-key"></span><button class="btn-secondary family-tree-open" type="button" data-family-tree-id="${entity.id}">View Family Tree</button>`,
-    infoRow("Caregiver", entity.caregiver_id === null ? "—" : `#${entity.caregiver_id}`),
-    infoRow("Partner", entity.partner_id === null ? "—" : `#${entity.partner_id}`),
+    infoRow("Caregiver", entityLink(entity.caregiver_id)),
+    infoRow("Partner", entityLink(entity.partner_id)),
     renderHouseholdSection(household),
     infoSectionTitle("Personality"),
     infoRow(
