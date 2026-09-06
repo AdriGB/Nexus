@@ -122,6 +122,11 @@ export function bindCamera(inputLayer: HTMLElement): void {
     fitWorld();
     requestRender();
   });
+  document.getElementById("btn-toggle-grid")?.addEventListener("click", () => {
+    state.showGrid = !state.showGrid;
+    document.getElementById("btn-toggle-grid")?.classList.toggle("active", state.showGrid);
+    requestRender();
+  });
 }
 
 export function centerOnTile(x: number, y: number): void {

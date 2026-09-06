@@ -73,6 +73,7 @@ function Test-Web {
         }
 
         Invoke-CheckStep "Install web dependencies" { npm ci }
+        Invoke-CheckStep "Web boot and markup smoke test" { npm test -- boot-smoke }
         Invoke-CheckStep "TypeScript typecheck" { npm run typecheck }
         Invoke-CheckStep "Web tests" { npm test }
         Invoke-CheckStep "Web build" { npm run build }
