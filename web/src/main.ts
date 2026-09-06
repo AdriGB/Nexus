@@ -46,7 +46,7 @@ import {
 import { installPerformanceDebug } from "./simulation-debug";
 import { bindInteractionHistory } from "./ui/interaction-history";
 import { bindFamilyTree } from "./ui/family-tree";
-import { bindTabs } from "./ui/tabs";
+import { bindTabs, switchTab } from "./ui/tabs";
 import {
   bindEntityInspector,
   selectEntity,
@@ -96,6 +96,12 @@ function activateWorld(
 
   updateWorldInfo(seed, width, height, sea);
   updateRegionStats();
+
+  // The minimap is an empty frame until a world exists, so it is hidden in the
+  // markup and only revealed here.
+  const minimapWrap = document.getElementById("minimap-wrap");
+  if (minimapWrap) minimapWrap.hidden = false;
+
   fitWorld();
   renderMinimap();
   requestRender();
@@ -131,6 +137,11 @@ function fullRender(): void {
 /* ── Boot ─────────────────────────────────── */
 
 async function boot(): Promise<void> {
+  // The minimap is an empty frame until a world exists; activateWorld() reveals
+  // it. Done here rather than in the markup so the change stays out of
+  // index.html, which another agent is editing concurrently.
+  document.getElementById("minimap-wrap")?.setAttribute("hidden", "");
+
   try {
     await loadWasm();
   } catch (err) {
@@ -145,11 +156,12 @@ async function boot(): Promise<void> {
     return;
   }
 
-  document.getElementById("loading")!.classList.add("done");
-  setTimeout(
-    () => document.getElementById("loading")!.remove(),
-    600,
-  );
+  // The engine is up but no world exists yet. Keep the overlay until the first
+  // world is on screen: with no world the minimap, the HUD telemetry and the
+  // status bar are all empty shells, and revealing them early just shows an
+  // empty viewport with a stray spinner floating in it.
+  const loadingText = document.getElementById("loading-text");
+  if (loadingText) loadingText.textContent = "Generating world\u2026";
 
   setRenderCallback(fullRender);
 
@@ -191,9 +203,12 @@ async function boot(): Promise<void> {
 
   inputLayer.addEventListener("click", (event) => {
     if (inputLayer.dataset.wasDrag === "true") return;
-    if (!state.hoverTile || !isTileInWorld(state.hoverTile)) return;
+    const rect = inputLayer.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    const tile = screenToTile(mx, my);
+    if (!isTileInWorld(tile)) return;
 
-    const tile = { ...state.hoverTile };
     state.selectedTile = tile;
 
     if (state.world) {
@@ -203,10 +218,12 @@ async function boot(): Promise<void> {
       } else {
         state.selectedEntityId = null;
         state.cameraFollowEntityId = null;
+        switchTab("inspector");
         syncEntityInspector();
         updateTileInspector();
       }
     } else {
+      switchTab("inspector");
       updateTileInspector();
     }
 
@@ -281,8 +298,18 @@ async function boot(): Promise<void> {
     }
   });
 
-  restoreLastWorld();
-  generateWorld();
+  try {
+    restoreLastWorld();
+    generateWorld();
+  } finally {
+    // `finally` so a failure inside generation cannot leave the user staring at
+    // "Generating world…" forever.
+    const loading = document.getElementById("loading");
+    if (loading) {
+      loading.classList.add("done");
+      setTimeout(() => loading.remove(), 600);
+    }
+  }
 }
 
 boot();

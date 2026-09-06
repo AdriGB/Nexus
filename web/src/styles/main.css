@@ -558,6 +558,7 @@ kbd {
 }
 .save-btn-sm:hover {
   border-color: var(--border-hover);
+}
 .save-btn-sm.danger:hover {
   border-color: rgba(239,68,68,0.3);
   color: var(--danger);
@@ -661,6 +662,25 @@ kbd {
   pointer-events: none; z-index: 1;
 }
 #minimap-canvas { display: block; cursor: pointer; }
+#minimap-wrap[hidden] { display: none; }
+
+/* ── Regenerate confirmation toast ──────────── */
+
+.regen-toast {
+  position: fixed; bottom: 52px; left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 60; max-width: 400px;
+  background: var(--bg-card); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 10px 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  font: 11px/1.5 var(--font-mono); color: var(--text);
+  text-align: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.regen-toast.visible {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
 
 /* ── Tooltip ────────────────────────────────── */
 
@@ -674,6 +694,10 @@ kbd {
 .tooltip-terrain { font-family: var(--font-display); font-weight: 700; font-size: 13px; margin-bottom: 4px; }
 .tooltip-row { display: flex; justify-content: space-between; color: var(--text-secondary); margin: 2px 0; }
 .tooltip-row span:last-child { color: var(--text); font-weight: 500; }
+
+/* ── Save button (sits beside the name input) ── */
+
+.btn-save-inline { width: auto; padding: 8px 14px; }
 
 /* ── Scrollbar ──────────────────────────────── */
 

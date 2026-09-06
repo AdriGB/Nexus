@@ -4,6 +4,34 @@ import { resizeRenderer } from "../renderer/renderer";
 import { updateTileInspector } from "./tile-inspector";
 import type { RegionStats } from "../types";
 
+/**
+ * Regenerating discards the running simulation, and `R` sits next to `F` and
+ * `G`, which are also bound. A stray keystroke used to wipe a long-running
+ * world with no warning, so the first press only arms the action and says so.
+ */
+const REGENERATE_CONFIRM_MS = 3000;
+
+function ensureRegenerateToast(): HTMLElement {
+  let toast = document.getElementById("regen-toast");
+  if (!toast) {
+    toast = document.createElement("output");
+    toast.id = "regen-toast";
+    toast.className = "regen-toast";
+    document.body.appendChild(toast);
+  }
+  return toast;
+}
+
+function showRegenerateToast(message: string): void {
+  const toast = ensureRegenerateToast();
+  toast.textContent = message;
+  toast.classList.add("visible");
+}
+
+function hideRegenerateToast(): void {
+  document.getElementById("regen-toast")?.classList.remove("visible");
+}
+
 function clampInt(
   val: string,
   min: number,
@@ -51,10 +79,31 @@ export function bindControls(generateFn: () => void): void {
     });
   });
 
+  let regenerateArmed = false;
+  let regenerateTimer: number | null = null;
+
   window.addEventListener("keydown", (e) => {
     if (e.target instanceof HTMLInputElement) return;
 
     if (e.key === "r" || e.key === "R") {
+      if (!regenerateArmed) {
+        regenerateArmed = true;
+        showRegenerateToast(
+          `Discard world (seed ${seedInput.value})? Press R again to confirm.`,
+        );
+        regenerateTimer = window.setTimeout(() => {
+          regenerateArmed = false;
+          regenerateTimer = null;
+          hideRegenerateToast();
+        }, REGENERATE_CONFIRM_MS);
+        return;
+      }
+
+      if (regenerateTimer !== null) window.clearTimeout(regenerateTimer);
+      regenerateTimer = null;
+      regenerateArmed = false;
+      hideRegenerateToast();
+
       seedInput.value = String(
         Math.floor(Math.random() * 4294967295),
       );
