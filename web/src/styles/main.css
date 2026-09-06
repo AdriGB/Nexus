@@ -307,11 +307,50 @@ kbd {
 }
 .save-btn-sm:hover {
   border-color: var(--border-hover);
-  color: var(--text);
-}
 .save-btn-sm.danger:hover {
   border-color: rgba(239,68,68,0.3);
   color: var(--danger);
+}
+
+.save-item-meta code {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  background: rgba(201,168,76,0.1);
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.save-status-msg {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  transition: all 0.2s ease;
+}
+.save-status-msg.success {
+  border-color: rgba(101,201,131,0.4);
+  color: #65c983;
+  background: rgba(101,201,131,0.08);
+}
+.save-status-msg.error {
+  border-color: rgba(239,68,68,0.4);
+  color: var(--danger);
+  background: rgba(239,68,68,0.08);
+}
+
+.hash-val {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  user-select: all;
+  transition: color 0.15s;
+}
+.hash-val:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 /* ── Viewport ───────────────────────────────── */

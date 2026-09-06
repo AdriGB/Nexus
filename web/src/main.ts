@@ -1,12 +1,14 @@
 import "./styles/main.css";
 
 import { state, setRenderCallback, requestRender } from "./state";
-import { loadWasm, createWorld } from "./wasm";
+import type { IWorldBridge } from "./types";
+import { loadWasm, createWorld, loadSnapshotWorld } from "./wasm";
 import {
   initializeRenderer,
   renderWorld,
   uploadRouteToRenderer,
   uploadWorldToRenderer,
+  uploadSimulationToRenderer,
 } from "./renderer/renderer";
 import {
   fitWorld,
@@ -41,12 +43,14 @@ import {
 import { installPerformanceDebug } from "./simulation-debug";
 import { bindInteractionHistory } from "./ui/interaction-history";
 import { bindFamilyTree } from "./ui/family-tree";
+import type { SavedSnapshotRecordMeta } from "./persistence/world-save";
 
-/* ── World generation ─────────────────────── */
+/* ── World activation & generation ─────────── */
 
-function generateWorld(): void {
-  const { seed, width, height, sea } = readParams();
-
+function activateWorld(
+  newWorld: IWorldBridge,
+  params?: { seed?: number; width?: number; height?: number; sea?: number },
+): void {
   state.selectedTile = null;
   state.hoverTile = null;
   state.routeStart = null;
@@ -63,11 +67,18 @@ function generateWorld(): void {
     }
   }
 
-  state.world = createWorld(seed, width, height, sea);
+  state.world = newWorld;
   state.worldW = state.world.width();
   state.worldH = state.world.height();
+
+  const width = params?.width ?? state.worldW;
+  const height = params?.height ?? state.worldH;
+  const seed = params?.seed ?? 42;
+  const sea = params?.sea ?? 0.35;
+
   resetSimulationView();
   uploadWorldToRenderer();
+  uploadSimulationToRenderer(true);
   uploadRouteToRenderer();
   updateRouteStatus();
 
@@ -76,7 +87,26 @@ function generateWorld(): void {
   fitWorld();
   renderMinimap();
   requestRender();
+}
+
+function generateWorld(): void {
+  const { seed, width, height, sea } = readParams();
+  const world = createWorld(seed, width, height, sea);
+  activateWorld(world, { seed, width, height, sea });
   autoSave();
+}
+
+function restoreSnapshotWorld(
+  json: string,
+  meta?: SavedSnapshotRecordMeta | null,
+): void {
+  const world = loadSnapshotWorld(json);
+  const seed = meta?.worldSeed ?? 42;
+  const sea = meta?.seaLevel ?? 0.35;
+  const width = world.width();
+  const height = world.height();
+
+  activateWorld(world, { seed, width, height, sea });
 }
 
 /* ── Render callback ──────────────────────── */
@@ -117,7 +147,7 @@ async function boot(): Promise<void> {
   const inputLayer = document.getElementById("world-input-layer")!;
   bindCamera(inputLayer);
   bindControls(generateWorld);
-  bindSaveControls(generateWorld);
+  bindSaveControls(generateWorld, restoreSnapshotWorld);
   bindSimulationControls();
   bindInteractionHistory();
   bindFamilyTree();
