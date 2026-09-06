@@ -39,10 +39,19 @@ import {
 import {
   bindSimulationControls,
   resetSimulationView,
+  togglePlaySimulation,
+  stepSimulation,
+  setSimulationSpeed,
 } from "./simulation";
 import { installPerformanceDebug } from "./simulation-debug";
 import { bindInteractionHistory } from "./ui/interaction-history";
 import { bindFamilyTree } from "./ui/family-tree";
+import { bindTabs } from "./ui/tabs";
+import {
+  bindEntityInspector,
+  selectEntity,
+  syncEntityInspector,
+} from "./ui/entity-inspector";
 import type { SavedSnapshotRecordMeta } from "./persistence/world-save";
 
 /* ── World activation & generation ─────────── */
@@ -52,12 +61,15 @@ function activateWorld(
   params?: { seed?: number; width?: number; height?: number; sea?: number },
 ): void {
   state.selectedTile = null;
+  state.selectedEntityId = null;
+  state.cameraFollowEntityId = null;
   state.hoverTile = null;
   state.routeStart = null;
   state.routeEnd = null;
   state.route = [];
   hideTooltip();
   clearTileInspector();
+  syncEntityInspector();
 
   if (state.world) {
     try {
@@ -145,10 +157,12 @@ async function boot(): Promise<void> {
   await initializeRenderer();
 
   const inputLayer = document.getElementById("world-input-layer")!;
+  bindTabs();
   bindCamera(inputLayer);
   bindControls(generateWorld);
   bindSaveControls(generateWorld, restoreSnapshotWorld);
   bindSimulationControls();
+  bindEntityInspector();
   bindInteractionHistory();
   bindFamilyTree();
   installPerformanceDebug();
@@ -181,7 +195,20 @@ async function boot(): Promise<void> {
 
     const tile = { ...state.hoverTile };
     state.selectedTile = tile;
-    updateTileInspector();
+
+    if (state.world) {
+      const entities = state.world.entities_at(tile.x, tile.y);
+      if (entities.length > 0) {
+        selectEntity(entities[0]);
+      } else {
+        state.selectedEntityId = null;
+        state.cameraFollowEntityId = null;
+        syncEntityInspector();
+        updateTileInspector();
+      }
+    } else {
+      updateTileInspector();
+    }
 
     if (event.shiftKey && state.routeStart && state.world) {
       state.routeEnd = tile;
@@ -201,6 +228,57 @@ async function boot(): Promise<void> {
     uploadRouteToRenderer();
     updateRouteStatus();
     requestRender();
+  });
+
+  window.addEventListener("keydown", (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName?.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+    switch (e.key) {
+      case " ":
+        e.preventDefault();
+        togglePlaySimulation();
+        break;
+      case ".":
+        stepSimulation();
+        break;
+      case "1":
+        setSimulationSpeed(1);
+        break;
+      case "2":
+        setSimulationSpeed(2);
+        break;
+      case "3":
+        setSimulationSpeed(4);
+        break;
+      case "f":
+      case "F":
+        fitWorld();
+        requestRender();
+        break;
+      case "g":
+      case "G": {
+        state.showGrid = !state.showGrid;
+        const gridBtn = document.getElementById("btn-toggle-grid");
+        gridBtn?.classList.toggle("active", state.showGrid);
+        requestRender();
+        break;
+      }
+      case "Escape":
+        state.selectedEntityId = null;
+        state.cameraFollowEntityId = null;
+        state.selectedTile = null;
+        state.routeStart = null;
+        state.routeEnd = null;
+        state.route = [];
+        uploadRouteToRenderer();
+        updateRouteStatus();
+        clearTileInspector();
+        syncEntityInspector();
+        requestRender();
+        break;
+    }
   });
 
   restoreLastWorld();

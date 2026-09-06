@@ -21,177 +21,210 @@
         <p class="app-subtitle">World Engine</p>
       </div>
 
-      <!-- World Parameters -->
-      <div class="sidebar-section">
-        <label class="field-label">World Parameters</label>
-        <div class="input-row">
-          <input id="seed-input" class="input-field" type="number" value="42" min="0" max="4294967295">
-          <button id="btn-random-seed" class="btn-secondary" title="Random seed">&#x1F3B2;</button>
-        </div>
-        <div class="input-row">
-          <input id="width-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
-          <span style="color:var(--text-muted);font-size:11px;line-height:32px;">&#215;</span>
-          <input id="height-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
-        </div>
-        <div class="slider-row">
-          <label>Sea Level <span id="sea-val">0.35</span></label>
-          <input id="sea-slider" type="range" min="0.1" max="0.6" step="0.01" value="0.35">
-        </div>
-        <button id="btn-generate" class="btn-primary">Generate World</button>
-      </div>
+      <!-- Tab Navigation -->
+      <nav class="sidebar-tabs" role="tablist" aria-label="Sidebar navigation">
+        <button class="sidebar-tab active" data-tab="world" role="tab" aria-selected="true">World</button>
+        <button class="sidebar-tab" data-tab="simulation" role="tab" aria-selected="false">Society</button>
+        <button class="sidebar-tab" data-tab="inspector" role="tab" aria-selected="false">Inspect</button>
+        <button class="sidebar-tab" data-tab="events" role="tab" aria-selected="false">Events</button>
+        <button class="sidebar-tab" data-tab="saves" role="tab" aria-selected="false">Saves</button>
+      </nav>
 
-      <!-- World Info -->
-      <div class="sidebar-section" id="world-info" style="display:none;">
-        <label class="field-label">World Info</label>
-        <div class="info-grid">
-          <span class="info-key">Seed</span><span class="info-val" id="info-seed">&#8212;</span>
-          <span class="info-key">Size</span><span class="info-val" id="info-size">&#8212;</span>
-          <span class="info-key">Tiles</span><span class="info-val" id="info-tiles">&#8212;</span>
-          <span class="info-key">Sea Level</span><span class="info-val" id="info-sea">&#8212;</span>
+      <!-- Tab 1: World & Terrain -->
+      <div class="tab-panel active" id="tab-world" role="tabpanel">
+        <!-- World Parameters -->
+        <div class="sidebar-section">
+          <label class="field-label">World Parameters</label>
+          <div class="input-row">
+            <input id="seed-input" class="input-field" type="number" value="42" min="0" max="4294967295">
+            <button id="btn-random-seed" class="btn-secondary" title="Random seed">&#x1F3B2;</button>
+          </div>
+          <div class="input-row">
+            <input id="width-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
+            <span style="color:var(--text-muted);font-size:11px;line-height:32px;">&#215;</span>
+            <input id="height-input" class="input-field" type="number" value="256" min="64" max="1024" step="64">
+          </div>
+          <div class="slider-row">
+            <label>Sea Level <span id="sea-val">0.35</span></label>
+            <input id="sea-slider" type="range" min="0.1" max="0.6" step="0.01" value="0.35">
+          </div>
+          <button id="btn-generate" class="btn-primary">Generate World</button>
         </div>
-        <div class="info-grid" id="region-stats" style="margin-top:8px;"></div>
-      </div>
 
-      <!-- Save & Load -->
-      <div class="sidebar-section" id="save-section">
-        <label class="field-label">Save &amp; Load</label>
-        <div class="input-row">
-          <input id="world-name-input" class="input-field" type="text" placeholder="World name..." maxlength="60">
-          <button id="btn-save-world" class="btn-primary" style="width:auto;padding:8px 14px;">Save</button>
+        <!-- World Info -->
+        <div class="sidebar-section" id="world-info" style="display:none;">
+          <label class="field-label">World Info</label>
+          <div class="info-grid">
+            <span class="info-key">Seed</span><span class="info-val" id="info-seed">&#8212;</span>
+            <span class="info-key">Size</span><span class="info-val" id="info-size">&#8212;</span>
+            <span class="info-key">Tiles</span><span class="info-val" id="info-tiles">&#8212;</span>
+            <span class="info-key">Sea Level</span><span class="info-val" id="info-sea">&#8212;</span>
+          </div>
+          <div class="info-grid" id="region-stats" style="margin-top:8px;"></div>
         </div>
-        <div class="input-row" style="gap:6px;">
-          <button id="btn-export-world" class="btn-secondary" style="flex:1;">Export JSON</button>
-          <label id="btn-import-label" class="btn-secondary import-label">
-            Import
-            <input id="import-file-input" type="file" accept=".json" style="display:none;">
-          </label>
-        </div>
-        <div id="save-status-msg" class="save-status-msg" hidden></div>
-        <div id="saved-worlds-list" class="saved-list"></div>
-      </div>
 
-      <!-- Terrain Legend -->
-      <div class="sidebar-section">
-        <label class="field-label">Terrain Legend</label>
-        <div class="legend-grid" id="legend-grid"></div>
-      </div>
+        <!-- Visualization Layers -->
+        <div class="sidebar-section">
+          <label class="field-label">Visualization Layer</label>
+          <div class="mode-switch" role="group" aria-label="Map visualization">
+            <button class="btn-secondary active" data-render-mode="terrain">Terrain</button>
+            <button class="btn-secondary" data-render-mode="resources">Resources</button>
+          </div>
+          <div class="resource-legend">
+            <span><i style="--resource-color:#4de559"></i>Food</span>
+            <span><i style="--resource-color:#1fb86b"></i>Timber</span>
+            <span><i style="--resource-color:#adb8c7"></i>Stone</span>
+            <span><i style="--resource-color:#eb6b2e"></i>Iron</span>
+          </div>
+        </div>
 
-      <!-- Visualization Layers -->
-      <div class="sidebar-section">
-        <label class="field-label">Visualization</label>
-        <div class="mode-switch" role="group" aria-label="Map visualization">
-          <button class="btn-secondary active" data-render-mode="terrain">Terrain</button>
-          <button class="btn-secondary" data-render-mode="resources">Resources</button>
+        <!-- Terrain Legend -->
+        <div class="sidebar-section">
+          <label class="field-label">Terrain Legend</label>
+          <div class="legend-grid" id="legend-grid"></div>
         </div>
-        <div class="resource-legend">
-          <span><i style="--resource-color:#4de559"></i>Food</span>
-          <span><i style="--resource-color:#1fb86b"></i>Timber</span>
-          <span><i style="--resource-color:#adb8c7"></i>Stone</span>
-          <span><i style="--resource-color:#eb6b2e"></i>Iron</span>
-        </div>
-      </div>
 
-      <!-- Selected Tile -->
-      <div class="sidebar-section" id="tile-inspector" style="display:none;">
-        <label class="field-label">Selected Tile</label>
-        <div class="info-grid" id="tile-info-grid"></div>
-      </div>
-
-      <!-- Simulation -->
-      <div class="sidebar-section">
-        <label class="field-label">Simulation</label>
-        <div class="info-grid simulation-readout">
-          <span class="info-key">Tick</span><span class="info-val" id="simulation-tick">0</span>
-          <span class="info-key">State</span><span class="info-val" id="simulation-state">Paused</span>
-          <span class="info-key">Hash</span><span class="info-val hash-val" id="simulation-hash" title="State hash (click to copy)">—</span>
-        </div>
-        <div class="simulation-controls">
-          <button id="btn-sim-play" class="btn-secondary" aria-label="Play simulation">▶ Play</button>
-          <button id="btn-sim-pause" class="btn-secondary active" aria-label="Pause simulation">⏸ Pause</button>
-          <button id="btn-sim-step" class="btn-secondary" aria-label="Advance one tick">⏭ Step</button>
-        </div>
-        <label class="simulation-speed-label" for="simulation-speed">Speed</label>
-        <select id="simulation-speed" class="input-field">
-          <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-        </select>
-        <label class="simulation-speed-label">Population</label>
-        <div class="info-grid population-readout">
-          <span class="info-key">Population</span><span class="info-val" id="population-count">0</span>
-          <span class="info-key">Female</span><span class="info-val" id="population-females">0</span>
-          <span class="info-key">Male</span><span class="info-val" id="population-males">0</span>
-          <span class="info-key">Pregnant</span><span class="info-val" id="population-pregnant">0</span>
-          <span class="info-key">Births</span><span class="info-val" id="population-births">0</span>
-          <span class="info-key">Deaths</span><span class="info-val" id="population-deaths">0</span>
-          <span class="info-key">Hungry</span><span class="info-val" id="population-hungry">0</span>
-          <span class="info-key">Seeking food</span><span class="info-val" id="population-seeking">0</span>
-          <span class="info-key">Average hunger</span><span class="info-val" id="population-average-hunger">0.0%</span>
-          <span class="info-key">Food consumed</span><span class="info-val" id="population-food-consumed">0</span>
-        </div>
-        <div class="population-controls">
-          <button id="btn-spawn-10" class="btn-secondary">Spawn +10</button>
-          <button id="btn-spawn-100" class="btn-secondary">Spawn +100</button>
-        </div>
-        <label class="simulation-speed-label">Households</label>
-        <div class="info-grid population-readout">
-          <span class="info-key">Households</span><span class="info-val" id="household-total">0</span>
-          <span class="info-key">Active</span><span class="info-val" id="household-active">0</span>
-          <span class="info-key">Dissolved</span><span class="info-val" id="household-dissolved">0</span>
-          <span class="info-key">Housed</span><span class="info-val" id="household-housed">0</span>
-          <span class="info-key">Unhoused</span><span class="info-val" id="household-unhoused">0</span>
-          <span class="info-key">Average size</span><span class="info-val" id="household-average-size">0.0</span>
-          <span class="info-key">Largest</span><span class="info-val" id="household-largest">0</span>
-          <span class="info-key">With dependents</span><span class="info-val" id="household-with-dependents">0</span>
-          <span class="info-key">Shared storage</span><span class="info-val" id="household-shared-storage">0 / 0 (0.0%)</span>
-          <span class="info-key">Stored food</span><span class="info-val" id="household-food">0</span>
-          <span class="info-key">Inheritances</span><span class="info-val" id="household-inheritances">0</span>
-          <span class="info-key">No heir</span><span class="info-val" id="household-no-heir">0</span>
+        <!-- Controls Guide -->
+        <div class="sidebar-section" style="border-bottom:none;">
+          <label class="field-label">Keybindings</label>
+          <div style="font-size:10px;color:var(--text-muted);line-height:1.8;">
+            <kbd>Space</kbd> Pause/Play · <kbd>.</kbd> Step 1 tick<br>
+            <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Speed (1×, 2×, 4×)<br>
+            <kbd>R</kbd> Regenerate · <kbd>F</kbd> Fit · <kbd>G</kbd> Grid<br>
+            <kbd>Esc</kbd> Deselect / Cancel follow
+          </div>
         </div>
       </div>
 
-      <!-- Entity debug -->
-      <div class="sidebar-section" id="entity-inspector" hidden>
-        <label class="field-label">Entity Debug</label>
-        <div class="entity-marker-preview"></div>
-        <div class="info-grid" id="entity-info-grid"></div>
+      <!-- Tab 2: Simulation & Society -->
+      <div class="tab-panel" id="tab-simulation" role="tabpanel" hidden>
+        <div class="sidebar-section">
+          <label class="field-label">Simulation Readout</label>
+          <div class="info-grid simulation-readout">
+            <span class="info-key">Tick</span><span class="info-val" id="simulation-tick">0</span>
+            <span class="info-key">State</span><span class="info-val" id="simulation-state">Paused</span>
+            <span class="info-key">Hash</span><span class="info-val hash-val" id="simulation-hash" title="State hash (click to copy)">—</span>
+          </div>
+          <div class="simulation-controls">
+            <button id="btn-sim-play" class="btn-secondary" aria-label="Play simulation">▶ Play</button>
+            <button id="btn-sim-pause" class="btn-secondary active" aria-label="Pause simulation">⏸ Pause</button>
+            <button id="btn-sim-step" class="btn-secondary" aria-label="Advance one tick">⏭ Step</button>
+          </div>
+          <label class="simulation-speed-label" for="simulation-speed">Speed</label>
+          <select id="simulation-speed" class="input-field">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+
+          <label class="simulation-speed-label">Population</label>
+          <div class="info-grid population-readout">
+            <span class="info-key">Population</span><span class="info-val" id="population-count">0</span>
+            <span class="info-key">Female</span><span class="info-val" id="population-females">0</span>
+            <span class="info-key">Male</span><span class="info-val" id="population-males">0</span>
+            <span class="info-key">Pregnant</span><span class="info-val" id="population-pregnant">0</span>
+            <span class="info-key">Births</span><span class="info-val" id="population-births">0</span>
+            <span class="info-key">Deaths</span><span class="info-val" id="population-deaths">0</span>
+            <span class="info-key">Hungry</span><span class="info-val" id="population-hungry">0</span>
+            <span class="info-key">Seeking food</span><span class="info-val" id="population-seeking">0</span>
+            <span class="info-key">Average hunger</span><span class="info-val" id="population-average-hunger">0.0%</span>
+            <span class="info-key">Food consumed</span><span class="info-val" id="population-food-consumed">0</span>
+          </div>
+          <div class="population-controls">
+            <button id="btn-spawn-10" class="btn-secondary">Spawn +10</button>
+            <button id="btn-spawn-100" class="btn-secondary">Spawn +100</button>
+          </div>
+
+          <label class="simulation-speed-label">Households</label>
+          <div class="info-grid population-readout">
+            <span class="info-key">Households</span><span class="info-val" id="household-total">0</span>
+            <span class="info-key">Active</span><span class="info-val" id="household-active">0</span>
+            <span class="info-key">Dissolved</span><span class="info-val" id="household-dissolved">0</span>
+            <span class="info-key">Housed</span><span class="info-val" id="household-housed">0</span>
+            <span class="info-key">Unhoused</span><span class="info-val" id="household-unhoused">0</span>
+            <span class="info-key">Average size</span><span class="info-val" id="household-average-size">0.0</span>
+            <span class="info-key">Largest</span><span class="info-val" id="household-largest">0</span>
+            <span class="info-key">With dependents</span><span class="info-val" id="household-with-dependents">0</span>
+            <span class="info-key">Shared storage</span><span class="info-val" id="household-shared-storage">0 / 0 (0.0%)</span>
+            <span class="info-key">Stored food</span><span class="info-val" id="household-food">0</span>
+            <span class="info-key">Inheritances</span><span class="info-val" id="household-inheritances">0</span>
+            <span class="info-key">No heir</span><span class="info-val" id="household-no-heir">0</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Recent simulation events -->
-      <div class="sidebar-section" id="interaction-history">
-        <label class="field-label">Event Timeline</label>
-        <div class="interaction-history-controls">
-          <button id="btn-history-all" class="btn-secondary active" type="button">All events</button>
-          <label class="interaction-entity-filter">
-            <span>Entity</span>
-            <input
-              id="interaction-entity-id"
-              class="input-field"
-              type="number"
-              min="1"
-              step="1"
-              inputmode="numeric"
-              placeholder="ID"
-              aria-label="Filter interaction history by entity ID"
-            >
+      <!-- Tab 3: Inspector (Tile & Entity) -->
+      <div class="tab-panel" id="tab-inspector" role="tabpanel" hidden>
+        <div id="inspector-empty" class="inspector-empty">
+          Click any tile or entity on the map to inspect details.
+        </div>
+
+        <!-- Selected Entity Inspector -->
+        <div class="sidebar-section" id="entity-inspector" hidden>
+          <div class="inspector-header">
+            <label class="field-label" id="entity-inspector-title">Selected Entity</label>
+            <div class="entity-actions-bar">
+              <button id="btn-entity-follow" class="btn-secondary btn-sm" title="Lock camera on entity">Follow</button>
+              <button id="btn-entity-center" class="btn-secondary btn-sm" title="Center camera on entity">Center</button>
+            </div>
+          </div>
+          <div id="entity-chips-container" class="entity-chips-container" hidden></div>
+          <div class="entity-marker-preview"></div>
+          <div class="info-grid" id="entity-info-grid"></div>
+        </div>
+
+        <!-- Selected Tile Inspector -->
+        <div class="sidebar-section" id="tile-inspector" style="display:none;">
+          <label class="field-label">Selected Tile</label>
+          <div class="info-grid" id="tile-info-grid"></div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Events (Chronicle) -->
+      <div class="tab-panel" id="tab-events" role="tabpanel" hidden>
+        <div class="sidebar-section" id="interaction-history" style="border-bottom:none;">
+          <label class="field-label">Event Chronicle</label>
+          <div class="interaction-history-controls">
+            <button id="btn-history-all" class="btn-secondary active" type="button">All events</button>
+            <label class="interaction-entity-filter">
+              <span>Entity</span>
+              <input
+                id="interaction-entity-id"
+                class="input-field"
+                type="number"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                placeholder="ID"
+                aria-label="Filter interaction history by entity ID"
+              >
             </label>
             <button id="btn-history-export" class="btn-secondary" type="button">Export JSON</button>
           </div>
-        <p id="interaction-history-scope" class="interaction-history-scope" aria-live="polite">All recent events</p>
-        <div id="interaction-history-summary" class="interaction-history-summary" hidden></div>
-        <div id="interaction-history-list" class="interaction-history-list"></div>
+          <p id="interaction-history-scope" class="interaction-history-scope" aria-live="polite">All recent events</p>
+          <div id="interaction-history-summary" class="interaction-history-summary" hidden></div>
+          <div id="interaction-history-list" class="interaction-history-list"></div>
+        </div>
       </div>
 
-      <!-- Controls -->
-      <div class="sidebar-section" style="border-bottom:none;">
-        <label class="field-label">Controls</label>
-        <div style="font-size:10px;color:var(--text-muted);line-height:1.8;">
-          Drag to pan &#183; Scroll to zoom<br>
-          <kbd>R</kbd> Regenerate
-          <kbd>F</kbd> Fit
-          <kbd>G</kbd> Grid<br>
-          Click route origin · Shift+Click destination
+      <!-- Tab 5: Saves & Snapshots -->
+      <div class="tab-panel" id="tab-saves" role="tabpanel" hidden>
+        <div class="sidebar-section" id="save-section" style="border-bottom:none;">
+          <label class="field-label">Snapshots &amp; Saves</label>
+          <div class="input-row">
+            <input id="world-name-input" class="input-field" type="text" placeholder="Snapshot name..." maxlength="60">
+            <button id="btn-save-world" class="btn-primary" style="width:auto;padding:8px 14px;">Save</button>
+          </div>
+          <div class="input-row" style="gap:6px;">
+            <button id="btn-export-world" class="btn-secondary" style="flex:1;">Export JSON</button>
+            <label id="btn-import-label" class="btn-secondary import-label">
+              Import
+              <input id="import-file-input" type="file" accept=".json" style="display:none;">
+            </label>
+          </div>
+          <div id="save-status-msg" class="save-status-msg" hidden></div>
+          <div id="saved-worlds-list" class="saved-list"></div>
         </div>
       </div>
     </aside>
@@ -201,6 +234,33 @@
       <canvas id="world-canvas"></canvas>
       <canvas id="world-gpu-canvas" hidden></canvas>
       <div id="world-input-layer" aria-label="World viewport"></div>
+
+      <!-- Floating Simulation HUD -->
+      <div id="simulation-hud" class="simulation-hud">
+        <div class="hud-group hud-playback">
+          <button id="hud-btn-pause" class="hud-btn active" title="Pause simulation (Space)">⏸</button>
+          <button id="hud-btn-play" class="hud-btn" title="Run simulation (Space)">▶</button>
+          <button id="hud-btn-step" class="hud-btn" title="Advance 1 tick (.)">⏭</button>
+        </div>
+        <div class="hud-group hud-speeds">
+          <button class="hud-speed-btn active" data-speed="1" title="1× speed (1)">1×</button>
+          <button class="hud-speed-btn" data-speed="2" title="2× speed (2)">2×</button>
+          <button class="hud-speed-btn" data-speed="4" title="4× speed (3)">4×</button>
+        </div>
+        <div class="hud-group hud-telemetry">
+          <span class="hud-badge"><span class="hud-label">Tick</span><strong id="hud-tick">0</strong></span>
+          <span class="hud-badge"><span class="hud-label">Pop</span><strong id="hud-pop">0</strong></span>
+          <span class="hud-badge hud-hash-badge" id="hud-hash" title="State Hash (click to copy)"><span class="hud-label">Hash</span><strong id="hud-hash-val">—</strong></span>
+        </div>
+      </div>
+
+      <!-- On-screen Camera Navigation Controls -->
+      <div id="camera-controls" class="camera-controls">
+        <button id="btn-zoom-in" class="cam-btn" title="Zoom in">+</button>
+        <button id="btn-zoom-out" class="cam-btn" title="Zoom out">−</button>
+        <button id="btn-zoom-fit" class="cam-btn" title="Fit world (F)">Fit</button>
+      </div>
+
       <output id="renderer-debug" hidden aria-live="off">
         <span>Renderer: <strong id="debug-renderer-backend">—</strong></span>
         <span>Frame: <strong id="debug-renderer-frame">—</strong></span>
@@ -218,8 +278,8 @@
         <span class="status-item">Alt:<span class="val" id="st-alt">&#8212;</span></span>
         <span class="status-item">Moist:<span class="val" id="st-moist">&#8212;</span></span>
         <span class="status-item">Temp:<span class="val" id="st-temp">&#8212;</span></span>
-        <span class="status-item">Renderer:<span class="accent" id="st-renderer">Detecting…</span></span>
-        <span class="status-item">Route:<span class="val" id="st-route">Select origin</span></span>
+        <span class="status-item">Mode:<span class="accent" id="st-mode">Inspect</span></span>
+        <span class="status-item">Selected:<span class="val" id="st-selected">None</span></span>
         <span style="flex:1;"></span>
         <span class="status-item">Zoom:<span class="accent" id="st-zoom">100%</span></span>
       </div>

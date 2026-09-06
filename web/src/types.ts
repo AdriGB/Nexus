@@ -37,9 +37,11 @@ export interface IWorldBridge {
   entity_event_summary(entityId: number): string;
   entity_info(id: number): string;
   entity_kinship(id: number): string;
+  entity_relationships(id: number): string;
   entity_household(id: number): string;
   entity_relationship(firstId: number, secondId: number): string;
   entity_family_tree(entityId: number, ancestorDepth: number, descendantDepth: number): string;
+  entities_at(x: number, y: number): Uint32Array;
   get_tile_data(
     vx: number,
     vy: number,

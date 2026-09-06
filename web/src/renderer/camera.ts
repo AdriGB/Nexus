@@ -92,14 +92,67 @@ export function bindCamera(inputLayer: HTMLElement): void {
   const miniCanvas = document.getElementById(
     "minimap-canvas",
   ) as HTMLCanvasElement;
-  miniCanvas.addEventListener("click", (e) => {
+  let miniDragging = false;
+  const navigateMinimap = (e: MouseEvent) => {
     const rect = miniCanvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / miniCanvas.width;
-    const my = (e.clientY - rect.top) / miniCanvas.height;
-    state.panX =
-      mx * state.worldW * BASE_TILE * state.zoom - state.cssW / 2;
-    state.panY =
-      my * state.worldH * BASE_TILE * state.zoom - state.cssH / 2;
+    const mx = Math.max(0, Math.min(1, (e.clientX - rect.left) / miniCanvas.width));
+    const my = Math.max(0, Math.min(1, (e.clientY - rect.top) / miniCanvas.height));
+    state.panX = mx * state.worldW * BASE_TILE * state.zoom - state.cssW / 2;
+    state.panY = my * state.worldH * BASE_TILE * state.zoom - state.cssH / 2;
+    requestRender();
+  };
+
+  miniCanvas.addEventListener("mousedown", (e) => {
+    miniDragging = true;
+    navigateMinimap(e);
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (miniDragging) {
+      navigateMinimap(e);
+    }
+  });
+  window.addEventListener("mouseup", () => {
+    miniDragging = false;
+  });
+
+  // Camera on-screen buttons
+  document.getElementById("btn-zoom-in")?.addEventListener("click", () => zoomIn());
+  document.getElementById("btn-zoom-out")?.addEventListener("click", () => zoomOut());
+  document.getElementById("btn-zoom-fit")?.addEventListener("click", () => {
+    fitWorld();
     requestRender();
   });
+}
+
+export function centerOnTile(x: number, y: number): void {
+  const tileSize = BASE_TILE * state.zoom;
+  state.panX = (x + 0.5) * tileSize - state.cssW / 2;
+  state.panY = (y + 0.5) * tileSize - state.cssH / 2;
+  requestRender();
+}
+
+export function zoomIn(): void {
+  zoomByFactor(1.25);
+}
+
+export function zoomOut(): void {
+  zoomByFactor(0.8);
+}
+
+function zoomByFactor(factor: number): void {
+  const oldZoom = state.zoom;
+  const effectiveMin = getEffectiveMinZoom();
+  const newZoom = Math.max(
+    effectiveMin,
+    Math.min(MAX_ZOOM, state.zoom * factor),
+  );
+  if (newZoom === oldZoom) return;
+
+  const cx = state.cssW / 2;
+  const cy = state.cssH / 2;
+  const ratio = newZoom / oldZoom;
+  state.panX = (state.panX + cx) * ratio - cx;
+  state.panY = (state.panY + cy) * ratio - cy;
+  state.zoom = newZoom;
+  requestRender();
 }

@@ -54,13 +54,264 @@ html, body {
 /* ── Sidebar ────────────────────────────────── */
 
 #sidebar {
-  width: 280px; min-width: 280px;
+  width: 290px; min-width: 290px;
   background: var(--bg-panel); border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; overflow-y: auto;
+  display: flex; flex-direction: column; overflow: hidden;
 }
-.sidebar-header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); }
+.sidebar-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
 .app-title { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: 0.08em; color: var(--accent); }
 .app-subtitle { font-size: 9px; color: var(--text-muted); letter-spacing: 0.18em; text-transform: uppercase; margin-top: 3px; }
+
+/* ── Sidebar Tabs ───────────────────────────── */
+.sidebar-tabs {
+  display: flex;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 10px 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sidebar-tab:hover {
+  color: var(--text);
+  background: rgba(201,168,76,0.04);
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(201,168,76,0.08);
+  font-weight: 600;
+}
+
+/* ── Tab Panels ─────────────────────────────── */
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+}
+.tab-panel[hidden] {
+  display: none !important;
+}
+
+/* ── Inspector Elements ─────────────────────── */
+.inspector-empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.inspector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.inspector-header .field-label {
+  margin-bottom: 0;
+}
+.entity-actions-bar {
+  display: flex;
+  gap: 4px;
+}
+.btn-sm {
+  padding: 3px 8px !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+}
+.entity-actions-bar .btn-secondary.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(201,168,76,0.12);
+}
+.entity-chips-container {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.entity-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 9px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  transition: all 0.15s;
+}
+.entity-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.entity-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(201,168,76,0.12);
+}
+.entity-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.entity-link-btn:hover {
+  color: var(--accent-hover);
+}
+
+/* ── Floating Simulation HUD ────────────────── */
+.simulation-hud {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(12, 14, 24, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.hud-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s;
+}
+.hud-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+.hud-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(201,168,76,0.12);
+}
+.hud-speed-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  padding: 4px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all 0.15s;
+}
+.hud-speed-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+.hud-speed-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(201,168,76,0.12);
+  font-weight: 600;
+}
+.hud-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.hud-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+.hud-label {
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.hud-badge strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.hud-hash-badge {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.hud-hash-badge strong {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+.hud-hash-badge:hover strong {
+  text-decoration: underline;
+}
+
+/* ── Camera Controls ────────────────────────── */
+.camera-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cam-btn {
+  width: 30px;
+  height: 30px;
+  background: rgba(12, 14, 24, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.cam-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--bg-card);
+}
+
 .sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .field-label { display: block; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
 
