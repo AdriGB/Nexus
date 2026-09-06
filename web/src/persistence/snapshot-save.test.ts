@@ -11,6 +11,7 @@ import {
   listSnapshotRecords,
   loadSnapshotRecord,
   deleteSnapshotRecord,
+  _clearMemoryStoreForTesting,
 } from "./snapshot-store";
 import {
   exportSnapshot,
@@ -104,6 +105,10 @@ describe("Save Format Detection & Metadata Parsing", () => {
 });
 
 describe("Snapshot Store (IndexedDB / Memory fallback)", () => {
+  beforeEach(() => {
+    _clearMemoryStoreForTesting();
+  });
+
   it("saves, lists, loads, and deletes snapshot records", async () => {
     const json = JSON.stringify(MOCK_SNAPSHOT_V1);
     const meta = parseSnapshotMeta(json, "Alpha Save", "slot_alpha");
@@ -119,6 +124,8 @@ describe("Snapshot Store (IndexedDB / Memory fallback)", () => {
     expect(found).toBeDefined();
     expect(found?.name).toBe("Alpha Save");
     expect(found?.tick).toBe(420);
+    // listSnapshotRecords must return metadata only, never materializing snapshotJson
+    expect((found as any).snapshotJson).toBeUndefined();
 
     const loaded = await loadSnapshotRecord("slot_alpha");
     expect(loaded).not.toBeNull();
@@ -127,6 +134,40 @@ describe("Snapshot Store (IndexedDB / Memory fallback)", () => {
     await deleteSnapshotRecord("slot_alpha");
     const loadedAfterDelete = await loadSnapshotRecord("slot_alpha");
     expect(loadedAfterDelete).toBeNull();
+  });
+
+  it("rejects when IndexedDB open fails instead of silently falling back", async () => {
+    const originalIDB = globalThis.indexedDB;
+    try {
+      const mockReq: {
+        onerror: ((e: any) => void) | null;
+        onsuccess: ((e: any) => void) | null;
+        error: Error;
+      } = {
+        onerror: null,
+        onsuccess: null,
+        error: new Error("Disk quota exceeded or database locked"),
+      };
+      (globalThis as any).indexedDB = {
+        open: vi.fn(() => {
+          setTimeout(() => mockReq.onerror?.(new Event("error")), 0);
+          return mockReq;
+        }),
+      };
+
+      const json = JSON.stringify(MOCK_SNAPSHOT_V1);
+      const meta = parseSnapshotMeta(json, "Beta Save", "slot_beta")!;
+      await expect(
+        saveSnapshotRecord({ ...meta, snapshotJson: json }),
+      ).rejects.toThrow("Disk quota exceeded or database locked");
+
+      // Verify it did NOT quietly save to memory
+      (globalThis as any).indexedDB = undefined;
+      const list = await listSnapshotRecords();
+      expect(list.find((s) => s.id === "slot_beta")).toBeUndefined();
+    } finally {
+      globalThis.indexedDB = originalIDB;
+    }
   });
 });
 
