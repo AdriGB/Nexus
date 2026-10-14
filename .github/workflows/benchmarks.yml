@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload raw scenario results
         if: ${{ always() && steps.results.outputs.raw_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-benchmark-raw-results-${{ steps.suite.outputs.value }}
           path: |
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload aggregate benchmark results
         if: ${{ always() && steps.results.outputs.aggregate_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-benchmark-results-${{ steps.suite.outputs.value }}
           path: target/nexus-bench/benchmark-results.json
@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload benchmark comparison
         if: ${{ always() && steps.results.outputs.comparison_present == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-benchmark-comparison-${{ steps.suite.outputs.value }}
           path: target/nexus-bench/benchmark-comparison.json
